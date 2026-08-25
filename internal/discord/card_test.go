@@ -56,7 +56,7 @@ func TestBuildComponents(t *testing.T) {
 		"Claude — 지금 큰 작업 돌리세요", "kshxxthm@gmail.com",
 		"5h", "77", "리셋 3시간 후",
 		"knowhackking", // antigravity 계정 행
-		"### 에이전트", "~/ai-folder/collab", "Opus 5 (1M context)", "입력 대기", "8분",
+		"### 에이전트", "~/ai-folder/collab", "Opus 5 (1M context)", "응답 필요", "8분",
 		"갱신 \\u003ct:", // json.Marshal이 <를 이스케이프 — Discord는 정상 해석
 	} {
 		if !strings.Contains(out, want) {
