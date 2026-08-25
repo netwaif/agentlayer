@@ -87,7 +87,7 @@ func summary(agents []*state.Agent) string {
 func shortName(s state.AgentState) string {
 	switch s {
 	case state.StateWaiting:
-		return "대기"
+		return "응답 필요"
 	case state.StateDoneUnread:
 		return "새 완료"
 	case state.StateError:
@@ -95,7 +95,7 @@ func shortName(s state.AgentState) string {
 	case state.StateWorking:
 		return "작업중"
 	default:
-		return "유휴"
+		return "대기"
 	}
 }
 

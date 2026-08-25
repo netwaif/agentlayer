@@ -48,10 +48,10 @@ var stateEmoji = map[state.AgentState]string{
 
 var stateWord = map[state.AgentState]string{
 	state.StateWorking:    "작업중",
-	state.StateWaiting:    "입력 대기",
+	state.StateWaiting:    "응답 필요",
 	state.StateDoneUnread: "새 완료(안 봄)",
 	state.StateError:      "에러",
-	state.StateIdle:       "유휴",
+	state.StateIdle:       "대기",
 	state.StateDead:       "종료",
 }
 
