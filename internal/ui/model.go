@@ -297,6 +297,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter": // 점프 + 읽음 처리
 			if a := m.selected(); a != nil {
+				if a.State == state.StateDead {
+					// 죽은 pane의 좌표는 무효 — 점프 대신 복구 경로 안내
+					if a.SessionID != "" {
+						m.notice = fmt.Sprintf("죽은 세션입니다 — 대화 복구: agentlayer resume %s", a.ID)
+					} else {
+						m.notice = "죽은 세션입니다 (세션 ID 미기록 — 24시간 뒤 자동 정리)"
+					}
+					return m, nil
+				}
 				_ = m.store.MarkRead(a.ID, time.Now())
 				return m, m.jumpCmd(a)
 			}
