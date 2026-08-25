@@ -182,7 +182,7 @@ func runInit(args []string) error {
 		fmt.Println()
 	}
 	// prefix 'a' 충돌 검사: list-keys가 성공하면 이미 바인딩된 것
-	conflict := exec.Command("tmux", "list-keys", "-T", "prefix", "a").Run() == nil
+	conflict := exec.Command(tmuxx.Bin(), "list-keys", "-T", "prefix", "a").Run() == nil
 	binPath, _ := os.Executable()
 	cli.PrintTmuxBinding(os.Stdout, conflict, binPath)
 	return nil

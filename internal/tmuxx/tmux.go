@@ -8,7 +8,32 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 )
+
+// tmux 팝업·hook은 최소 PATH(/usr/bin:/bin…)로 실행되는 일이 많아
+// PATH 탐색이 실패할 수 있다. 흔한 설치 위치를 직접 짚는다.
+var (
+	binOnce sync.Once
+	binPath = "tmux"
+)
+
+// Bin은 tmux 실행 파일의 절대 경로를 찾는다 (한 번만 탐색).
+func Bin() string {
+	binOnce.Do(func() {
+		if p, err := exec.LookPath("tmux"); err == nil {
+			binPath = p
+			return
+		}
+		for _, c := range []string{"/opt/homebrew/bin/tmux", "/usr/local/bin/tmux", "/usr/bin/tmux"} {
+			if _, err := os.Stat(c); err == nil {
+				binPath = c
+				return
+			}
+		}
+	})
+	return binPath
+}
 
 // Pane은 tmux pane 하나의 스냅샷.
 type Pane struct {
@@ -59,7 +84,7 @@ type Tmux struct {
 }
 
 func (t Tmux) run(args ...string) (string, error) {
-	cmd := exec.Command("tmux", append(append([]string{}, t.Args...), args...)...)
+	cmd := exec.Command(Bin(), append(append([]string{}, t.Args...), args...)...)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("tmux %s: %w", strings.Join(args, " "), err)
