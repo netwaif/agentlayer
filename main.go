@@ -12,7 +12,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/netwaif/agentlayer/internal/cli"
+	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/hookcmd"
+	"github.com/netwaif/agentlayer/internal/notify"
 	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
@@ -115,6 +117,12 @@ func runHook(args []string) error {
 		fmt.Fprintln(os.Stderr, "agentlayer hook:", err)
 		return nil
 	}
+	// 상태가 실제로 바뀐 순간에만 알림 (heartbeat 무음은 notify가 보장)
+	cfg := config.Load()
+	sender := notify.DefaultSender()
+	hookcmd.SetTransitionHook(func(a *state.Agent, prev, to state.AgentState) {
+		notify.Notify(cfg, sender, a, prev, to)
+	})
 	switch agent {
 	case "claude":
 		if err := hookcmd.RunClaude(st, *event, os.Stdin, os.Getenv, time.Now()); err != nil {

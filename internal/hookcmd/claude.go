@@ -61,6 +61,22 @@ func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) 
 	if p.Message != "" {
 		a.Task = p.Message
 	}
+	prev := a.State
 	a.Transition(to, now)
-	return st.Save(a)
+	if err := st.Save(a); err != nil {
+		return err
+	}
+	if onTransition != nil {
+		onTransition(a, prev, to)
+	}
+	return nil
+}
+
+// onTransition은 상태 전이 후크(알림 발화 지점). main이 주입한다.
+// heartbeat(같은 상태)를 걸러내는 건 알림 쪽 책임이다.
+var onTransition func(a *state.Agent, prev, to state.AgentState)
+
+// SetTransitionHook은 전이 콜백을 등록한다.
+func SetTransitionHook(fn func(a *state.Agent, prev, to state.AgentState)) {
+	onTransition = fn
 }
