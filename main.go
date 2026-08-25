@@ -8,8 +8,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/hookcmd"
+	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/state"
+	"github.com/netwaif/agentlayer/internal/tmuxx"
 )
 
 func main() {
@@ -26,9 +29,32 @@ func run(args []string) error {
 	switch args[0] {
 	case "hook":
 		return runHook(args[1:])
+	case "status":
+		return runStatus(args[1:])
 	default:
 		return fmt.Errorf("알 수 없는 명령: %s", args[0])
 	}
+}
+
+// runStatus: agentlayer status [--json]
+// 출력 전에 tmux 현실과 동기화한다. tmux가 없으면 저장된 상태만 보여준다.
+func runStatus(args []string) error {
+	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	jsonOut := fs.Bool("json", false, "JSON으로 출력")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
+		if err := scan.Sync(st, panes, now); err != nil {
+			return err
+		}
+	}
+	return cli.Status(os.Stdout, st, *jsonOut, now)
 }
 
 // runHook: agentlayer hook <agent> --event <event>
