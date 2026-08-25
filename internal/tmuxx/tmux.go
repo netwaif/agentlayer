@@ -108,9 +108,16 @@ type Ref struct {
 	PaneID  string
 }
 
-// JumpTo는 현재 클라이언트를 해당 pane으로 이동시킨다.
+// JumpTo는 사용자 클라이언트를 해당 pane으로 이동시킨다.
+// 팝업 안에서 실행되면 tmux가 "현재 클라이언트"를 특정하지 못해
+// switch-client가 조용히 실패하므로, 가장 최근 활동한 클라이언트를
+// 명시적으로 짚어 전환한다 (Enter를 누른 클라이언트가 곧 최근 활동자).
 func (t Tmux) JumpTo(r Ref) error {
-	if _, err := t.run("switch-client", "-t", r.Session); err != nil {
+	args := []string{"switch-client", "-t", r.Session}
+	if client := t.activeClient(); client != "" {
+		args = append(args, "-c", client)
+	}
+	if _, err := t.run(args...); err != nil {
 		return err
 	}
 	if _, err := t.run("select-window", "-t", fmt.Sprintf("%s:%d", r.Session, r.Window)); err != nil {
@@ -118,6 +125,34 @@ func (t Tmux) JumpTo(r Ref) error {
 	}
 	_, err := t.run("select-pane", "-t", r.PaneID)
 	return err
+}
+
+// activeClient는 가장 최근 활동한 클라이언트 이름. 없으면 빈 문자열.
+func (t Tmux) activeClient() string {
+	out, err := t.run("list-clients", "-F", "#{client_activity}\t#{client_name}")
+	if err != nil {
+		return ""
+	}
+	return pickLatestClient(out)
+}
+
+// pickLatestClient는 "activity\tname" 줄들에서 activity 최대인 이름을 고른다.
+func pickLatestClient(out string) string {
+	best, bestAct := "", int64(-1)
+	for _, line := range strings.Split(out, "\n") {
+		parts := strings.SplitN(strings.TrimSpace(line), "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		act, err := strconv.ParseInt(parts[0], 10, 64)
+		if err != nil {
+			continue
+		}
+		if act > bestAct {
+			bestAct, best = act, parts[1]
+		}
+	}
+	return best
 }
 
 // NewWindow는 현재 세션에 이름·시작 디렉터리·실행 명령을 지정해 window를

@@ -66,3 +66,16 @@ func TestListPanesIntegration(t *testing.T) {
 		t.Errorf("임시 서버 pane이 보여야 함: %+v", panes)
 	}
 }
+
+func TestPickLatestClient(t *testing.T) {
+	out := "1787580000\t/dev/ttys003\n1787581234\t/dev/ttys007\n1787580500\t/dev/ttys001\n"
+	if got := pickLatestClient(out); got != "/dev/ttys007" {
+		t.Errorf("최근 활동 클라이언트: %q", got)
+	}
+	if got := pickLatestClient(""); got != "" {
+		t.Errorf("빈 목록: %q", got)
+	}
+	if got := pickLatestClient("깨진 줄\n"); got != "" {
+		t.Errorf("불량 줄 무시: %q", got)
+	}
+}
