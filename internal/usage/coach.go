@@ -6,7 +6,9 @@ package usage
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -35,9 +37,57 @@ type Payload struct {
 	Providers map[string]Provider `json:"providers"`
 }
 
-// CoachRunner는 기본 실행기: PATH의 coach를 부른다.
+// toolDirs는 PATH 탐색 실패 시 짚어볼 흔한 설치 위치.
+// tmux 팝업·LaunchAgent는 최소 PATH(/usr/bin:/bin…)로 뜨는 일이 많다.
+func toolDirs() []string {
+	var dirs []string
+	if home, err := os.UserHomeDir(); err == nil {
+		dirs = append(dirs, filepath.Join(home, ".local", "bin"))
+	}
+	return append(dirs, "/opt/homebrew/bin", "/usr/local/bin")
+}
+
+// lookupTool은 name을 PATH에서, 없으면 흔한 위치에서 찾는다.
+func lookupTool(name string) string {
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+	for _, d := range toolDirs() {
+		p := filepath.Join(d, name)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+// extendedEnv는 현재 env에서 PATH만 흔한 도구 위치까지 넓힌 것.
+// coach가 내부에서 codexbar를 PATH로 찾으므로 자식 env도 넓혀줘야 한다.
+func extendedEnv() []string {
+	path := os.Getenv("PATH")
+	for _, d := range toolDirs() {
+		if !strings.Contains(":"+path+":", ":"+d+":") {
+			path += ":" + d
+		}
+	}
+	env := []string{}
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(kv, "PATH=") {
+			env = append(env, kv)
+		}
+	}
+	return append(env, "PATH="+path)
+}
+
+// CoachRunner는 기본 실행기: coach를 찾아 --json으로 부른다.
 func CoachRunner() ([]byte, error) {
-	return exec.Command("coach", "--json").Output()
+	bin := lookupTool("coach")
+	if bin == "" {
+		return nil, fmt.Errorf("coach 없음")
+	}
+	cmd := exec.Command(bin, "--json")
+	cmd.Env = extendedEnv()
+	return cmd.Output()
 }
 
 // Fetch는 coach 출력을 파싱한다. coach가 없거나 실패하면 (nil, nil) —
