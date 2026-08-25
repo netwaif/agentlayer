@@ -87,6 +87,44 @@ func TestStatusJSON(t *testing.T) {
 	}
 }
 
+func TestStatusKoreanAlignment(t *testing.T) {
+	// 한글 TASK(2칸 폭)가 섞여도 DIR 열의 시작 위치가 모든 행에서 같아야 한다
+	st, _ := state.NewStore(t.TempDir())
+	st.Save(&state.Agent{ID: "a", Kind: "claude", Task: "핸드오프 문서 확인", State: state.StateWorking,
+		Tmux: state.TmuxRef{Session: "ai"}, CWD: "/x/one", UpdatedAt: t0, StateSince: t0})
+	st.Save(&state.Agent{ID: "b", Kind: "codex", Task: "build", State: state.StateWorking,
+		Tmux: state.TmuxRef{Session: "codex-live"}, CWD: "/x/two", UpdatedAt: t0, StateSince: t0})
+	var buf bytes.Buffer
+	if err := Status(&buf, st, false, t0); err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	var cols []int
+	for _, ln := range lines[1:] {
+		idx := strings.Index(ln, "/x/")
+		if idx < 0 {
+			t.Fatalf("DIR 없음: %q", ln)
+		}
+		// 표시 폭 기준 위치
+		cols = append(cols, displayWidth(ln[:idx]))
+	}
+	if cols[0] != cols[1] {
+		t.Errorf("DIR 열 시작 표시폭이 달라짐: %v\n%s", cols, buf.String())
+	}
+}
+
+func displayWidth(s string) int {
+	w := 0
+	for _, r := range s {
+		if r >= 0x1100 && (r <= 0x115F || (r >= 0xAC00 && r <= 0xD7A3) || (r >= 0x4E00 && r <= 0x9FFF)) {
+			w += 2
+		} else {
+			w++
+		}
+	}
+	return w
+}
+
 func TestStatusEmpty(t *testing.T) {
 	st, _ := state.NewStore(t.TempDir())
 	var buf bytes.Buffer

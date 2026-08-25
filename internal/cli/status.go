@@ -8,9 +8,9 @@ import (
 	"io"
 	"os"
 	"strings"
-	"text/tabwriter"
 	"time"
 
+	"github.com/mattn/go-runewidth"
 	"github.com/netwaif/agentlayer/internal/state"
 )
 
@@ -80,16 +80,45 @@ func Status(w io.Writer, st *state.Store, jsonOut bool, now time.Time) error {
 		fmt.Fprintln(w, "에이전트 없음 — tmux에서 claude/codex/gemini가 돌고 있는지 확인하세요.")
 		return nil
 	}
-	tw := tabwriter.NewWriter(w, 2, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "STATE\tAGENT\tSESSION\tTASK\tDIR\tSINCE")
+	// tabwriter는 한글(동아시아 폭 2칸)을 1칸으로 세서 열이 어긋난다 —
+	// runewidth 기반 수동 패딩으로 표시 폭을 맞춘다.
+	rows := [][]string{{"STATE", "AGENT", "SESSION", "TASK", "DIR", "SINCE"}}
 	for _, a := range agents {
 		task := a.Task
-		if len([]rune(task)) > 40 {
-			task = string([]rune(task)[:39]) + "…"
+		if runewidth.StringWidth(task) > 40 {
+			task = runewidth.Truncate(task, 39, "…")
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		rows = append(rows, []string{
 			stateLabel(a, now), a.Kind, a.Tmux.Session, task,
-			ShortenHome(a.CWD), Since(a.StateSince, now))
+			ShortenHome(a.CWD), Since(a.StateSince, now)})
 	}
-	return tw.Flush()
+	widths := make([]int, len(rows[0]))
+	for _, r := range rows {
+		for i, c := range r {
+			if w := runewidth.StringWidth(c); w > widths[i] {
+				widths[i] = w
+			}
+		}
+	}
+	for _, r := range rows {
+		var line strings.Builder
+		for i, c := range r {
+			if i == len(r)-1 {
+				line.WriteString(c)
+				break
+			}
+			line.WriteString(PadRight(c, widths[i]+2))
+		}
+		fmt.Fprintln(w, strings.TrimRight(line.String(), " "))
+	}
+	return nil
+}
+
+// PadRight는 표시 폭 기준으로 오른쪽 공백을 채운다 (한글 2칸 반영).
+func PadRight(s string, width int) string {
+	gap := width - runewidth.StringWidth(s)
+	if gap < 0 {
+		gap = 0
+	}
+	return s + strings.Repeat(" ", gap)
 }

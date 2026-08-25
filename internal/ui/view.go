@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattn/go-runewidth"
+
 	"github.com/charmbracelet/lipgloss"
 	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/state"
@@ -245,15 +247,13 @@ func (m Model) View() string {
 	if s := m.starterLine(); s != "" {
 		b.WriteString(s + "\n")
 	}
-	b.WriteString(styleHeader.Render(fmt.Sprintf("%-8s %-7s %-20s %-30s %s", "STATE", "AGENT", "SESSION", "TASK", "DIR·SINCE")) + "\n")
+	b.WriteString(styleHeader.Render("STATE    "+cli.PadRight("AGENT", 8)+cli.PadRight("SESSION", 21)+cli.PadRight("TASK", 31)+"DIR·SINCE") + "\n")
 
 	for i, a := range m.agents {
-		task := a.Task
-		if r := []rune(task); len(r) > 28 {
-			task = string(r[:27]) + "…"
-		}
-		line := fmt.Sprintf("%s %-7s %-20s %-30s %s · %s",
-			stateBadge(a, m.now), a.Kind, a.Tmux.Session, task,
+		task := runewidth.Truncate(a.Task, 28, "…")
+		line := fmt.Sprintf("%s %s %s %s %s · %s",
+			stateBadge(a, m.now), cli.PadRight(a.Kind, 7), cli.PadRight(a.Tmux.Session, 20),
+			cli.PadRight(task, 30),
 			cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
 		if br, ok := m.wtBranch[a.CWD]; ok {
 			line += " " + styleTitle.Render("⎇ "+br)
