@@ -89,13 +89,13 @@ func shortName(s state.AgentState) string {
 	case state.StateWaiting:
 		return "대기"
 	case state.StateDoneUnread:
-		return "안읽음"
+		return "새 완료"
 	case state.StateError:
 		return "에러"
 	case state.StateWorking:
 		return "작업중"
 	default:
-		return "휴지"
+		return "유휴"
 	}
 }
 
