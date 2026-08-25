@@ -257,6 +257,7 @@ func runInfo(args []string) error {
 		Agent:  a,
 		Wiring: wiring.Collect(wiring.DefaultPaths(), a.CWD, a.Tmux.Session, cfg.ChannelLabels),
 		Ctx:    usage.LoadSnapshots(usage.SnapshotsDir())[a.CWD],
+		Labels: cfg.ChannelLabels,
 	}
 	if metas, err := wt.ListMetas(state.DefaultDir()); err == nil {
 		for _, m := range metas {

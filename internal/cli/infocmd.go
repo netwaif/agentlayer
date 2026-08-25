@@ -15,8 +15,9 @@ import (
 type InfoData struct {
 	Agent  *state.Agent
 	Wiring wiring.Info
-	Ctx    usage.CtxInfo // 모델·ctx% (없으면 zero)
-	Branch string        // worktree 브랜치 (없으면 빈 값)
+	Ctx    usage.CtxInfo     // 모델·ctx% (없으면 zero)
+	Branch string            // worktree 브랜치 (없으면 빈 값)
+	Labels map[string]string // 채널 ID → 라벨 (config channel_labels)
 }
 
 // RenderInfo는 에이전트 상세 카드를 plain 텍스트로 그린다.
@@ -69,6 +70,15 @@ func RenderInfo(w io.Writer, d InfoData, now time.Time) {
 			alive = "⚠ 데몬 죽음"
 		}
 		fmt.Fprintf(w, "  Discord    codex 브리지 (%s) · %s\n", ShortenHome(br.Dir), alive)
+		for _, id := range br.Channels {
+			label := d.Labels[id]
+			if label == "" {
+				label = wiring.ShortID(id)
+			} else {
+				label += " (" + wiring.ShortID(id) + ")"
+			}
+			fmt.Fprintf(w, "             채널 %s\n", label)
+		}
 	} else if d.Wiring.DiscordConnected() {
 		fmt.Fprintln(w, "  Discord    연결됨 (LaunchAgent 경유)")
 	} else {

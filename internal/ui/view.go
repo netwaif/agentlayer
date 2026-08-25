@@ -278,7 +278,8 @@ func (m Model) usageView() string {
 	}
 	b.WriteString("\n\n")
 	if m.usagePay == nil {
-		b.WriteString(styleHelp.Render("coach 데이터 없음 — usage-coach가 설치돼 있는지 확인하세요\n"))
+		b.WriteString(styleHelp.Render("사용량 불러오는 중… 콜드 시작은 최대 2분 걸립니다.\n"))
+		b.WriteString(styleHelp.Render("(계속 비어 있으면 usage-coach 미설치 — brew/GitHub에서 coach 설치 후 재시도)\n"))
 	} else {
 		for _, key := range []string{"claude", "codex", "antigravity"} {
 			p, ok := m.usagePay.Providers[key]
@@ -346,6 +347,8 @@ func (m Model) View() string {
 	b.WriteString(styleTitle.Render("AgentLayer") + "  " + summary(m.agents) + "\n")
 	if s := m.usageSummaryLine(); s != "" {
 		b.WriteString(s + "\n")
+	} else if m.usagePay == nil {
+		b.WriteString(styleHelp.Render("사용량 불러오는 중… (콜드 시작은 최대 2분 걸립니다)") + "\n")
 	}
 	if s := m.starterLine(); s != "" {
 		b.WriteString(s + "\n")

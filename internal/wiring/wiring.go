@@ -29,8 +29,9 @@ type Discord struct {
 
 // Bridge는 codex/gemini Discord 브리지 연결 (CODEX_WORKDIR 매칭).
 type Bridge struct {
-	Dir   string // 브리지 루트
-	Alive bool   // daemon.pid 생존
+	Dir      string   // 브리지 루트
+	Alive    bool     // daemon.pid 생존
+	Channels []string // .env의 *CHANNEL* 키에서 모은 채널 ID들
 }
 
 // Info는 에이전트 하나의 배선 전체.
@@ -156,7 +157,8 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 				dataDir = "data" + strings.Replace(suffix, ".", "-", 1)
 			}
 			info.Bridge = &Bridge{Dir: root,
-				Alive: pidAlive(filepath.Join(root, dataDir, "daemon.pid"))}
+				Alive:    pidAlive(filepath.Join(root, dataDir, "daemon.pid")),
+				Channels: envChannels(string(b))}
 		}
 	}
 
@@ -203,6 +205,30 @@ func envPointsTo(env, folder string) bool {
 		}
 	}
 	return false
+}
+
+// envChannels는 .env에서 채널 ID들을 모은다 (키에 CHANNEL 포함, 값은 숫자).
+func envChannels(env string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, line := range strings.Split(env, "\n") {
+		key, val, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok || !strings.Contains(key, "CHANNEL") {
+			continue
+		}
+		for _, tok := range strings.Split(val, ",") {
+			tok = strings.TrimSpace(tok)
+			if tok == "" || seen[tok] {
+				continue
+			}
+			if _, err := strconv.ParseUint(tok, 10, 64); err == nil {
+				seen[tok] = true
+				out = append(out, tok)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // pidAlive는 pid 파일의 프로세스가 살아 있는지 (신호 0).

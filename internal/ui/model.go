@@ -317,6 +317,7 @@ func (m Model) buildInfo(a *state.Agent) string {
 		Agent:  a,
 		Wiring: wiring.Collect(wiring.DefaultPaths(), a.CWD, a.Tmux.Session, cfg.ChannelLabels),
 		Ctx:    m.ctx[a.CWD],
+		Labels: cfg.ChannelLabels,
 	}
 	if br, ok := m.wtBranch[a.CWD]; ok {
 		d.Branch = br
