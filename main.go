@@ -8,11 +8,13 @@ import (
 	"os"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/hookcmd"
 	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
+	"github.com/netwaif/agentlayer/internal/ui"
 )
 
 func main() {
@@ -24,7 +26,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("TUI는 아직 구현 전")
+		return runTUI()
 	}
 	switch args[0] {
 	case "hook":
@@ -34,6 +36,17 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("알 수 없는 명령: %s", args[0])
 	}
+}
+
+// runTUI는 기본 명령: 관제 TUI를 연다.
+func runTUI() error {
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	p := tea.NewProgram(ui.New(st, tmuxx.Tmux{}), tea.WithAltScreen())
+	_, err = p.Run()
+	return err
 }
 
 // runStatus: agentlayer status [--json]
