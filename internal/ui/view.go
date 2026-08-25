@@ -222,13 +222,18 @@ func (m Model) usageView() string {
 			head := fmt.Sprintf("%s %s — %s", providerEmoji(key, p.Level), strings.Title(key), p.Action)
 			b.WriteString(providerStyle(key, p.Level).Render(head) + "\n")
 			b.WriteString(styleHelp.Render("  "+p.Email) + "\n")
+			// 막대는 coach와 동일하게 provider 브랜드 색 (level 무관)
+			barStyle, ok := provStyle[key]
+			if !ok {
+				barStyle = levelStyle["white"]
+			}
 			for _, wk := range windowOrder(p.Windows) {
 				w := p.Windows[wk]
 				label := winLabel[wk]
 				if label == "" {
 					label = wk // antigravity 계정명 등
 				}
-				line := fmt.Sprintf("  %-12s %s", label, usage.Gauge(w.LeftPct, 14))
+				line := fmt.Sprintf("  %-12s %s", label, barStyle.Render(usage.Gauge(w.LeftPct, 14)))
 				if w.LeftPct != nil {
 					line += fmt.Sprintf("  %3d%%", int(*w.LeftPct))
 					if r := usage.ResetLabel(w.ResetMin); r != "" {
