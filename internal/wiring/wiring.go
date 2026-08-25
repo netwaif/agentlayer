@@ -248,10 +248,11 @@ func pidAlive(pidFile string) bool {
 	return proc.Signal(syscall.Signal(0)) == nil
 }
 
-// ShortID는 채널 ID를 표시용으로 축약한다 (앞 6자리…).
+// ShortID는 채널 ID를 표시용으로 축약한다. Discord 스노우플레이크는
+// 앞부분(타임스탬프)이 비슷해 구분이 안 되므로 앞4…뒤4를 보여준다.
 func ShortID(id string) string {
-	if len(id) <= 8 {
+	if len(id) <= 10 {
 		return id
 	}
-	return id[:6] + "…"
+	return id[:4] + "…" + id[len(id)-4:]
 }

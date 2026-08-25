@@ -110,8 +110,12 @@ func TestDiscordConnectedByLaunchAgent(t *testing.T) {
 }
 
 func TestShortID(t *testing.T) {
-	if ShortID("1533823223442182294") != "153382…" {
+	if ShortID("1533823223442182294") != "1533…2294" {
 		t.Errorf("축약: %s", ShortID("1533823223442182294"))
+	}
+	// 앞부분이 같은 두 ID가 다르게 보여야 함 (스노우플레이크)
+	if ShortID("1529498215651741706") == ShortID("1529494852000022780") {
+		t.Error("다른 채널이 같은 축약이면 안 됨")
 	}
 	if ShortID("abc") != "abc" {
 		t.Error("짧은 건 그대로")

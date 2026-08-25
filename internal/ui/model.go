@@ -214,6 +214,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.refreshCmd()
 
 	case tea.KeyMsg:
+		// 상세 카드가 떠 있으면 esc는 카드만 닫는다 (TUI 종료 아님)
+		if m.showInfo && msg.String() == "esc" {
+			m.showInfo = false
+			return m, nil
+		}
 		// 일괄 명령 확인 대기 중이면 y만 실행, 나머지는 취소
 		if m.pendingCmd != "" {
 			cmd := m.pendingCmd
