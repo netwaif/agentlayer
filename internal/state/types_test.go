@@ -61,9 +61,9 @@ func TestStale(t *testing.T) {
 func TestJSONRoundTrip(t *testing.T) {
 	a := &Agent{
 		ID: "claude-ai-1-3", Kind: "claude", Task: "핸드오프 문서 확인",
-		State: StateDoneUnread,
-		Tmux:  TmuxRef{Session: "ai", Window: 1, PaneID: "%3"},
-		CWD:   "/Users/soonho/ai-folder/dev/agentlayer",
+		State:     StateDoneUnread,
+		Tmux:      TmuxRef{Session: "ai", Window: 1, PaneID: "%3"},
+		CWD:       "/Users/soonho/ai-folder/dev/agentlayer",
 		SessionID: "10ec8033", PID: 12345,
 		UpdatedAt: t0, StateSince: t0,
 	}

@@ -44,6 +44,8 @@ func run(args []string) error {
 		return runInit(args[1:])
 	case "card":
 		return runCard(args[1:])
+	case "resume":
+		return runResume(args[1:])
 	case "wt":
 		st, err := state.NewStore(state.DefaultDir())
 		if err != nil {
@@ -171,6 +173,14 @@ func runInit(args []string) error {
 		return err
 	}
 	fmt.Println()
+	codexConfig := filepath.Join(home, ".codex", "config.toml")
+	if _, err := os.Stat(filepath.Dir(codexConfig)); err == nil {
+		fmt.Println("Codex notify 등록:", codexConfig)
+		if err := cli.InstallCodexNotify(os.Stdout, codexConfig, *dryRun); err != nil {
+			return err
+		}
+		fmt.Println()
+	}
 	// prefix 'a' 충돌 검사: list-keys가 성공하면 이미 바인딩된 것
 	conflict := exec.Command("tmux", "list-keys", "-T", "prefix", "a").Run() == nil
 	cli.PrintTmuxBinding(os.Stdout, conflict)
@@ -205,6 +215,61 @@ func runHook(args []string) error {
 		if err := hookcmd.RunClaude(st, *event, os.Stdin, os.Getenv, time.Now()); err != nil {
 			fmt.Fprintln(os.Stderr, "agentlayer hook:", err)
 		}
+	case "codex":
+		if err := hookcmd.RunCodex(st, fs.Args(), os.Getenv, time.Now()); err != nil {
+			fmt.Fprintln(os.Stderr, "agentlayer hook:", err)
+		}
 	}
+	return nil
+}
+
+// runResume: agentlayer resume [id]
+// 마감 의식 없이 죽은 대화를 구조한다. 인자 없으면 후보 목록.
+func runResume(args []string) error {
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
+		_ = scan.Sync(st, panes, time.Now())
+	}
+	agents, err := st.List()
+	if err != nil {
+		return err
+	}
+	if len(args) == 0 {
+		var found bool
+		fmt.Println("resume 가능한 세션 (죽었거나 에러난 것 우선):")
+		for _, a := range agents {
+			if a.SessionID == "" || a.Kind != "claude" {
+				continue
+			}
+			marker := " "
+			if a.State == state.StateDead || a.State == state.StateError {
+				marker = "!"
+			}
+			fmt.Printf("  %s %-14s %-8s %s  (%s)\n", marker, a.ID, a.State, cli.ShortenHome(a.CWD), a.SessionID[:8])
+			found = true
+		}
+		if !found {
+			fmt.Println("  없음 — session_id가 기록된 claude 세션이 없습니다.")
+		}
+		fmt.Println("\n사용법: agentlayer resume <id>")
+		return nil
+	}
+	id := args[0]
+	a, err := st.Load(id)
+	if err != nil {
+		return err
+	}
+	if a.Kind != "claude" || a.SessionID == "" {
+		return fmt.Errorf("resume은 session_id가 기록된 claude 세션만 지원합니다")
+	}
+	tm := tmuxx.Tmux{}
+	name := "resume-" + id
+	if err := tm.NewWindow(name, a.CWD, fmt.Sprintf("claude --resume %s", a.SessionID)); err != nil {
+		return err
+	}
+	fmt.Printf("새 window %q에서 대화를 이어갑니다 (%s)\n", name, cli.ShortenHome(a.CWD))
 	return nil
 }

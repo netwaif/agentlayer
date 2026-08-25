@@ -6,7 +6,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/scan"
+	"github.com/netwaif/agentlayer/internal/starter"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/usage"
@@ -33,6 +35,7 @@ type usageTickMsg time.Time
 type usageMsg struct {
 	payload *usage.Payload
 	ctx     map[string]usage.CtxInfo
+	starter []starter.Task
 }
 
 // jumpDoneMsg는 점프 실행 후 종료 신호.
@@ -40,29 +43,36 @@ type jumpDoneMsg struct{ err error }
 
 // Model은 TUI 상태.
 type Model struct {
-	store     *state.Store
-	tm        tmuxx.Tmux
-	agents    []*state.Agent
-	cursor    int
-	now       time.Time
-	width     int
-	height    int
-	err       error
-	showUsage bool // u 키: 사용량 전용 뷰
-	usagePay  *usage.Payload
-	ctx       map[string]usage.CtxInfo // CWD(절대경로) → 모델·ctx%
-	wtBranch  map[string]string        // worktree 경로 → 브랜치
+	store        *state.Store
+	tm           tmuxx.Tmux
+	agents       []*state.Agent
+	cursor       int
+	now          time.Time
+	width        int
+	height       int
+	err          error
+	showUsage    bool // u 키: 사용량 전용 뷰
+	usagePay     *usage.Payload
+	ctx          map[string]usage.CtxInfo // CWD(절대경로) → 모델·ctx%
+	wtBranch     map[string]string        // worktree 경로 → 브랜치
+	starterTasks []starter.Task           // MultiAgent 활성 작업
 	// 주입점 (테스트용)
 	coachRunner func() ([]byte, error)
 	snapshotDir string
 	codexRoot   string
+	starterRoot string
 }
 
 func New(st *state.Store, tm tmuxx.Tmux) Model {
+	root := config.Load().StarterRoot
+	if root == "" {
+		root = starter.DefaultRoot()
+	}
 	return Model{store: st, tm: tm, now: time.Now(),
 		coachRunner: usage.CoachRunner,
 		snapshotDir: usage.SnapshotsDir(),
-		codexRoot:   usage.CodexSessionsRoot()}
+		codexRoot:   usage.CodexSessionsRoot(),
+		starterRoot: root}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -82,6 +92,7 @@ func usageTickCmd() tea.Cmd {
 // 어떤 소스가 없어도 관제는 계속된다.
 func (m Model) usageCmd() tea.Cmd {
 	runner, snapDir, codexRoot, st := m.coachRunner, m.snapshotDir, m.codexRoot, m.store
+	starterRoot := m.starterRoot
 	return func() tea.Msg {
 		pay := usage.FetchCached(st.Dir, 5*time.Minute, runner, time.Now())
 		ctx := usage.LoadSnapshots(snapDir)
@@ -97,7 +108,7 @@ func (m Model) usageCmd() tea.Cmd {
 				}
 			}
 		}
-		return usageMsg{payload: pay, ctx: ctx}
+		return usageMsg{payload: pay, ctx: ctx, starter: starter.ActiveTasks(starterRoot)}
 	}
 }
 
@@ -151,6 +162,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.ctx != nil {
 			m.ctx = msg.ctx
 		}
+		m.starterTasks = msg.starter
 		return m, nil
 
 	case refreshMsg:

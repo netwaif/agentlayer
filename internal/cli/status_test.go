@@ -20,16 +20,16 @@ func fixtureStore(t *testing.T) *state.Store {
 	}
 	agents := []*state.Agent{
 		{ID: "claude-3", Kind: "claude", Task: "핸드오프 문서 확인", State: state.StateWorking,
-			Tmux: state.TmuxRef{Session: "ai", Window: 1, PaneID: "%3"},
-			CWD:  "/Users/soonho/ai-folder/dev/agentlayer",
+			Tmux:      state.TmuxRef{Session: "ai", Window: 1, PaneID: "%3"},
+			CWD:       "/Users/soonho/ai-folder/dev/agentlayer",
 			UpdatedAt: t0.Add(-5 * time.Minute), StateSince: t0.Add(-5 * time.Minute)},
 		{ID: "claude-7", Kind: "claude", Task: "승인 대기", State: state.StateWaiting,
-			Tmux: state.TmuxRef{Session: "collab-bot", Window: 0, PaneID: "%7"},
-			CWD:  "/Users/soonho/ai-folder/collab",
+			Tmux:      state.TmuxRef{Session: "collab-bot", Window: 0, PaneID: "%7"},
+			CWD:       "/Users/soonho/ai-folder/collab",
 			UpdatedAt: t0.Add(-time.Minute), StateSince: t0.Add(-time.Minute)},
 		{ID: "codex-1", Kind: "codex", State: state.StateWorking,
-			Tmux: state.TmuxRef{Session: "codex-live", Window: 0, PaneID: "%1"},
-			CWD:  "/Users/soonho/ai-folder/codex-discord-workspace",
+			Tmux:      state.TmuxRef{Session: "codex-live", Window: 0, PaneID: "%1"},
+			CWD:       "/Users/soonho/ai-folder/codex-discord-workspace",
 			UpdatedAt: t0.Add(-2 * time.Hour), StateSince: t0.Add(-2 * time.Hour)}, // STALE
 	}
 	for _, a := range agents {

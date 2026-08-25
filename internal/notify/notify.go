@@ -17,7 +17,7 @@ import (
 
 // Sender는 전달 수단 주입점 (테스트용).
 type Sender struct {
-	RunOSA   func(script string) error       // osascript 실행
+	RunOSA   func(script string) error           // osascript 실행
 	PostJSON func(url string, body []byte) error // Discord 웹훅 POST
 }
 
