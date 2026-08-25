@@ -9,9 +9,13 @@ import (
 	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
+	"github.com/netwaif/agentlayer/internal/usage"
 )
 
-const pollInterval = 2 * time.Second
+const (
+	pollInterval  = 2 * time.Second
+	usageInterval = 15 * time.Second // coach subprocess·rollout 파싱은 느긋하게
+)
 
 // refreshMsg는 저장소를 다시 읽은 결과.
 type refreshMsg struct {
@@ -21,31 +25,77 @@ type refreshMsg struct {
 
 type tickMsg time.Time
 
+type usageTickMsg time.Time
+
+// usageMsg는 coach·세션 컨텍스트 수집 결과.
+type usageMsg struct {
+	payload *usage.Payload
+	ctx     map[string]usage.CtxInfo
+}
+
 // jumpDoneMsg는 점프 실행 후 종료 신호.
 type jumpDoneMsg struct{ err error }
 
 // Model은 TUI 상태.
 type Model struct {
-	store  *state.Store
-	tm     tmuxx.Tmux
-	agents []*state.Agent
-	cursor int
-	now    time.Time
-	width  int
-	height int
-	err    error
+	store     *state.Store
+	tm        tmuxx.Tmux
+	agents    []*state.Agent
+	cursor    int
+	now       time.Time
+	width     int
+	height    int
+	err       error
+	showUsage bool // u 키: 사용량 전용 뷰
+	usagePay  *usage.Payload
+	ctx       map[string]usage.CtxInfo // CWD(절대경로) → 모델·ctx%
+	// 주입점 (테스트용)
+	coachRunner func() ([]byte, error)
+	snapshotDir string
+	codexRoot   string
 }
 
 func New(st *state.Store, tm tmuxx.Tmux) Model {
-	return Model{store: st, tm: tm, now: time.Now()}
+	return Model{store: st, tm: tm, now: time.Now(),
+		coachRunner: usage.CoachRunner,
+		snapshotDir: usage.SnapshotsDir(),
+		codexRoot:   usage.CodexSessionsRoot()}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.refreshCmd(), tickCmd())
+	return tea.Batch(m.refreshCmd(), tickCmd(), m.usageCmd(), usageTickCmd())
 }
 
 func tickCmd() tea.Cmd {
 	return tea.Tick(pollInterval, func(t time.Time) tea.Msg { return tickMsg(t) })
+}
+
+func usageTickCmd() tea.Cmd {
+	return tea.Tick(usageInterval, func(t time.Time) tea.Msg { return usageTickMsg(t) })
+}
+
+// usageCmd는 coach 사용량과 폴더별 세션 컨텍스트를 백그라운드에서 모은다.
+// coach는 콜드 실행이 분 단위라 5분 파일 캐시 + 실행 중복 방지로 감싼다.
+// 어떤 소스가 없어도 관제는 계속된다.
+func (m Model) usageCmd() tea.Cmd {
+	runner, snapDir, codexRoot, st := m.coachRunner, m.snapshotDir, m.codexRoot, m.store
+	return func() tea.Msg {
+		pay := usage.FetchCached(st.Dir, 5*time.Minute, runner, time.Now())
+		ctx := usage.LoadSnapshots(snapDir)
+		if agents, err := st.List(); err == nil {
+			for _, a := range agents {
+				if a.Kind != "codex" || a.CWD == "" {
+					continue
+				}
+				if _, ok := ctx[a.CWD]; !ok {
+					if info := usage.CodexLatest(codexRoot, a.CWD); info.Model != "" || info.UsedPct != nil {
+						ctx[a.CWD] = info
+					}
+				}
+			}
+		}
+		return usageMsg{payload: pay, ctx: ctx}
+	}
 }
 
 // refreshCmd는 tmux 동기화 + 저장소 재조회를 백그라운드에서 수행한다.
@@ -82,6 +132,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m, tea.Batch(m.refreshCmd(), tickCmd())
 
+	case usageTickMsg:
+		return m, tea.Batch(m.usageCmd(), usageTickCmd())
+
+	case usageMsg:
+		if msg.payload != nil {
+			m.usagePay = msg.payload
+		}
+		if msg.ctx != nil {
+			m.ctx = msg.ctx
+		}
+		return m, nil
+
 	case refreshMsg:
 		m.agents = msg.agents
 		m.now = msg.now
@@ -107,7 +169,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor--
 			}
 		case "r":
-			return m, m.refreshCmd()
+			return m, tea.Batch(m.refreshCmd(), m.usageCmd())
+		case "u":
+			m.showUsage = !m.showUsage
+			return m, nil
 		case "o": // 읽음 처리만 (점프 없이)
 			if a := m.selected(); a != nil {
 				_ = m.store.MarkRead(a.ID, time.Now())

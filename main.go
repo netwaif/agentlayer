@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -12,11 +13,15 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/netwaif/agentlayer/internal/cli"
+	"github.com/netwaif/agentlayer/internal/config"
+	"github.com/netwaif/agentlayer/internal/discord"
 	"github.com/netwaif/agentlayer/internal/hookcmd"
+	"github.com/netwaif/agentlayer/internal/notify"
 	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/ui"
+	"github.com/netwaif/agentlayer/internal/usage"
 )
 
 func main() {
@@ -37,6 +42,8 @@ func run(args []string) error {
 		return runStatus(args[1:])
 	case "init":
 		return runInit(args[1:])
+	case "card":
+		return runCard(args[1:])
 	default:
 		return fmt.Errorf("알 수 없는 명령: %s", args[0])
 	}
@@ -72,6 +79,69 @@ func runStatus(args []string) error {
 		}
 	}
 	return cli.Status(os.Stdout, st, *jsonOut, now)
+}
+
+// runCard: agentlayer card [--out]
+// 사용량 + 에이전트 상태를 Discord 카드 하나로 업서트한다.
+// LaunchAgent 등에서 주기 실행하는 용도. --out은 payload JSON만 출력.
+func runCard(args []string) error {
+	fs := flag.NewFlagSet("card", flag.ContinueOnError)
+	outOnly := fs.Bool("out", false, "전송 없이 카드 JSON만 출력")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
+		if err := scan.Sync(st, panes, now); err != nil {
+			return err
+		}
+	}
+	agents, err := st.List()
+	if err != nil {
+		return err
+	}
+	pay := usage.FetchCached(st.Dir, 4*time.Minute, usage.CoachRunner, now)
+	ctx := usage.LoadSnapshots(usage.SnapshotsDir())
+	for _, a := range agents {
+		if a.Kind == "codex" && a.CWD != "" {
+			if _, ok := ctx[a.CWD]; !ok {
+				if info := usage.CodexLatest(usage.CodexSessionsRoot(), a.CWD); info.Model != "" || info.UsedPct != nil {
+					ctx[a.CWD] = info
+				}
+			}
+		}
+	}
+	home, _ := os.UserHomeDir()
+	comps := discord.BuildComponents(pay, agents, ctx, home, now)
+
+	if *outOnly {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(comps)
+	}
+
+	cfg := config.Load()
+	if cfg.DiscordWebhookURL == "" {
+		return fmt.Errorf("discord_webhook_url이 설정에 없습니다: %s", config.Path())
+	}
+	statePath := discord.CardStatePath(state.DefaultDir())
+	cs := discord.LoadCardState(statePath)
+	client := discord.NewClient(cfg.DiscordWebhookURL)
+	mid, err := client.Upsert(comps, cs.MessageID)
+	if err != nil {
+		return err
+	}
+	cs.MessageID = mid
+	pings, lv := discord.WorsenedPings(pay, cs.LastLevels)
+	cs.LastLevels = lv
+	for _, p := range pings {
+		_ = client.Ping(p)
+	}
+	return discord.SaveCardState(statePath, cs)
 }
 
 // runInit: agentlayer init [--dry-run]
@@ -115,6 +185,12 @@ func runHook(args []string) error {
 		fmt.Fprintln(os.Stderr, "agentlayer hook:", err)
 		return nil
 	}
+	// 상태가 실제로 바뀐 순간에만 알림 (heartbeat 무음은 notify가 보장)
+	cfg := config.Load()
+	sender := notify.DefaultSender()
+	hookcmd.SetTransitionHook(func(a *state.Agent, prev, to state.AgentState) {
+		notify.Notify(cfg, sender, a, prev, to)
+	})
 	switch agent {
 	case "claude":
 		if err := hookcmd.RunClaude(st, *event, os.Stdin, os.Getenv, time.Now()); err != nil {

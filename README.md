@@ -47,10 +47,37 @@ agentlayer는 tmux 설정을 자동으로 수정하지 않는다.
 ## 사용
 
 ```bash
-agentlayer            # TUI 관제탑 (j/k 이동, enter 점프+읽음, o 읽음, r 새로고침, q 종료)
+agentlayer            # TUI 관제탑 (j/k 이동, enter 점프+읽음, o 읽음, u 사용량 뷰, r 새로고침, q 종료)
 agentlayer status     # plain 표 — SSH·스크립트용
 agentlayer status --json
+agentlayer card       # Discord 상태 카드 업서트 (주기 실행용) / --out은 JSON만
 ```
+
+## 사용량·컨텍스트 (선택적 통합)
+
+[usage-coach](https://github.com/netwaif/usage-coach)가 설치돼 있으면:
+
+- TUI 헤더에 provider별 요약 한 줄, `u` 키로 전용 뷰(게이지·리셋·코칭)
+- 각 에이전트 행에 모델·컨텍스트%·마지막 활동 (statusline 스냅샷 + codex rollout)
+- coach 콜드 실행이 느려도 5분 파일 캐시 + 중복 실행 방지로 TUI는 블로킹되지 않는다
+
+## 알림·Discord
+
+`~/.config/agentlayer/config.json`:
+
+```json
+{
+  "discord_webhook_url": "https://discord.com/api/webhooks/...",
+  "notify_macos": true,
+  "notify_discord": false
+}
+```
+
+- 에이전트가 **완료(DONE)** 되거나 **입력 대기(WAIT)** 로 바뀐 순간에만 알림 1회
+  (heartbeat는 무음) — macOS 알림 + (켜면) Discord 단문
+- `agentlayer card`는 사용량 + 에이전트 상태를 Discord 메시지 하나로 계속
+  업서트하고, provider level이 악화되면 새 메시지로 핑한다.
+  LaunchAgent 등으로 5분 주기 실행을 권장
 
 ## 안전 원칙
 
