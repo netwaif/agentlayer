@@ -18,7 +18,8 @@ import (
 var (
 	styleHeader   = lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a"))
 	styleTitle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffaf5f")).Bold(true)
-	styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("#ffaf5f")).Foreground(lipgloss.Color("#1c1c1c")).Bold(true)
+	selBg         = lipgloss.Color("#3a3a3a") // 은은한 선택 배경 (tmux 테마 톤)
+	styleSelected = lipgloss.NewStyle().Background(selBg).Foreground(lipgloss.Color("#e4e4e4")).Bold(true)
 	styleHelp     = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a6a6a"))
 	styleModel    = lipgloss.NewStyle().Foreground(lipgloss.Color("#d0d0d0"))
 	styleDiscord  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7C8AFF")).Bold(true)
@@ -329,26 +330,32 @@ func (m Model) View() string {
 	for i, a := range m.agents {
 		task := runewidth.Truncate(a.Task, 28, "…")
 		if i == m.cursor {
-			// 선택 행: 색 조각 없이 통짜 텍스트를 만들어 화면 전체 폭 반전 바로.
-			// (안쪽 색 코드가 배경을 끊어 바가 짧아지는 문제 방지)
-			line := fmt.Sprintf("▸ %s %s %s %s %s · %s",
-				stateText(a, m.now), cli.PadRight(a.Kind, 7), cli.PadRight(a.Tmux.Session, 20),
+			// 선택 행: 화면 전체 폭 바. 조각마다 같은 배경을 입혀
+			// 상태 색은 살리면서 바가 중간에 끊기지 않게 한다.
+			st := stateText(a, m.now)
+			rest := fmt.Sprintf(" %s %s %s %s · %s",
+				cli.PadRight(a.Kind, 7), cli.PadRight(a.Tmux.Session, 20),
 				cli.PadRight(task, 30),
 				cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
 			if m.discordWired[a.CWD] {
-				line += " ⌁"
+				rest += " ⌁"
 			}
 			if br, ok := m.wtBranch[a.CWD]; ok {
-				line += " ⎇ " + br
+				rest += " ⎇ " + br
 			}
 			if badge := m.ctxBadgePlain(a); badge != "" {
-				line += " " + badge
+				rest += " " + badge
 			}
+			used := 2 + runewidth.StringWidth(st) + runewidth.StringWidth(rest)
 			width := m.width
-			if width < runewidth.StringWidth(line)+1 {
-				width = runewidth.StringWidth(line) + 1
+			if width < used+1 {
+				width = used + 1
 			}
-			b.WriteString(styleSelected.Render(cli.PadRight(line, width)) + "\n")
+			rest = cli.PadRight(rest, width-2-runewidth.StringWidth(st))
+			line := styleSelected.Render("▸ ") +
+				stateStyles[a.State].Background(selBg).Bold(true).Render(st) +
+				styleSelected.Render(rest)
+			b.WriteString(line + "\n")
 			continue
 		}
 		line := fmt.Sprintf("  %s %s %s %s %s · %s",
