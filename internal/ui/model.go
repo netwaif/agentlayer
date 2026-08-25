@@ -75,11 +75,12 @@ func usageTickCmd() tea.Cmd {
 }
 
 // usageCmd는 coach 사용량과 폴더별 세션 컨텍스트를 백그라운드에서 모은다.
+// coach는 콜드 실행이 분 단위라 5분 파일 캐시 + 실행 중복 방지로 감싼다.
 // 어떤 소스가 없어도 관제는 계속된다.
 func (m Model) usageCmd() tea.Cmd {
 	runner, snapDir, codexRoot, st := m.coachRunner, m.snapshotDir, m.codexRoot, m.store
 	return func() tea.Msg {
-		pay, _ := usage.Fetch(runner)
+		pay := usage.FetchCached(st.Dir, 5*time.Minute, runner, time.Now())
 		ctx := usage.LoadSnapshots(snapDir)
 		if agents, err := st.List(); err == nil {
 			for _, a := range agents {
