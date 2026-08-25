@@ -53,6 +53,9 @@ agentlayer status     # plain 표 — SSH·스크립트용
 agentlayer status --json
 agentlayer card       # Discord 상태 카드 업서트 (주기 실행용) / --out은 JSON만
 agentlayer resume     # 죽은 claude 대화 목록 / resume <id>로 구조
+agentlayer wake-all   # 모든 claude·codex 세션에 "세션 이어서하자" 일괄 전송
+agentlayer close-all  # "세션 마감하자" 전송 → 전원 완료(DONE)까지 감시 → 요약
+agentlayer broadcast "<메시지>"   # 임의 메시지 일괄 전송 (--except로 제외, --yes로 무확인)
 agentlayer wt ...     # worktree 병렬 모드 (아래 참고)
 ```
 

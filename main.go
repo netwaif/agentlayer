@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -46,6 +47,8 @@ func run(args []string) error {
 		return runCard(args[1:])
 	case "resume":
 		return runResume(args[1:])
+	case "wake-all", "close-all", "broadcast":
+		return runAll(args[0], args[1:])
 	case "wt":
 		st, err := state.NewStore(state.DefaultDir())
 		if err != nil {
@@ -222,6 +225,38 @@ func runHook(args []string) error {
 		}
 	}
 	return nil
+}
+
+// runAll: wake-all("세션 이어서하자") / close-all("세션 마감하자"+감시) / broadcast <메시지>
+func runAll(cmd string, args []string) error {
+	defaultWatch := cmd == "close-all"
+	o, rest, err := cli.ParseAllFlags(cmd, args, defaultWatch)
+	if err != nil {
+		return err
+	}
+	var message string
+	switch cmd {
+	case "wake-all":
+		message = cli.WakeMessage
+	case "close-all":
+		message = cli.CloseMessage
+	default:
+		if len(rest) == 0 {
+			return fmt.Errorf("broadcast에는 메시지가 필요합니다: agentlayer broadcast \"<메시지>\"")
+		}
+		message = strings.Join(rest, " ")
+	}
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
+		if err := scan.Sync(st, panes, now); err != nil {
+			return err
+		}
+	}
+	return cli.RunAll(os.Stdout, st, tmuxx.Tmux{}, message, o, now)
 }
 
 // runResume: agentlayer resume [id]
