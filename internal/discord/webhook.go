@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -78,16 +79,24 @@ func (c *Client) request(method, url string, payload any) (map[string]any, int, 
 		return nil, 0, fmt.Errorf("discord 요청 실패")
 	}
 	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 	var out map[string]any
-	_ = json.NewDecoder(resp.Body).Decode(&out)
+	_ = json.Unmarshal(raw, &out)
+	if resp.StatusCode >= 400 {
+		// 진단용: Discord 에러 본문(웹훅 URL 미포함)을 함께 남긴다
+		out = map[string]any{"_error_body": string(raw)}
+	}
 	return out, resp.StatusCode, nil
 }
 
 // Upsert는 카드 메시지 하나를 편집하고, 없으면 새로 만든다.
 // 반환값은 최종 message ID.
+// 원칙: 옛 메시지 삭제는 새 게시가 성공한 뒤에만 — 카드가 채널에서
+// 사라진 채 끝나는 일이 없어야 한다.
 func (c *Client) Upsert(components []any, mid string) (string, error) {
+	patchFailed400 := false
 	if mid != "" {
-		_, code, err := c.request(http.MethodPatch,
+		res, code, err := c.request(http.MethodPatch,
 			fmt.Sprintf("%s/messages/%s?with_components=true", c.Webhook, mid),
 			map[string]any{"components": components})
 		if err != nil {
@@ -96,10 +105,13 @@ func (c *Client) Upsert(components []any, mid string) (string, error) {
 		if code >= 200 && code < 300 {
 			return mid, nil
 		}
-		if code == 400 { // V2 이전 메시지는 편집 불가 → 지우고 새로
-			c.request(http.MethodDelete, fmt.Sprintf("%s/messages/%s", c.Webhook, mid), nil)
-		} else if code != 404 {
-			return "", fmt.Errorf("discord 편집 실패 (HTTP %d)", code)
+		switch code {
+		case 400:
+			patchFailed400 = true // 새 게시 성공 후에만 옛것 삭제
+		case 404:
+			// 메시지 삭제됨 — 새로 게시
+		default:
+			return "", fmt.Errorf("discord 편집 실패 (HTTP %d): %v", code, res["_error_body"])
 		}
 	}
 	res, code, err := c.request(http.MethodPost,
@@ -109,9 +121,12 @@ func (c *Client) Upsert(components []any, mid string) (string, error) {
 		return "", err
 	}
 	if code < 200 || code >= 300 {
-		return "", fmt.Errorf("discord 게시 실패 (HTTP %d)", code)
+		return "", fmt.Errorf("discord 게시 실패 (HTTP %d): %v", code, res["_error_body"])
 	}
 	id, _ := res["id"].(string)
+	if patchFailed400 && mid != "" && id != "" {
+		c.request(http.MethodDelete, fmt.Sprintf("%s/messages/%s", c.Webhook, mid), nil)
+	}
 	return id, nil
 }
 

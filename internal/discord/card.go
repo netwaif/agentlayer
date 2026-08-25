@@ -167,6 +167,7 @@ func windowOrder(ws map[string]usage.Window) []string {
 }
 
 // agentsContainer는 에이전트 섹션: 상태 + 폴더 + 모델 + ctx 게이지 + 경과.
+// agentsContainer는 행이 하나도 없으면 nil (빈 섹션 금지).
 func agentsContainer(agents []*state.Agent, ctx map[string]usage.CtxInfo, home string, now time.Time) map[string]any {
 	shorten := func(p string) string {
 		if home != "" && strings.HasPrefix(p, home) {
@@ -215,6 +216,9 @@ func agentsContainer(agents []*state.Agent, ctx map[string]usage.CtxInfo, home s
 		}
 		lines = append(lines, line)
 	}
+	if len(lines) == 0 {
+		return nil // 빈 content는 Discord가 400으로 거부한다
+	}
 	color := "#565B66"
 	switch {
 	case worst != nil && *worst >= 80:
@@ -255,8 +259,8 @@ func BuildComponents(pay *usage.Payload, agents []*state.Agent, ctx map[string]u
 			}
 		}
 	}
-	if len(agents) > 0 {
-		comps = append(comps, agentsContainer(agents, ctx, home, now))
+	if ac := agentsContainer(agents, ctx, home, now); ac != nil {
+		comps = append(comps, ac)
 	}
 	comps = append(comps, map[string]any{"type": typeText,
 		"content": fmt.Sprintf("-# 갱신 <t:%d:R>", now.Unix())})
