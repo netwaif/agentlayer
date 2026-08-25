@@ -111,6 +111,28 @@ func TestIdleNotificationKeepsDone(t *testing.T) {
 	}
 }
 
+func TestIdleNotificationNeverWaitsFromIdle(t *testing.T) {
+	// 읽음 처리(IDLE) 후 도착한 유휴 에코도 WAIT를 만들면 안 된다
+	st := newStore(t)
+	pre := &state.Agent{ID: scan.IDForPane("claude", "%3"), Kind: "claude",
+		State: state.StateIdle, UpdatedAt: t0, StateSince: t0,
+		Tmux: state.TmuxRef{PaneID: "%3"}}
+	if err := st.Save(pre); err != nil {
+		t.Fatal(err)
+	}
+	idle := `{"session_id":"s","message":"Claude is waiting for your input"}`
+	if err := RunClaude(st, "notification", strings.NewReader(idle), env("%3"), t0.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.Load(pre.ID)
+	if a.State != state.StateIdle {
+		t.Errorf("유휴 에코는 IDLE 유지: %s", a.State)
+	}
+	if a.Task != "" {
+		t.Errorf("유휴 에코가 Task를 덮으면 안 됨: %q", a.Task)
+	}
+}
+
 func TestEmptyStdinTolerated(t *testing.T) {
 	st := newStore(t)
 	if err := RunClaude(st, "stop", strings.NewReader(""), env("%5"), t0); err != nil {

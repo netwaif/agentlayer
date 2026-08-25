@@ -6,6 +6,7 @@ package hookcmd
 import (
 	"encoding/json"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/scan"
@@ -52,10 +53,13 @@ func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) 
 			Tmux:      state.TmuxRef{PaneID: pane}, // 세션·창은 다음 Sync가 채운다
 			UpdatedAt: now, StateSince: now}
 	}
-	// 턴 종료(DONE) 후의 Notification은 "입력 기다림" 유휴 에코다 —
-	// 진짜 승인 요청은 턴 진행 중(WORKING)에만 오므로, DONE을 덮지 않는다.
-	// (UserPromptSubmit이 새 턴 시작 시 WORKING으로 되돌려 놓는 전제)
-	if event == "notification" && a.State == state.StateDoneUnread {
+	// 유휴 에코 무시: Claude Code는 60초 입력이 없으면
+	// "Claude is waiting for your input" Notification을 보낸다.
+	// 이건 승인 요청이 아니므로 어떤 상태(DONE·IDLE 포함)도 WAIT로 덮지 않는다.
+	// 진짜 승인·질문 알림은 다른 문구("needs your permission" 등)로 온다.
+	// 문구가 못 잡히는 미래 변경 대비로 DONE 상태 방어도 유지한다.
+	if event == "notification" &&
+		(strings.Contains(p.Message, "waiting for your input") || a.State == state.StateDoneUnread) {
 		a.UpdatedAt = now
 		return st.Save(a)
 	}
