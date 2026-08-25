@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -163,15 +164,18 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 	}
 
 	// 3) 구동 LaunchAgent — 세션 이름·폴더·(브리지면) 브리지 경로를 언급하는 plist
-	needles := []string{}
+	// 세션 이름은 단어 경계로 매칭 — "ai" 같은 짧은 이름이 "ai-folder"
+	// 경로에 부분 일치해 무관한 plist를 잡는 오탐을 막는다.
+	var sessionRe *regexp.Regexp
 	if session != "" {
-		needles = append(needles, session)
+		sessionRe = regexp.MustCompile(`(^|[^A-Za-z0-9_-])` + regexp.QuoteMeta(session) + `($|[^A-Za-z0-9_-])`)
 	}
+	var pathNeedles []string
 	if folder != "" {
-		needles = append(needles, folder)
+		pathNeedles = append(pathNeedles, folder)
 	}
 	if info.Bridge != nil {
-		needles = append(needles, info.Bridge.Dir)
+		pathNeedles = append(pathNeedles, info.Bridge.Dir)
 	}
 	if entries, err := os.ReadDir(p.LaunchAgentsDir); err == nil {
 		for _, e := range entries {
@@ -183,12 +187,18 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 				continue
 			}
 			s := string(b)
-			for _, n := range needles {
-				if strings.Contains(s, n) {
-					info.LaunchAgents = append(info.LaunchAgents,
-						strings.TrimSuffix(e.Name(), ".plist"))
-					break
+			matched := sessionRe != nil && sessionRe.MatchString(s)
+			if !matched {
+				for _, n := range pathNeedles {
+					if strings.Contains(s, n) {
+						matched = true
+						break
+					}
 				}
+			}
+			if matched {
+				info.LaunchAgents = append(info.LaunchAgents,
+					strings.TrimSuffix(e.Name(), ".plist"))
 			}
 		}
 	}

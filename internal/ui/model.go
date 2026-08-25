@@ -228,7 +228,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if cmd == "close" {
 					message = cli.CloseMessage
 				}
-				sent, total, err := cli.SendAll(m.store, m.tm, message)
+				sent, total, err := cli.SendAll(m.store, m.tm, message, true)
 				if err != nil {
 					m.err = err
 				} else {

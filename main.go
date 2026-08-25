@@ -317,7 +317,7 @@ func runAll(cmd string, args []string) error {
 			return err
 		}
 	}
-	return cli.RunAll(os.Stdout, st, tmuxx.Tmux{}, message, o, now)
+	return cli.RunAll(os.Stdout, st, tmuxx.Tmux{}, message, o, cmd != "broadcast", now)
 }
 
 // runResume: agentlayer resume [id]

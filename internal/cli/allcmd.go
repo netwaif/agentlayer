@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,6 +19,27 @@ const (
 	WakeMessage  = "세션 이어서하자"
 	CloseMessage = "세션 마감하자"
 )
+
+// HasSessionHandoff는 폴더가 세션 이어가기 규율을 갖췄는지 검사한다:
+// SESSION.md가 있거나, CLAUDE.md/AGENTS.md에 loadout 조각 마커가 있으면 참.
+// wake-all/close-all 지시는 이 규율이 있는 세션에만 의미가 있다.
+func HasSessionHandoff(cwd string) bool {
+	if cwd == "" {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(cwd, "SESSION.md")); err == nil {
+		return true
+	}
+	for _, f := range []string{"CLAUDE.md", "AGENTS.md"} {
+		if b, err := os.ReadFile(filepath.Join(cwd, f)); err == nil {
+			if strings.Contains(string(b), "store:session-handoff") ||
+				strings.Contains(string(b), "세션 이어가기") {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // Targets는 일괄 전송 대상을 고른다: claude·codex(loadout이 양쪽에서 돌므로),
 // 죽지 않은 것, 그리고 자기 자신 pane 제외(자기 세션에 지시를 쏘지 않게).
@@ -71,12 +93,25 @@ func ParseAllFlags(name string, args []string, defaultWatch bool) (*AllOptions, 
 }
 
 // RunAll은 wake-all / close-all / broadcast의 공통 본체.
-func RunAll(w io.Writer, st *state.Store, tm tmuxx.Tmux, message string, o *AllOptions, now time.Time) error {
+// handoffOnly는 기상·마감(조각 있는 세션만), broadcast는 false(전체).
+func RunAll(w io.Writer, st *state.Store, tm tmuxx.Tmux, message string, o *AllOptions, handoffOnly bool, now time.Time) error {
 	agents, err := st.List()
 	if err != nil {
 		return err
 	}
 	targets := Targets(agents, tmuxx.CurrentPaneID(), o.except)
+	if handoffOnly {
+		var kept []*state.Agent
+		for _, a := range targets {
+			if HasSessionHandoff(a.CWD) {
+				kept = append(kept, a)
+			}
+		}
+		if len(kept) < len(targets) {
+			fmt.Fprintf(w, "(세션 이어가기 조각·SESSION.md 없는 %d개 폴더는 제외)\n", len(targets)-len(kept))
+		}
+		targets = kept
+	}
 	if len(targets) == 0 {
 		fmt.Fprintln(w, "전송할 대상이 없습니다.")
 		return nil
@@ -115,12 +150,22 @@ func RunAll(w io.Writer, st *state.Store, tm tmuxx.Tmux, message string, o *AllO
 
 // SendAll은 확인 절차 없이 대상 전원에게 메시지를 보낸다.
 // 확인(y/N)은 호출자(CLI 프롬프트 또는 TUI 키 확인)의 책임이다.
-func SendAll(st *state.Store, tm tmuxx.Tmux, message string) (sent, total int, err error) {
+// handoffOnly=true(기상·마감)면 세션 이어가기 규율이 있는 폴더만 대상.
+func SendAll(st *state.Store, tm tmuxx.Tmux, message string, handoffOnly bool) (sent, total int, err error) {
 	agents, err := st.List()
 	if err != nil {
 		return 0, 0, err
 	}
 	targets := Targets(agents, tmuxx.CurrentPaneID(), nil)
+	if handoffOnly {
+		var kept []*state.Agent
+		for _, a := range targets {
+			if HasSessionHandoff(a.CWD) {
+				kept = append(kept, a)
+			}
+		}
+		targets = kept
+	}
 	for _, a := range targets {
 		if tm.SendText(a.Tmux.PaneID, message) == nil {
 			sent++
