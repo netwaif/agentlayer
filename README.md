@@ -79,6 +79,28 @@ agentlayer card       # Discord 상태 카드 업서트 (주기 실행용) / --o
   업서트하고, provider level이 악화되면 새 메시지로 핑한다.
   LaunchAgent 등으로 5분 주기 실행을 권장
 
+## Worktree 병렬 모드
+
+같은 저장소에서 여러 에이전트(claude/codex/gemini 혼합 자유)가 서로 파일을
+밟지 않고 병렬 작업하게 한다. 명령 하나가 worktree + `agent/<task>` 브랜치 +
+tmux window + 에이전트 실행까지 만든다.
+
+```bash
+agentlayer wt new auth-api --agent claude --test 'go test ./...'
+agentlayer wt new login-ui --agent codex        # 같은 repo, 충돌 없음
+agentlayer wt list                              # dirty·미병합·테스트 상태 한눈에
+agentlayer wt diff auth-api                     # base 대비 변경
+agentlayer wt test auth-api                     # 테스트 실행·기록
+agentlayer wt review auth-api                   # 리뷰 파일 생성 → "#> 코멘트" 작성
+agentlayer wt send auth-api                     # 코멘트를 에이전트에 수정 지시로 전송
+agentlayer wt merge auth-api                    # 검사 요약 + 명령 안내 + y 확인 후 병합
+agentlayer wt clean auth-api                    # 보존 우선 정리
+```
+
+- **자동 merge 없음** — merge는 항상 안내 + 명시적 확인
+- **보존 우선 정리** — 미커밋·untracked·미병합 커밋이 하나라도 있으면 clean 거부
+- worktree는 `<repo>/.agentlayer/worktrees/<task>`에, 메타는 상태 디렉터리에 기록
+
 ## 안전 원칙
 
 - 기존 tmux 세션·window·pane을 절대 kill하지 않는다
