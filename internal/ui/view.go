@@ -20,6 +20,8 @@ var (
 	styleTitle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffaf5f")).Bold(true)
 	styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("#3a3a3a")).Bold(true)
 	styleHelp     = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a6a6a"))
+	styleModel    = lipgloss.NewStyle().Foreground(lipgloss.Color("#d0d0d0"))
+	styleDiscord  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7C8AFF")).Bold(true)
 
 	stateStyles = map[state.AgentState]lipgloss.Style{
 		state.StateWorking:    lipgloss.NewStyle().Foreground(lipgloss.Color("#43B581")),
@@ -144,18 +146,18 @@ func (m Model) ctxBadge(a *state.Agent) string {
 	}
 	var parts []string
 	if info.Model != "" {
-		parts = append(parts, info.Model)
+		parts = append(parts, styleModel.Render(info.Model))
 	}
 	if info.UsedPct != nil {
-		parts = append(parts, ctxStyle(*info.UsedPct).Render(fmt.Sprintf("ctx %d%%", int(*info.UsedPct))))
+		parts = append(parts, ctxStyle(*info.UsedPct).Bold(true).Render(fmt.Sprintf("ctx %d%%", int(*info.UsedPct))))
 	}
 	if !info.TS.IsZero() {
-		parts = append(parts, cli.Since(info.TS, m.now))
+		parts = append(parts, styleHeader.Render(cli.Since(info.TS, m.now)))
 	}
 	if len(parts) == 0 {
 		return ""
 	}
-	return styleHelp.Render("[") + strings.Join(parts, styleHelp.Render(" · ")) + styleHelp.Render("]")
+	return styleHeader.Render("[") + strings.Join(parts, styleHeader.Render(" · ")) + styleHeader.Render("]")
 }
 
 // usageSummaryLine은 메인 뷰 헤더의 사용량 한 줄 요약.
@@ -293,7 +295,7 @@ func (m Model) View() string {
 			cli.PadRight(task, 30),
 			cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
 		if m.discordWired[a.CWD] {
-			line += " " + styleHelp.Render("⌁")
+			line += " " + styleDiscord.Render("⌁")
 		}
 		if br, ok := m.wtBranch[a.CWD]; ok {
 			line += " " + styleTitle.Render("⎇ "+br)
@@ -313,7 +315,7 @@ func (m Model) View() string {
 	}
 	b.WriteString("\n" + styleHelp.Render("j/k 이동 · enter 점프+읽음 · o 읽음 · i 상세 · g git(lazygit) · u 사용량 · r 새로고침 · q 종료"))
 	if m.err != nil {
-		b.WriteString("\n" + stateStyles[state.StateError].Render("점프 실패: "+m.err.Error()))
+		b.WriteString("\n" + stateStyles[state.StateError].Render("⚠ "+m.err.Error()))
 	}
 	return b.String()
 }

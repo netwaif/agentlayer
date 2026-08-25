@@ -210,6 +210,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case gitDoneMsg:
 		// lazygit에서 커밋 등이 일어났을 수 있으니 즉시 새로고침
+		if msg.err != nil {
+			m.err = fmt.Errorf("lazygit 종료: %v", msg.err)
+		}
 		return m, m.refreshCmd()
 
 	case tea.KeyMsg:
@@ -237,6 +240,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.err = fmt.Errorf("lazygit이 설치돼 있지 않습니다 (brew install lazygit)")
 					return m, nil
 				}
+				// lazygit은 저장소가 아니면 즉시 종료(깜빡임)하므로 미리 검사
+				if exec.Command("git", "-C", a.CWD, "rev-parse", "--git-dir").Run() != nil {
+					m.err = fmt.Errorf("%s는 git 저장소가 아닙니다 — worktree 태스크나 repo 폴더에서만 g가 동작합니다", a.Tmux.Session)
+					return m, nil
+				}
+				m.err = nil
 				c := exec.Command(bin, "-p", a.CWD)
 				return m, tea.ExecProcess(c, func(err error) tea.Msg { return gitDoneMsg{err: err} })
 			}
