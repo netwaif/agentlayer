@@ -3,7 +3,9 @@
 package ui
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -46,6 +48,9 @@ type usageMsg struct {
 
 // jumpDoneMsg는 점프 실행 후 종료 신호.
 type jumpDoneMsg struct{ err error }
+
+// gitDoneMsg는 lazygit에서 돌아온 뒤 새로고침 신호.
+type gitDoneMsg struct{ err error }
 
 // Model은 TUI 상태.
 type Model struct {
@@ -203,6 +208,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		return m, tea.Quit
 
+	case gitDoneMsg:
+		// lazygit에서 커밋 등이 일어났을 수 있으니 즉시 새로고침
+		return m, m.refreshCmd()
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
@@ -220,6 +229,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "u":
 			m.showUsage = !m.showUsage
 			m.showInfo = false
+			return m, nil
+		case "g": // 선택 에이전트 폴더를 lazygit으로 (조작은 lazygit이 정본)
+			if a := m.selected(); a != nil && a.CWD != "" {
+				bin := usage.LookupTool("lazygit")
+				if bin == "" {
+					m.err = fmt.Errorf("lazygit이 설치돼 있지 않습니다 (brew install lazygit)")
+					return m, nil
+				}
+				c := exec.Command(bin, "-p", a.CWD)
+				return m, tea.ExecProcess(c, func(err error) tea.Msg { return gitDoneMsg{err: err} })
+			}
 			return m, nil
 		case "i":
 			if m.showInfo {

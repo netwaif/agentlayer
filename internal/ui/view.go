@@ -311,7 +311,7 @@ func (m Model) View() string {
 	if len(m.agents) == 0 {
 		b.WriteString(styleHelp.Render("  tmux에서 실행 중인 claude/codex/gemini가 없습니다\n"))
 	}
-	b.WriteString("\n" + styleHelp.Render("j/k 이동 · enter 점프+읽음 · o 읽음 · i 상세 · u 사용량 · r 새로고침 · q 종료"))
+	b.WriteString("\n" + styleHelp.Render("j/k 이동 · enter 점프+읽음 · o 읽음 · i 상세 · g git(lazygit) · u 사용량 · r 새로고침 · q 종료"))
 	if m.err != nil {
 		b.WriteString("\n" + stateStyles[state.StateError].Render("점프 실패: "+m.err.Error()))
 	}

@@ -47,8 +47,9 @@ func toolDirs() []string {
 	return append(dirs, "/opt/homebrew/bin", "/usr/local/bin")
 }
 
-// lookupTool은 name을 PATH에서, 없으면 흔한 위치에서 찾는다.
-func lookupTool(name string) string {
+// LookupTool은 name을 PATH에서, 없으면 흔한 위치에서 찾는다.
+// (tmux 팝업의 최소 PATH 환경 대응 — coach·lazygit 등 외부 도구 공용)
+func LookupTool(name string) string {
 	if p, err := exec.LookPath(name); err == nil {
 		return p
 	}
@@ -81,7 +82,7 @@ func extendedEnv() []string {
 
 // CoachRunner는 기본 실행기: coach를 찾아 --json으로 부른다.
 func CoachRunner() ([]byte, error) {
-	bin := lookupTool("coach")
+	bin := LookupTool("coach")
 	if bin == "" {
 		return nil, fmt.Errorf("coach 없음")
 	}
