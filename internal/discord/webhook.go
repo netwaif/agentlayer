@@ -79,7 +79,7 @@ func (c *Client) request(method, url string, payload any) (map[string]any, int, 
 		return nil, 0, fmt.Errorf("discord 요청 실패")
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 카드 응답은 수 KB — 넉넉히
 	var out map[string]any
 	_ = json.Unmarshal(raw, &out)
 	if resp.StatusCode >= 400 {

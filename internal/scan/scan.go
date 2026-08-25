@@ -5,6 +5,7 @@ package scan
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -15,21 +16,26 @@ import (
 // DEAD 레코드를 보존하는 기간. 그 뒤에는 저장소에서 정리한다.
 const deadRetention = 24 * time.Hour
 
+// versionRe: Claude Code는 프로세스 이름을 자기 버전("2.1.241")으로 바꾼다.
+var versionRe = regexp.MustCompile(`^\d+(\.\d+)+$`)
+
 // DetectKind는 pane이 어떤 에이전트인지 판정한다.
-// Claude Code는 pane_current_command가 버전 문자열(예: "2.1.241")이나
-// node로 잡히는 경우가 있어 title의 "✳" 신호를 병용한다.
 // 화면 내용 스크래핑은 하지 않는다 — command와 title 메타데이터만 본다.
+// 판정은 로케일 무관해야 한다: LANG 없는 환경(LaunchAgent)에서 tmux가
+// 제목의 비ASCII를 치환하므로, ✳ 제목 신호는 보조로만 쓴다.
 func DetectKind(p tmuxx.Pane) string {
 	cmd := strings.ToLower(p.Command)
 	switch {
-	case cmd == "claude" || strings.HasPrefix(cmd, "claude"):
+	case strings.HasPrefix(cmd, "claude"):
 		return "claude"
-	case cmd == "codex" || strings.HasPrefix(cmd, "codex"):
+	case strings.HasPrefix(cmd, "codex"):
 		return "codex"
-	case cmd == "gemini" || strings.HasPrefix(cmd, "gemini"):
+	case strings.HasPrefix(cmd, "gemini"):
 		return "gemini"
+	case versionRe.MatchString(cmd):
+		// 버전 형식 command = Claude Code (프로세스명을 버전으로 바꿈)
+		return "claude"
 	case strings.Contains(p.Title, "✳"):
-		// Claude Code의 상태 제목 신호 (버전형 command 대비)
 		return "claude"
 	}
 	return ""

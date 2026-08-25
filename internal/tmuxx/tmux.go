@@ -85,6 +85,11 @@ type Tmux struct {
 
 func (t Tmux) run(args ...string) (string, error) {
 	cmd := exec.Command(Bin(), append(append([]string{}, t.Args...), args...)...)
+	// LaunchAgent 등 LANG 없는 환경에서 tmux는 비ASCII(✳·한글)를 _로
+	// 치환해 감지·표시가 깨진다 — UTF-8 로케일을 보장한다.
+	if os.Getenv("LANG") == "" && os.Getenv("LC_ALL") == "" {
+		cmd.Env = append(os.Environ(), "LANG=en_US.UTF-8")
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("tmux %s: %w", strings.Join(args, " "), err)

@@ -33,7 +33,8 @@ func TestDetectKind(t *testing.T) {
 		{tmuxx.Pane{Command: "gemini", Title: ""}, "gemini"},
 		{tmuxx.Pane{Command: "python3.11", Title: "gwonsunhouiiMac"}, ""},
 		{tmuxx.Pane{Command: "zsh", Title: ""}, ""},
-		{tmuxx.Pane{Command: "2.1.241", Title: ""}, ""}, // 버전형이어도 ✳ 없으면 판정 보류
+		{tmuxx.Pane{Command: "2.1.241", Title: ""}, "claude"},             // 버전형 = Claude (로케일 무관 판정)
+		{tmuxx.Pane{Command: "2.1.241", Title: "_ collab-bot"}, "claude"}, // LANG 없어 ✳가 _로 치환된 경우
 	}
 	for _, c := range cases {
 		if got := DetectKind(c.pane); got != c.want {

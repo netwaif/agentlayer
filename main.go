@@ -134,7 +134,25 @@ func runCard(args []string) error {
 		}
 	}
 	home, _ := os.UserHomeDir()
-	comps := discord.BuildComponents(pay, agents, ctx, home, now)
+	// Discord 연결 표시: 채널 라벨이 있으면 ⌁라벨, 없으면 ⌁
+	cfgForCard := config.Load()
+	wired := map[string]string{}
+	wp := wiring.DefaultPaths()
+	for _, a := range agents {
+		if a.CWD == "" || wired[a.CWD] != "" {
+			continue
+		}
+		wi := wiring.Collect(wp, a.CWD, a.Tmux.Session, cfgForCard.ChannelLabels)
+		if !wi.DiscordConnected() {
+			continue
+		}
+		mark := "⌁"
+		if wi.Discord != nil && len(wi.Discord.Channels) > 0 && wi.Discord.Channels[0].Label != "" {
+			mark += wi.Discord.Channels[0].Label
+		}
+		wired[a.CWD] = mark
+	}
+	comps := discord.BuildComponents(pay, agents, ctx, wired, home, now)
 
 	if *outOnly {
 		enc := json.NewEncoder(os.Stdout)

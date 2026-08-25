@@ -168,7 +168,7 @@ func windowOrder(ws map[string]usage.Window) []string {
 
 // agentsContainer는 에이전트 섹션: 상태 + 폴더 + 모델 + ctx 게이지 + 경과.
 // agentsContainer는 행이 하나도 없으면 nil (빈 섹션 금지).
-func agentsContainer(agents []*state.Agent, ctx map[string]usage.CtxInfo, home string, now time.Time) map[string]any {
+func agentsContainer(agents []*state.Agent, ctx map[string]usage.CtxInfo, wired map[string]string, home string, now time.Time) map[string]any {
 	shorten := func(p string) string {
 		if home != "" && strings.HasPrefix(p, home) {
 			return "~" + strings.TrimPrefix(p, home)
@@ -214,6 +214,9 @@ func agentsContainer(agents []*state.Agent, ctx map[string]usage.CtxInfo, home s
 		if r.a.State != state.StateIdle {
 			line += " " + since(r.a.StateSince, now)
 		}
+		if w := wired[r.a.CWD]; w != "" {
+			line += " · " + w
+		}
 		lines = append(lines, line)
 	}
 	if len(lines) == 0 {
@@ -250,7 +253,8 @@ func since(from, now time.Time) string {
 }
 
 // BuildComponents는 카드 전체를 조립한다. usage가 nil이면 에이전트 섹션만.
-func BuildComponents(pay *usage.Payload, agents []*state.Agent, ctx map[string]usage.CtxInfo, home string, now time.Time) []any {
+// wired는 CWD → Discord 연결 표시("⌁" 또는 "⌁라벨"), 없으면 nil 허용.
+func BuildComponents(pay *usage.Payload, agents []*state.Agent, ctx map[string]usage.CtxInfo, wired map[string]string, home string, now time.Time) []any {
 	var comps []any
 	if pay != nil {
 		for _, key := range []string{"claude", "codex", "antigravity"} {
@@ -259,7 +263,7 @@ func BuildComponents(pay *usage.Payload, agents []*state.Agent, ctx map[string]u
 			}
 		}
 	}
-	if ac := agentsContainer(agents, ctx, home, now); ac != nil {
+	if ac := agentsContainer(agents, ctx, wired, home, now); ac != nil {
 		comps = append(comps, ac)
 	}
 	comps = append(comps, map[string]any{"type": typeText,

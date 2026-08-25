@@ -46,7 +46,7 @@ func fixtureAgents() ([]*state.Agent, map[string]usage.CtxInfo) {
 
 func TestBuildComponents(t *testing.T) {
 	agents, ctx := fixtureAgents()
-	comps := BuildComponents(fixturePayload(), agents, ctx, "/Users/soonho", t0)
+	comps := BuildComponents(fixturePayload(), agents, ctx, map[string]string{"/Users/soonho/ai-folder/collab": "⌁collab방"}, "/Users/soonho", t0)
 	b, err := json.Marshal(comps)
 	if err != nil {
 		t.Fatal(err)
@@ -58,6 +58,7 @@ func TestBuildComponents(t *testing.T) {
 		"knowhackking", // antigravity 계정 행
 		"### 에이전트", "~/ai-folder/collab", "Opus 5 (1M context)", "응답 필요", "8분",
 		"갱신 \\u003ct:", // json.Marshal이 <를 이스케이프 — Discord는 정상 해석
+		"⌁collab방",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("카드에 %q 있어야 함", want)
@@ -75,7 +76,7 @@ func TestBuildComponents(t *testing.T) {
 
 func TestBuildComponentsNoUsage(t *testing.T) {
 	agents, ctx := fixtureAgents()
-	comps := BuildComponents(nil, agents, ctx, "/Users/soonho", t0)
+	comps := BuildComponents(nil, agents, ctx, nil, "/Users/soonho", t0)
 	b, _ := json.Marshal(comps)
 	if !strings.Contains(string(b), "### 에이전트") {
 		t.Error("coach 없이도 에이전트 섹션은 나옴")
