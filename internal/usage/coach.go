@@ -81,6 +81,7 @@ func ResetLabel(min *float64) string {
 	case d < 24*time.Hour:
 		return fmt.Sprintf("%d시간 후", int(d.Hours()))
 	default:
-		return fmt.Sprintf("%d일 후", int(d.Hours()/24))
+		// 일 단위는 반올림 — "5.7일"을 "6일 후"로 보여주는 게 체감에 맞다
+		return fmt.Sprintf("%d일 후", int(d.Hours()/24+0.5))
 	}
 }
