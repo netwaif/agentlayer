@@ -415,13 +415,14 @@ func (m Model) View() string {
 		if width < 20 {
 			width = 80
 		}
-		b.WriteString("\n" + styleHeader.Render("── "+title+" "+strings.Repeat("─", max(0, width-runewidth.StringWidth(title)-5))) + "\n")
+		b.WriteString("\n" + styleTitle.Render("── "+title+" ") +
+			styleHeader.Render(strings.Repeat("─", max(0, width-runewidth.StringWidth(title)-5))) + "\n")
 		lines := strings.Split(m.preview, "\n")
 		if len(lines) > h {
 			lines = lines[len(lines)-h:]
 		}
 		for _, ln := range lines {
-			b.WriteString(styleHelp.Render(runewidth.Truncate(ln, width, "")) + "\n")
+			b.WriteString(styleModel.Render(runewidth.Truncate(ln, width, "")) + "\n")
 		}
 	}
 
