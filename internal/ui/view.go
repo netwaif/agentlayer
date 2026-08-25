@@ -18,7 +18,7 @@ import (
 var (
 	styleHeader   = lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a"))
 	styleTitle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffaf5f")).Bold(true)
-	styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("#3a3a3a")).Bold(true)
+	styleSelected = lipgloss.NewStyle().Background(lipgloss.Color("#ffaf5f")).Foreground(lipgloss.Color("#1c1c1c")).Bold(true)
 	styleHelp     = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a6a6a"))
 	styleModel    = lipgloss.NewStyle().Foreground(lipgloss.Color("#d0d0d0"))
 	styleDiscord  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7C8AFF")).Bold(true)
@@ -32,6 +32,22 @@ var (
 		state.StateDead:       lipgloss.NewStyle().Foreground(lipgloss.Color("#555555")),
 	}
 )
+
+// stateText는 색 없는 상태 라벨 (선택 바 렌더용).
+func stateText(a *state.Agent, now time.Time) string {
+	label := map[state.AgentState]string{
+		state.StateWorking:    "● WORK",
+		state.StateWaiting:    "◆ WAIT",
+		state.StateDoneUnread: "✔ DONE",
+		state.StateError:      "✖ ERR ",
+		state.StateIdle:       "· idle",
+		state.StateDead:       "  dead",
+	}[a.State]
+	if a.State == state.StateWorking && a.Stale(now) {
+		label = "● WORK?"
+	}
+	return label
+}
 
 func stateBadge(a *state.Agent, now time.Time) string {
 	label := map[state.AgentState]string{
@@ -158,6 +174,28 @@ func (m Model) ctxBadge(a *state.Agent) string {
 		return ""
 	}
 	return styleHeader.Render("[") + strings.Join(parts, styleHeader.Render(" · ")) + styleHeader.Render("]")
+}
+
+// ctxBadgePlain은 색 없는 컨텍스트 뱃지 (선택 바 렌더용).
+func (m Model) ctxBadgePlain(a *state.Agent) string {
+	info, ok := m.ctx[a.CWD]
+	if !ok {
+		return ""
+	}
+	var parts []string
+	if info.Model != "" {
+		parts = append(parts, info.Model)
+	}
+	if info.UsedPct != nil {
+		parts = append(parts, fmt.Sprintf("ctx %d%%", int(*info.UsedPct)))
+	}
+	if !info.TS.IsZero() {
+		parts = append(parts, cli.Since(info.TS, m.now))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "[" + strings.Join(parts, " · ") + "]"
 }
 
 // usageSummaryLine은 메인 뷰 헤더의 사용량 한 줄 요약.
@@ -290,7 +328,30 @@ func (m Model) View() string {
 
 	for i, a := range m.agents {
 		task := runewidth.Truncate(a.Task, 28, "…")
-		line := fmt.Sprintf("%s %s %s %s %s · %s",
+		if i == m.cursor {
+			// 선택 행: 색 조각 없이 통짜 텍스트를 만들어 화면 전체 폭 반전 바로.
+			// (안쪽 색 코드가 배경을 끊어 바가 짧아지는 문제 방지)
+			line := fmt.Sprintf("▸ %s %s %s %s %s · %s",
+				stateText(a, m.now), cli.PadRight(a.Kind, 7), cli.PadRight(a.Tmux.Session, 20),
+				cli.PadRight(task, 30),
+				cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
+			if m.discordWired[a.CWD] {
+				line += " ⌁"
+			}
+			if br, ok := m.wtBranch[a.CWD]; ok {
+				line += " ⎇ " + br
+			}
+			if badge := m.ctxBadgePlain(a); badge != "" {
+				line += " " + badge
+			}
+			width := m.width
+			if width < runewidth.StringWidth(line)+1 {
+				width = runewidth.StringWidth(line) + 1
+			}
+			b.WriteString(styleSelected.Render(cli.PadRight(line, width)) + "\n")
+			continue
+		}
+		line := fmt.Sprintf("  %s %s %s %s %s · %s",
 			stateBadge(a, m.now), cli.PadRight(a.Kind, 7), cli.PadRight(a.Tmux.Session, 20),
 			cli.PadRight(task, 30),
 			cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
@@ -302,11 +363,6 @@ func (m Model) View() string {
 		}
 		if badge := m.ctxBadge(a); badge != "" {
 			line += " " + badge
-		}
-		if i == m.cursor {
-			line = styleSelected.Render("▸ " + line)
-		} else {
-			line = "  " + line
 		}
 		b.WriteString(line + "\n")
 	}
