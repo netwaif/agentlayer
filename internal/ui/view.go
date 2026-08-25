@@ -93,6 +93,34 @@ var levelEmoji = map[string]string{
 	"red": "🔴", "yellow": "🟡", "wait": "⏳", "white": "⚪", "green": "🟢",
 }
 
+// provider 브랜드 색·점 — Discord 카드와 동일 규칙:
+// 평상시(green/white)는 브랜드 색, 위험(red/yellow/wait)이면 level 색이 덮는다.
+var provStyle = map[string]lipgloss.Style{
+	"claude":      lipgloss.NewStyle().Foreground(lipgloss.Color("#E5B567")).Bold(true),
+	"codex":       lipgloss.NewStyle().Foreground(lipgloss.Color("#7ED5F5")).Bold(true),
+	"antigravity": lipgloss.NewStyle().Foreground(lipgloss.Color("#C89BF0")).Bold(true),
+}
+
+var provEmoji = map[string]string{"claude": "🟠", "codex": "🔵", "antigravity": "🟣"}
+
+func providerStyle(key, level string) lipgloss.Style {
+	if level == "green" || level == "white" {
+		if s, ok := provStyle[key]; ok {
+			return s
+		}
+	}
+	return levelStyle[level]
+}
+
+func providerEmoji(key, level string) string {
+	if level == "green" || level == "white" {
+		if e, ok := provEmoji[key]; ok {
+			return e
+		}
+	}
+	return levelEmoji[level]
+}
+
 // 게이지 라벨 — Discord 카드와 동일 축
 var winLabel = map[string]string{"5h": "5h", "7d": "7d", "daily": "1d", "fable_7d": "Fable"}
 
@@ -156,8 +184,8 @@ func (m Model) usageSummaryLine() string {
 			}
 		}
 		if len(wins) > 0 {
-			parts = append(parts, levelStyle[p.Level].Render(
-				levelEmoji[p.Level]+" "+strings.Title(key)+" "+strings.Join(wins, " · ")))
+			parts = append(parts, providerStyle(key, p.Level).Render(
+				providerEmoji(key, p.Level)+" "+strings.Title(key)+" "+strings.Join(wins, " · ")))
 		}
 	}
 	return strings.Join(parts, styleHelp.Render("  |  "))
@@ -191,8 +219,8 @@ func (m Model) usageView() string {
 			if !ok || !p.OK {
 				continue
 			}
-			head := fmt.Sprintf("%s %s — %s", levelEmoji[p.Level], strings.Title(key), p.Action)
-			b.WriteString(levelStyle[p.Level].Render(head) + "\n")
+			head := fmt.Sprintf("%s %s — %s", providerEmoji(key, p.Level), strings.Title(key), p.Action)
+			b.WriteString(providerStyle(key, p.Level).Render(head) + "\n")
 			b.WriteString(styleHelp.Render("  "+p.Email) + "\n")
 			for _, wk := range windowOrder(p.Windows) {
 				w := p.Windows[wk]
