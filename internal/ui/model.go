@@ -50,6 +50,12 @@ type jumpDoneMsg struct{ err error }
 // gitDoneMsg는 lazygit에서 돌아온 뒤 새로고침 신호.
 type gitDoneMsg struct{ err error }
 
+// previewMsg는 선택 pane 화면 미리보기.
+type previewMsg struct {
+	paneID  string
+	content string
+}
+
 // Model은 TUI 상태.
 type Model struct {
 	store        *state.Store
@@ -65,6 +71,8 @@ type Model struct {
 	infoText     string // 상세 카드 렌더 결과
 	pendingCmd   string // "wake"|"close": y 확인 대기 중
 	notice       string // 하단 안내줄 (에러 아님)
+	preview      string // 선택 pane 화면 미리보기
+	previewPane  string
 	usagePay     *usage.Payload
 	ctx          map[string]usage.CtxInfo // CWD(절대경로) → 모델·ctx%
 	wtBranch     map[string]string        // worktree 경로 → 브랜치
@@ -159,6 +167,35 @@ func (m Model) refreshCmd() tea.Cmd {
 	}
 }
 
+// previewCmd는 선택 pane의 화면 꼬리를 가져온다 (표시 전용).
+func (m Model) previewCmd() tea.Cmd {
+	a := m.selected()
+	if a == nil || a.State == state.StateDead {
+		return func() tea.Msg { return previewMsg{} }
+	}
+	tm, pane, lines := m.tm, a.Tmux.PaneID, m.previewHeight()
+	if lines < 3 {
+		return nil
+	}
+	return func() tea.Msg {
+		content, err := tm.CapturePane(pane, lines)
+		if err != nil {
+			return previewMsg{paneID: pane}
+		}
+		return previewMsg{paneID: pane, content: content}
+	}
+}
+
+// previewHeight는 목록·헤더·도움말을 빼고 남는 미리보기 줄 수.
+func (m Model) previewHeight() int {
+	used := 5 + len(m.agents) + 3 // 헤더(요약·사용량·starter·컬럼)≈5 + 목록 + 하단
+	h := m.height - used
+	if h > 40 {
+		h = 40
+	}
+	return h
+}
+
 // jumpCmd는 선택 에이전트의 pane으로 이동 후 종료를 지시한다.
 func (m Model) jumpCmd(a *state.Agent) tea.Cmd {
 	tm := m.tm
@@ -200,6 +237,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cursor >= len(m.agents) {
 			m.cursor = max(0, len(m.agents)-1)
 		}
+		return m, m.previewCmd() // 미리보기도 폴링 주기에 맞춰 라이브 갱신
+
+	case previewMsg:
+		m.preview = msg.content
+		m.previewPane = msg.paneID
 		return m, nil
 
 	case jumpDoneMsg:
@@ -246,10 +288,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor < len(m.agents)-1 {
 				m.cursor++
 			}
+			return m, m.previewCmd()
 		case "k", "up":
 			if m.cursor > 0 {
 				m.cursor--
 			}
+			return m, m.previewCmd()
 		case "r":
 			return m, tea.Batch(m.refreshCmd(), m.usageCmd())
 		case "u":

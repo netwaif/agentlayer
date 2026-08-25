@@ -181,6 +181,24 @@ func (t Tmux) SendText(paneID, text string) error {
 	return err
 }
 
+// CapturePane은 pane 화면의 마지막 lines줄을 평문으로 가져온다.
+// 표시 전용(미리보기) — 상태 판정에는 절대 쓰지 않는다.
+func (t Tmux) CapturePane(paneID string, lines int) (string, error) {
+	out, err := t.run("capture-pane", "-p", "-t", paneID, "-S", fmt.Sprintf("-%d", lines))
+	if err != nil {
+		return "", err
+	}
+	// 꼬리의 빈 줄 제거 후 마지막 lines줄만
+	all := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	for len(all) > 0 && strings.TrimSpace(all[len(all)-1]) == "" {
+		all = all[:len(all)-1]
+	}
+	if len(all) > lines {
+		all = all[len(all)-lines:]
+	}
+	return strings.Join(all, "\n"), nil
+}
+
 // InsideTmux는 tmux 안에서 실행 중인지.
 func InsideTmux() bool {
 	return os.Getenv("TMUX") != ""

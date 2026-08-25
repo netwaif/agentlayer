@@ -404,6 +404,27 @@ func (m Model) View() string {
 	if len(m.agents) == 0 {
 		b.WriteString(styleHelp.Render("  tmux에서 실행 중인 claude/codex/gemini가 없습니다\n"))
 	}
+	// 선택 세션 화면 미리보기 (C-b s 스타일) — 남는 공간에
+	if h := m.previewHeight(); h >= 3 && m.preview != "" {
+		sel := m.selected()
+		title := "미리보기"
+		if sel != nil {
+			title = sel.Tmux.Session + " 미리보기"
+		}
+		width := m.width
+		if width < 20 {
+			width = 80
+		}
+		b.WriteString("\n" + styleHeader.Render("── "+title+" "+strings.Repeat("─", max(0, width-runewidth.StringWidth(title)-5))) + "\n")
+		lines := strings.Split(m.preview, "\n")
+		if len(lines) > h {
+			lines = lines[len(lines)-h:]
+		}
+		for _, ln := range lines {
+			b.WriteString(styleHelp.Render(runewidth.Truncate(ln, width, "")) + "\n")
+		}
+	}
+
 	if m.pendingCmd != "" {
 		what := "이어서하기(기상)"
 		if m.pendingCmd == "close" {
