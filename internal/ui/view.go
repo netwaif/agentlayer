@@ -199,6 +199,23 @@ func (m Model) ctxBadgePlain(a *state.Agent) string {
 	return "[" + strings.Join(parts, " · ") + "]"
 }
 
+// usageAge는 coach 데이터의 나이 표시 — 늦게 갱신될 수 있음을 숨기지 않는다.
+func (m Model) usageAge() string {
+	if m.usagePay == nil || m.usagePay.TS == "" {
+		return ""
+	}
+	ts, err := time.Parse(time.RFC3339, m.usagePay.TS)
+	if err != nil {
+		return ""
+	}
+	age := m.now.Sub(ts)
+	label := cli.Since(ts, m.now) + " 전 데이터"
+	if age > 15*time.Minute {
+		return levelStyle["yellow"].Render("⚠ " + label)
+	}
+	return styleHelp.Render(label)
+}
+
 // usageSummaryLine은 메인 뷰 헤더의 사용량 한 줄 요약.
 func (m Model) usageSummaryLine() string {
 	if m.usagePay == nil {
@@ -229,7 +246,11 @@ func (m Model) usageSummaryLine() string {
 				providerEmoji(key, p.Level)+" "+strings.Title(key)+" "+strings.Join(wins, " · ")))
 		}
 	}
-	return strings.Join(parts, styleHelp.Render("  |  "))
+	line := strings.Join(parts, styleHelp.Render("  |  "))
+	if age := m.usageAge(); age != "" {
+		line += styleHelp.Render("  ·  ") + age
+	}
+	return line
 }
 
 // starterLine은 MultiAgent 활성 작업 요약 한 줄 (활성 있을 때만).
@@ -251,7 +272,11 @@ func (m Model) starterLine() string {
 // usageView는 u 키로 전환하는 사용량 전용 화면 — Discord 카드와 같은 정보.
 func (m Model) usageView() string {
 	var b strings.Builder
-	b.WriteString(styleTitle.Render("AgentLayer — 사용량") + "\n\n")
+	b.WriteString(styleTitle.Render("AgentLayer — 사용량"))
+	if age := m.usageAge(); age != "" {
+		b.WriteString("  " + age)
+	}
+	b.WriteString("\n\n")
 	if m.usagePay == nil {
 		b.WriteString(styleHelp.Render("coach 데이터 없음 — usage-coach가 설치돼 있는지 확인하세요\n"))
 	} else {

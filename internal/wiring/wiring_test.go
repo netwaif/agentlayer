@@ -73,6 +73,42 @@ func TestCollectMatchBySessionName(t *testing.T) {
 	}
 }
 
+func TestCollectBridge(t *testing.T) {
+	root := t.TempDir()
+	bridge := filepath.Join(root, "codex-discord")
+	os.MkdirAll(filepath.Join(bridge, "data"), 0o755)
+	workdir := "/Users/x/codex-workspace"
+	os.WriteFile(filepath.Join(bridge, ".env"),
+		[]byte("TOKEN=x\nCODEX_WORKDIR="+workdir+"\n"), 0o644)
+	os.WriteFile(filepath.Join(bridge, "data", "daemon.pid"), []byte("999999999"), 0o644)
+
+	p := Paths{BotsJSON: "/없음", LaunchAgentsDir: "/없음", BridgeRoots: []string{bridge}}
+	info := Collect(p, workdir, "codex-live", nil)
+	if info.Bridge == nil {
+		t.Fatal("브리지 감지돼야 함")
+	}
+	if info.Bridge.Alive {
+		t.Error("없는 pid는 죽음으로")
+	}
+	if !info.DiscordConnected() {
+		t.Error("브리지 연결도 Discord 연결로 침")
+	}
+	// 다른 폴더는 매칭 안 됨
+	if Collect(p, "/다른/폴더", "", nil).Bridge != nil {
+		t.Error("WORKDIR 불일치는 미연결")
+	}
+}
+
+func TestDiscordConnectedByLaunchAgent(t *testing.T) {
+	i := Info{LaunchAgents: []string{"com.soonho.claude-discord"}}
+	if !i.DiscordConnected() {
+		t.Error("discord 이름의 LaunchAgent도 연결로 침")
+	}
+	if (Info{LaunchAgents: []string{"com.folder-bot.x"}}).DiscordConnected() {
+		t.Error("무관한 plist는 아님")
+	}
+}
+
 func TestShortID(t *testing.T) {
 	if ShortID("1533823223442182294") != "153382…" {
 		t.Errorf("축약: %s", ShortID("1533823223442182294"))

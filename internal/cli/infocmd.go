@@ -63,6 +63,14 @@ func RenderInfo(w io.Writer, d InfoData, now time.Time) {
 		if len(dc.Channels) == 0 {
 			fmt.Fprintf(w, "  Discord    연결됨 (채널 미등록 · dmPolicy %s)\n", dc.DMPolicy)
 		}
+	} else if br := d.Wiring.Bridge; br != nil {
+		alive := "데몬 살아있음"
+		if !br.Alive {
+			alive = "⚠ 데몬 죽음"
+		}
+		fmt.Fprintf(w, "  Discord    codex 브리지 (%s) · %s\n", ShortenHome(br.Dir), alive)
+	} else if d.Wiring.DiscordConnected() {
+		fmt.Fprintln(w, "  Discord    연결됨 (LaunchAgent 경유)")
 	} else {
 		fmt.Fprintln(w, "  Discord    연결 없음")
 	}

@@ -4,9 +4,7 @@ package ui
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -128,13 +126,11 @@ func (m Model) usageCmd() tea.Cmd {
 		if agents, err := st.List(); err == nil {
 			wp := wiring.DefaultPaths()
 			for _, a := range agents {
-				if a.CWD == "" {
+				if a.CWD == "" || dc[a.CWD] {
 					continue
 				}
-				if _, err := os.Stat(filepath.Join(a.CWD, ".discord-state", "access.json")); err == nil {
-					dc[a.CWD] = true
-				}
-				_ = wp
+				w := wiring.Collect(wp, a.CWD, a.Tmux.Session, nil)
+				dc[a.CWD] = w.DiscordConnected()
 			}
 		}
 		return usageMsg{payload: pay, ctx: ctx, starter: starter.ActiveTasks(starterRoot), discord: dc}
