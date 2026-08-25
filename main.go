@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,6 +35,8 @@ func run(args []string) error {
 		return runHook(args[1:])
 	case "status":
 		return runStatus(args[1:])
+	case "init":
+		return runInit(args[1:])
 	default:
 		return fmt.Errorf("알 수 없는 명령: %s", args[0])
 	}
@@ -68,6 +72,30 @@ func runStatus(args []string) error {
 		}
 	}
 	return cli.Status(os.Stdout, st, *jsonOut, now)
+}
+
+// runInit: agentlayer init [--dry-run]
+// Claude hook 등록 + tmux 바인딩 안내. .tmux.conf는 건드리지 않는다.
+func runInit(args []string) error {
+	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	dryRun := fs.Bool("dry-run", false, "변경 없이 할 일만 출력")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	settingsPath := filepath.Join(home, ".claude", "settings.json")
+	fmt.Println("Claude Code hook 등록:", settingsPath)
+	if err := cli.InstallClaudeHooks(os.Stdout, settingsPath, *dryRun); err != nil {
+		return err
+	}
+	fmt.Println()
+	// prefix 'a' 충돌 검사: list-keys가 성공하면 이미 바인딩된 것
+	conflict := exec.Command("tmux", "list-keys", "-T", "prefix", "a").Run() == nil
+	cli.PrintTmuxBinding(os.Stdout, conflict)
+	return nil
 }
 
 // runHook: agentlayer hook <agent> --event <event>
