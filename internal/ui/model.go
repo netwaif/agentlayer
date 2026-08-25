@@ -3,15 +3,20 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/starter"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/usage"
+	"github.com/netwaif/agentlayer/internal/wiring"
 	"github.com/netwaif/agentlayer/internal/wt"
 )
 
@@ -36,6 +41,7 @@ type usageMsg struct {
 	payload *usage.Payload
 	ctx     map[string]usage.CtxInfo
 	starter []starter.Task
+	discord map[string]bool // CWD → Discord 연결 여부 (⌁ 마크)
 }
 
 // jumpDoneMsg는 점프 실행 후 종료 신호.
@@ -51,10 +57,13 @@ type Model struct {
 	width        int
 	height       int
 	err          error
-	showUsage    bool // u 키: 사용량 전용 뷰
+	showUsage    bool   // u 키: 사용량 전용 뷰
+	showInfo     bool   // i 키: 선택 에이전트 상세 카드
+	infoText     string // 상세 카드 렌더 결과
 	usagePay     *usage.Payload
 	ctx          map[string]usage.CtxInfo // CWD(절대경로) → 모델·ctx%
 	wtBranch     map[string]string        // worktree 경로 → 브랜치
+	discordWired map[string]bool          // CWD → Discord 연결 (⌁)
 	starterTasks []starter.Task           // MultiAgent 활성 작업
 	// 주입점 (테스트용)
 	coachRunner func() ([]byte, error)
@@ -108,7 +117,20 @@ func (m Model) usageCmd() tea.Cmd {
 				}
 			}
 		}
-		return usageMsg{payload: pay, ctx: ctx, starter: starter.ActiveTasks(starterRoot)}
+		dc := map[string]bool{}
+		if agents, err := st.List(); err == nil {
+			wp := wiring.DefaultPaths()
+			for _, a := range agents {
+				if a.CWD == "" {
+					continue
+				}
+				if _, err := os.Stat(filepath.Join(a.CWD, ".discord-state", "access.json")); err == nil {
+					dc[a.CWD] = true
+				}
+				_ = wp
+			}
+		}
+		return usageMsg{payload: pay, ctx: ctx, starter: starter.ActiveTasks(starterRoot), discord: dc}
 	}
 }
 
@@ -163,6 +185,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.ctx = msg.ctx
 		}
 		m.starterTasks = msg.starter
+		if msg.discord != nil {
+			m.discordWired = msg.discord
+		}
 		return m, nil
 
 	case refreshMsg:
@@ -194,6 +219,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(m.refreshCmd(), m.usageCmd())
 		case "u":
 			m.showUsage = !m.showUsage
+			m.showInfo = false
+			return m, nil
+		case "i":
+			if m.showInfo {
+				m.showInfo = false
+				return m, nil
+			}
+			if a := m.selected(); a != nil {
+				m.infoText = m.buildInfo(a)
+				m.showInfo = true
+			}
 			return m, nil
 		case "o": // 읽음 처리만 (점프 없이)
 			if a := m.selected(); a != nil {
@@ -208,6 +244,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// buildInfo는 선택 에이전트의 배선 상세 카드를 조립한다 (동기, 파일 몇 개 읽기).
+func (m Model) buildInfo(a *state.Agent) string {
+	cfg := config.Load()
+	d := cli.InfoData{
+		Agent:  a,
+		Wiring: wiring.Collect(wiring.DefaultPaths(), a.CWD, a.Tmux.Session, cfg.ChannelLabels),
+		Ctx:    m.ctx[a.CWD],
+	}
+	if br, ok := m.wtBranch[a.CWD]; ok {
+		d.Branch = br
+	}
+	var buf strings.Builder
+	cli.RenderInfo(&buf, d, time.Now())
+	return buf.String()
 }
 
 func (m Model) selected() *state.Agent {

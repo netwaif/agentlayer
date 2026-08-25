@@ -269,6 +269,10 @@ func windowOrder(ws map[string]usage.Window) []string {
 }
 
 func (m Model) View() string {
+	if m.showInfo {
+		return styleTitle.Render("AgentLayer — 상세") + "\n\n" + m.infoText +
+			"\n" + styleHelp.Render("i/esc 닫기 · enter 점프 · q 종료")
+	}
 	if m.showUsage {
 		return m.usageView()
 	}
@@ -288,6 +292,9 @@ func (m Model) View() string {
 			stateBadge(a, m.now), cli.PadRight(a.Kind, 7), cli.PadRight(a.Tmux.Session, 20),
 			cli.PadRight(task, 30),
 			cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
+		if m.discordWired[a.CWD] {
+			line += " " + styleHelp.Render("⌁")
+		}
 		if br, ok := m.wtBranch[a.CWD]; ok {
 			line += " " + styleTitle.Render("⎇ "+br)
 		}
@@ -304,7 +311,7 @@ func (m Model) View() string {
 	if len(m.agents) == 0 {
 		b.WriteString(styleHelp.Render("  tmux에서 실행 중인 claude/codex/gemini가 없습니다\n"))
 	}
-	b.WriteString("\n" + styleHelp.Render("j/k 이동 · enter 점프+읽음 · o 읽음 · u 사용량 · r 새로고침 · q 종료"))
+	b.WriteString("\n" + styleHelp.Render("j/k 이동 · enter 점프+읽음 · o 읽음 · i 상세 · u 사용량 · r 새로고침 · q 종료"))
 	if m.err != nil {
 		b.WriteString("\n" + stateStyles[state.StateError].Render("점프 실패: "+m.err.Error()))
 	}

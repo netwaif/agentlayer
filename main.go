@@ -23,6 +23,8 @@ import (
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/ui"
 	"github.com/netwaif/agentlayer/internal/usage"
+	"github.com/netwaif/agentlayer/internal/wiring"
+	"github.com/netwaif/agentlayer/internal/wt"
 )
 
 func main() {
@@ -47,6 +49,8 @@ func run(args []string) error {
 		return runCard(args[1:])
 	case "resume":
 		return runResume(args[1:])
+	case "info":
+		return runInfo(args[1:])
 	case "wake-all", "close-all", "broadcast":
 		return runAll(args[0], args[1:])
 	case "wt":
@@ -224,6 +228,44 @@ func runHook(args []string) error {
 			fmt.Fprintln(os.Stderr, "agentlayer hook:", err)
 		}
 	}
+	return nil
+}
+
+// runInfo: agentlayer info <세션이름|id> — 에이전트 배선 상세 카드
+func runInfo(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("사용법: agentlayer info <세션이름|id>")
+	}
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
+		_ = scan.Sync(st, panes, now)
+	}
+	agents, err := st.List()
+	if err != nil {
+		return err
+	}
+	a := cli.FindAgent(agents, args[0])
+	if a == nil {
+		return fmt.Errorf("에이전트 %q 없음 — agentlayer status로 확인하세요", args[0])
+	}
+	cfg := config.Load()
+	d := cli.InfoData{
+		Agent:  a,
+		Wiring: wiring.Collect(wiring.DefaultPaths(), a.CWD, a.Tmux.Session, cfg.ChannelLabels),
+		Ctx:    usage.LoadSnapshots(usage.SnapshotsDir())[a.CWD],
+	}
+	if metas, err := wt.ListMetas(state.DefaultDir()); err == nil {
+		for _, m := range metas {
+			if m.Path == a.CWD {
+				d.Branch = m.Branch
+			}
+		}
+	}
+	cli.RenderInfo(os.Stdout, d, now)
 	return nil
 }
 
