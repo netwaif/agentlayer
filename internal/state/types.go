@@ -48,16 +48,16 @@ type TmuxRef struct {
 
 // Agent는 관제 대상 에이전트 하나의 정본 레코드.
 type Agent struct {
-	ID        string     `json:"id"`
-	Kind      string     `json:"kind"` // claude | codex | gemini
-	Task      string     `json:"task,omitempty"`
-	State     AgentState `json:"state"`
-	Tmux      TmuxRef    `json:"tmux"`
-	CWD       string     `json:"cwd,omitempty"`
-	SessionID string     `json:"session_id,omitempty"` // 비상 복구(resume)용
-	PID       int        `json:"pid,omitempty"`
-	UpdatedAt time.Time  `json:"updated_at"`
-	StateSince time.Time `json:"state_since"`
+	ID         string     `json:"id"`
+	Kind       string     `json:"kind"` // claude | codex | gemini
+	Task       string     `json:"task,omitempty"`
+	State      AgentState `json:"state"`
+	Tmux       TmuxRef    `json:"tmux"`
+	CWD        string     `json:"cwd,omitempty"`
+	SessionID  string     `json:"session_id,omitempty"` // 비상 복구(resume)용
+	PID        int        `json:"pid,omitempty"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	StateSince time.Time  `json:"state_since"`
 }
 
 // Transition은 상태를 바꾸고 시각을 갱신한다.

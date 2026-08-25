@@ -161,6 +161,22 @@ func (m Model) usageSummaryLine() string {
 	return strings.Join(parts, styleHelp.Render("  |  "))
 }
 
+// starterLine은 MultiAgent 활성 작업 요약 한 줄 (활성 있을 때만).
+func (m Model) starterLine() string {
+	if len(m.starterTasks) == 0 {
+		return ""
+	}
+	var parts []string
+	for i, t := range m.starterTasks {
+		if i >= 3 {
+			parts = append(parts, fmt.Sprintf("외 %d", len(m.starterTasks)-3))
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s(%s)", t.Name, t.Status))
+	}
+	return styleHelp.Render("MultiAgent: ") + strings.Join(parts, styleHelp.Render(" · "))
+}
+
 // usageView는 u 키로 전환하는 사용량 전용 화면 — Discord 카드와 같은 정보.
 func (m Model) usageView() string {
 	var b strings.Builder
@@ -224,6 +240,9 @@ func (m Model) View() string {
 	var b strings.Builder
 	b.WriteString(styleTitle.Render("AgentLayer") + "  " + summary(m.agents) + "\n")
 	if s := m.usageSummaryLine(); s != "" {
+		b.WriteString(s + "\n")
+	}
+	if s := m.starterLine(); s != "" {
 		b.WriteString(s + "\n")
 	}
 	b.WriteString(styleHeader.Render(fmt.Sprintf("%-8s %-7s %-20s %-30s %s", "STATE", "AGENT", "SESSION", "TASK", "DIR·SINCE")) + "\n")

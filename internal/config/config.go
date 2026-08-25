@@ -15,6 +15,8 @@ type Config struct {
 	NotifyMacOS *bool `json:"notify_macos,omitempty"`
 	// Discord 단문 알림. 기본 꺼짐 (웹훅이 있어도 명시적으로 켜야 함).
 	NotifyDiscord bool `json:"notify_discord,omitempty"`
+	// multi-agent-starter 루트. 비면 자동 탐지(starter.DefaultRoot).
+	StarterRoot string `json:"starter_root,omitempty"`
 }
 
 // MacOSEnabled는 기본값(true)을 반영한 접근자.
