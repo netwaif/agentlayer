@@ -313,7 +313,17 @@ func (m Model) View() string {
 	if len(m.agents) == 0 {
 		b.WriteString(styleHelp.Render("  tmux에서 실행 중인 claude/codex/gemini가 없습니다\n"))
 	}
-	b.WriteString("\n" + styleHelp.Render("j/k 이동 · enter 점프+읽음 · o 읽음 · i 상세 · g git(lazygit) · u 사용량 · r 새로고침 · q 종료"))
+	if m.pendingCmd != "" {
+		what := "이어서하기(기상)"
+		if m.pendingCmd == "close" {
+			what = "마감"
+		}
+		b.WriteString("\n" + stateStyles[state.StateWaiting].Render(
+			fmt.Sprintf("⚠ 모든 세션 %s — 전 세션에 지시를 보냅니다. y 확인 / 다른 키 취소", what)))
+	} else if m.notice != "" {
+		b.WriteString("\n" + styleTitle.Render(m.notice))
+	}
+	b.WriteString("\n" + styleHelp.Render("j/k 이동 · enter 점프+읽음 · o 읽음 · i 상세 · g git · u 사용량 · W 전체기상 · C 전체마감 · r 새로고침 · q 종료"))
 	if m.err != nil {
 		b.WriteString("\n" + stateStyles[state.StateError].Render("⚠ "+m.err.Error()))
 	}

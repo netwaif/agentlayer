@@ -65,6 +65,8 @@ type Model struct {
 	showUsage    bool   // u 키: 사용량 전용 뷰
 	showInfo     bool   // i 키: 선택 에이전트 상세 카드
 	infoText     string // 상세 카드 렌더 결과
+	pendingCmd   string // "wake"|"close": y 확인 대기 중
+	notice       string // 하단 안내줄 (에러 아님)
 	usagePay     *usage.Payload
 	ctx          map[string]usage.CtxInfo // CWD(절대경로) → 모델·ctx%
 	wtBranch     map[string]string        // worktree 경로 → 브랜치
@@ -216,6 +218,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.refreshCmd()
 
 	case tea.KeyMsg:
+		// 일괄 명령 확인 대기 중이면 y만 실행, 나머지는 취소
+		if m.pendingCmd != "" {
+			cmd := m.pendingCmd
+			m.pendingCmd = ""
+			if msg.String() == "y" {
+				message := cli.WakeMessage
+				if cmd == "close" {
+					message = cli.CloseMessage
+				}
+				sent, total, err := cli.SendAll(m.store, m.tm, message)
+				if err != nil {
+					m.err = err
+				} else {
+					m.notice = fmt.Sprintf("%d/%d 세션에 %q 전송 — 상태 변화는 이 화면에서 실시간으로 보입니다", sent, total, message)
+				}
+				return m, m.refreshCmd()
+			}
+			m.notice = "취소했습니다"
+			return m, nil
+		}
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
 			return m, tea.Quit
@@ -232,6 +254,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "u":
 			m.showUsage = !m.showUsage
 			m.showInfo = false
+			return m, nil
+		case "W": // 모든 세션 이어서하기
+			m.pendingCmd = "wake"
+			m.notice = ""
+			return m, nil
+		case "C": // 모든 세션 마감
+			m.pendingCmd = "close"
+			m.notice = ""
 			return m, nil
 		case "g": // 선택 에이전트 폴더를 lazygit으로 (조작은 lazygit이 정본)
 			if a := m.selected(); a != nil && a.CWD != "" {

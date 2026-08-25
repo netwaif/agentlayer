@@ -113,6 +113,22 @@ func RunAll(w io.Writer, st *state.Store, tm tmuxx.Tmux, message string, o *AllO
 	return watchDone(w, st, sent, now, o.timeout)
 }
 
+// SendAll은 확인 절차 없이 대상 전원에게 메시지를 보낸다.
+// 확인(y/N)은 호출자(CLI 프롬프트 또는 TUI 키 확인)의 책임이다.
+func SendAll(st *state.Store, tm tmuxx.Tmux, message string) (sent, total int, err error) {
+	agents, err := st.List()
+	if err != nil {
+		return 0, 0, err
+	}
+	targets := Targets(agents, tmuxx.CurrentPaneID(), nil)
+	for _, a := range targets {
+		if tm.SendText(a.Tmux.PaneID, message) == nil {
+			sent++
+		}
+	}
+	return sent, len(targets), nil
+}
+
 // watchDone은 전송 후 각 대상의 턴 종료(DONE 전이)를 상태 파일로 감시한다.
 // codex는 notify가 비활성이면 DONE이 안 잡히므로 타임아웃 시 미확인으로 표기.
 func watchDone(w io.Writer, st *state.Store, sent []*state.Agent, sentAt time.Time, timeout time.Duration) error {
