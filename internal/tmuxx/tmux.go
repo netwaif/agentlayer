@@ -95,6 +95,27 @@ func (t Tmux) JumpTo(r Ref) error {
 	return err
 }
 
+// NewWindow는 현재 세션에 이름·시작 디렉터리·실행 명령을 지정해 window를
+// 만든다. 기존 window는 건드리지 않는다.
+func (t Tmux) NewWindow(name, dir, command string) error {
+	args := []string{"new-window", "-n", name, "-c", dir}
+	if command != "" {
+		args = append(args, command)
+	}
+	_, err := t.run(args...)
+	return err
+}
+
+// SendText는 pane에 텍스트를 입력하고 Enter를 보낸다.
+// 에이전트 입력창에 지시를 넣는 용도 — 임의 키 시퀀스는 보내지 않는다.
+func (t Tmux) SendText(paneID, text string) error {
+	if _, err := t.run("send-keys", "-t", paneID, "-l", text); err != nil {
+		return err
+	}
+	_, err := t.run("send-keys", "-t", paneID, "Enter")
+	return err
+}
+
 // InsideTmux는 tmux 안에서 실행 중인지.
 func InsideTmux() bool {
 	return os.Getenv("TMUX") != ""

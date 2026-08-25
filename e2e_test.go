@@ -14,6 +14,7 @@ import (
 	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
+	"github.com/netwaif/agentlayer/internal/wt"
 )
 
 // 종단 시나리오: 임시 tmux 서버(기존 서버와 완전 격리)에서
@@ -154,5 +155,102 @@ func TestTUILaunchesInTmux(t *testing.T) {
 	}
 	if !strings.Contains(screen, "j/k") {
 		t.Errorf("도움말 라인이 보여야 함:\n%s", screen)
+	}
+}
+
+// wt 종단: 임시 repo + 임시 tmux 서버에서 new → window 생성 → 작업 → merge → clean.
+func TestWorktreeEndToEnd(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux 없음")
+	}
+	sock := fmt.Sprintf("agentlayer-wt-%d", os.Getpid())
+	tmux := func(args ...string) string {
+		t.Helper()
+		out, err := exec.Command("tmux", append([]string{"-L", sock}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("tmux %v: %v (%s)", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	t.Cleanup(func() { exec.Command("tmux", "-L", sock, "kill-server").Run() })
+	tmux("new-session", "-d", "-s", "wt-e2e", "-x", "100", "-y", "30")
+	t.Setenv("TMUX", "/fake,1,0") // InsideTmux 통과용 — 실제 호출은 -L 소켓으로 감
+
+	// 임시 repo
+	repo := t.TempDir()
+	gitE := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", repo}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+	gitE("init", "-b", "main")
+	os.WriteFile(repo+"/a.txt", []byte("hi\n"), 0o644)
+	gitE("add", ".")
+	gitE("commit", "-m", "init")
+
+	stateDir := t.TempDir()
+	st, err := state.NewStore(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tm := tmuxx.Tmux{Args: []string{"-L", sock}}
+
+	// new — 에이전트 명령 대신 window가 유지되도록 sh를 쓰는 편법 없이,
+	// claude가 없을 수 있으므로 window 생성만 확인하고 종료돼도 무방
+	var buf bytes.Buffer
+	if err := cli.RunWT(&buf, stateDir, st, tm, []string{"new", "feat-x", "--repo", repo, "--test", "true"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "agent/feat-x") {
+		t.Errorf("생성 요약:\n%s", buf.String())
+	}
+	wins := tmux("list-windows", "-a", "-F", "#{window_name}")
+	if !strings.Contains(wins, "feat-x") {
+		t.Errorf("tmux window 생성돼야 함: %q", wins)
+	}
+
+	// 작업 → 커밋 → list/test/merge/clean
+	m, err := wt.LoadMeta(stateDir, "feat-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(m.Path+"/a.txt", []byte("changed\n"), 0o644)
+	gitW := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", m.Path}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
+	gitW("add", ".")
+	gitW("commit", "-m", "work")
+
+	buf.Reset()
+	if err := cli.RunWT(&buf, stateDir, st, tm, []string{"test", "feat-x"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "통과") {
+		t.Errorf("테스트 통과:\n%s", buf.String())
+	}
+	buf.Reset()
+	if err := cli.RunWT(&buf, stateDir, st, tm, []string{"list"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "feat-x") || !strings.Contains(buf.String(), "✔") {
+		t.Errorf("list에 태스크+테스트 결과:\n%s", buf.String())
+	}
+	buf.Reset()
+	if err := cli.RunWT(&buf, stateDir, st, tm, []string{"merge", "feat-x", "--yes"}); err != nil {
+		t.Fatal(err)
+	}
+	buf.Reset()
+	if err := cli.RunWT(&buf, stateDir, st, tm, []string{"clean", "feat-x"}); err != nil {
+		t.Fatalf("병합 후 정리: %v", err)
 	}
 }
