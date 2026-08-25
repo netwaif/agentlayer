@@ -2,12 +2,14 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/state"
+	"github.com/netwaif/agentlayer/internal/usage"
 )
 
 // 사용자 tmux 테마와 같은 팔레트: 짙은 회색 + 주황(#ffaf5f) 포인트.
@@ -76,9 +78,154 @@ func shortName(s state.AgentState) string {
 	}
 }
 
+// levelStyle은 coach level 색.
+var levelStyle = map[string]lipgloss.Style{
+	"red":    lipgloss.NewStyle().Foreground(lipgloss.Color("#F04747")).Bold(true),
+	"yellow": lipgloss.NewStyle().Foreground(lipgloss.Color("#FAA61A")),
+	"wait":   lipgloss.NewStyle().Foreground(lipgloss.Color("#7C8AFF")),
+	"white":  lipgloss.NewStyle().Foreground(lipgloss.Color("#9AA4B2")),
+	"green":  lipgloss.NewStyle().Foreground(lipgloss.Color("#43B581")),
+}
+
+var levelEmoji = map[string]string{
+	"red": "🔴", "yellow": "🟡", "wait": "⏳", "white": "⚪", "green": "🟢",
+}
+
+// 게이지 라벨 — Discord 카드와 동일 축
+var winLabel = map[string]string{"5h": "5h", "7d": "7d", "daily": "1d", "fable_7d": "Fable"}
+
+// ctxStyle은 컨텍스트 사용률 색: 40%↑ 노랑(사용자의 마감 습관 기준), 80%↑ 빨강.
+func ctxStyle(used float64) lipgloss.Style {
+	switch {
+	case used >= 80:
+		return levelStyle["red"]
+	case used >= 40:
+		return levelStyle["yellow"]
+	default:
+		return levelStyle["green"]
+	}
+}
+
+// ctxBadge는 행 끝의 "[모델 · ctx% · age]" 조각.
+func (m Model) ctxBadge(a *state.Agent) string {
+	info, ok := m.ctx[a.CWD]
+	if !ok {
+		return ""
+	}
+	var parts []string
+	if info.Model != "" {
+		parts = append(parts, info.Model)
+	}
+	if info.UsedPct != nil {
+		parts = append(parts, ctxStyle(*info.UsedPct).Render(fmt.Sprintf("ctx %d%%", int(*info.UsedPct))))
+	}
+	if !info.TS.IsZero() {
+		parts = append(parts, cli.Since(info.TS, m.now))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return styleHelp.Render("[") + strings.Join(parts, styleHelp.Render(" · ")) + styleHelp.Render("]")
+}
+
+// usageSummaryLine은 메인 뷰 헤더의 사용량 한 줄 요약.
+func (m Model) usageSummaryLine() string {
+	if m.usagePay == nil {
+		return ""
+	}
+	var parts []string
+	for _, key := range []string{"claude", "codex", "antigravity"} {
+		p, ok := m.usagePay.Providers[key]
+		if !ok || !p.OK {
+			continue
+		}
+		var wins []string
+		for _, wk := range []string{"5h", "7d", "fable_7d"} {
+			if w, ok := p.Windows[wk]; ok && w.LeftPct != nil {
+				wins = append(wins, fmt.Sprintf("%s %d%%", winLabel[wk], int(*w.LeftPct)))
+			}
+		}
+		if len(wins) == 0 { // antigravity: 계정 창 중 데이터 있는 첫 것
+			for wk, w := range p.Windows {
+				if w.LeftPct != nil {
+					wins = append(wins, fmt.Sprintf("%s %d%%", wk, int(*w.LeftPct)))
+					break
+				}
+			}
+		}
+		if len(wins) > 0 {
+			parts = append(parts, levelStyle[p.Level].Render(
+				levelEmoji[p.Level]+" "+strings.Title(key)+" "+strings.Join(wins, " · ")))
+		}
+	}
+	return strings.Join(parts, styleHelp.Render("  |  "))
+}
+
+// usageView는 u 키로 전환하는 사용량 전용 화면 — Discord 카드와 같은 정보.
+func (m Model) usageView() string {
+	var b strings.Builder
+	b.WriteString(styleTitle.Render("AgentLayer — 사용량") + "\n\n")
+	if m.usagePay == nil {
+		b.WriteString(styleHelp.Render("coach 데이터 없음 — usage-coach가 설치돼 있는지 확인하세요\n"))
+	} else {
+		for _, key := range []string{"claude", "codex", "antigravity"} {
+			p, ok := m.usagePay.Providers[key]
+			if !ok || !p.OK {
+				continue
+			}
+			head := fmt.Sprintf("%s %s — %s", levelEmoji[p.Level], strings.Title(key), p.Action)
+			b.WriteString(levelStyle[p.Level].Render(head) + "\n")
+			b.WriteString(styleHelp.Render("  "+p.Email) + "\n")
+			for _, wk := range windowOrder(p.Windows) {
+				w := p.Windows[wk]
+				label := winLabel[wk]
+				if label == "" {
+					label = wk // antigravity 계정명 등
+				}
+				line := fmt.Sprintf("  %-12s %s", label, usage.Gauge(w.LeftPct, 14))
+				if w.LeftPct != nil {
+					line += fmt.Sprintf("  %3d%%", int(*w.LeftPct))
+					if r := usage.ResetLabel(w.ResetMin); r != "" {
+						line += styleHelp.Render(" · 리셋 " + r)
+					}
+				} else {
+					line += styleHelp.Render("   —%")
+				}
+				b.WriteString(line + "\n")
+			}
+			b.WriteString("  " + p.Reason + "\n\n")
+		}
+	}
+	b.WriteString(styleHelp.Render("u 관제 화면으로 · r 새로고침 · q 종료"))
+	return b.String()
+}
+
+// windowOrder는 표시 순서: 표준 창(5h,7d,Fable) 먼저, 나머지는 이름순.
+func windowOrder(ws map[string]usage.Window) []string {
+	var std, rest []string
+	for _, k := range []string{"5h", "daily", "7d", "fable_7d"} {
+		if _, ok := ws[k]; ok {
+			std = append(std, k)
+		}
+	}
+	for k := range ws {
+		if winLabel[k] == "" {
+			rest = append(rest, k)
+		}
+	}
+	sort.Strings(rest)
+	return append(std, rest...)
+}
+
 func (m Model) View() string {
+	if m.showUsage {
+		return m.usageView()
+	}
 	var b strings.Builder
 	b.WriteString(styleTitle.Render("AgentLayer") + "  " + summary(m.agents) + "\n")
+	if s := m.usageSummaryLine(); s != "" {
+		b.WriteString(s + "\n")
+	}
 	b.WriteString(styleHeader.Render(fmt.Sprintf("%-8s %-7s %-20s %-30s %s", "STATE", "AGENT", "SESSION", "TASK", "DIR·SINCE")) + "\n")
 
 	for i, a := range m.agents {
@@ -89,6 +236,9 @@ func (m Model) View() string {
 		line := fmt.Sprintf("%s %-7s %-20s %-30s %s · %s",
 			stateBadge(a, m.now), a.Kind, a.Tmux.Session, task,
 			cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
+		if badge := m.ctxBadge(a); badge != "" {
+			line += " " + badge
+		}
 		if i == m.cursor {
 			line = styleSelected.Render("▸ " + line)
 		} else {
@@ -99,7 +249,7 @@ func (m Model) View() string {
 	if len(m.agents) == 0 {
 		b.WriteString(styleHelp.Render("  tmux에서 실행 중인 claude/codex/gemini가 없습니다\n"))
 	}
-	b.WriteString("\n" + styleHelp.Render("j/k 이동 · enter 점프+읽음 · o 읽음 · r 새로고침 · q 종료"))
+	b.WriteString("\n" + styleHelp.Render("j/k 이동 · enter 점프+읽음 · o 읽음 · u 사용량 · r 새로고침 · q 종료"))
 	if m.err != nil {
 		b.WriteString("\n" + stateStyles[state.StateError].Render("점프 실패: "+m.err.Error()))
 	}

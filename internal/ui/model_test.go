@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
+	"github.com/netwaif/agentlayer/internal/usage"
 )
 
 var t0 = time.Date(2026, 8, 25, 12, 0, 0, 0, time.FixedZone("KST", 9*3600))
@@ -105,6 +106,49 @@ func TestQuitKeys(t *testing.T) {
 		if cmd == nil {
 			t.Errorf("%s는 Quit Cmd 반환해야 함", k)
 		}
+	}
+}
+
+func TestUsageToggleAndView(t *testing.T) {
+	m := fixtureModel(t)
+	pct77, pct16 := 77.0, 16.0
+	m.usagePay = &usage.Payload{Providers: map[string]usage.Provider{
+		"claude": {OK: true, Level: "green", Action: "지금 큰 작업 돌리세요",
+			Email:  "kshxxthm@gmail.com",
+			Reason: "단기 한도 77% 남았어요.",
+			Windows: map[string]usage.Window{
+				"5h": {LeftPct: &pct77}, "7d": {LeftPct: &pct16}}},
+	}}
+	// 메인 뷰 헤더 요약
+	v := m.View()
+	if !strings.Contains(v, "5h 77%") || !strings.Contains(v, "7d 16%") {
+		t.Errorf("헤더 사용량 요약 있어야 함:\n%s", v)
+	}
+	// u 토글 → 사용량 전용 뷰
+	next, _ := m.Update(key("u"))
+	uv := next.(Model).View()
+	for _, want := range []string{"사용량", "Claude", "지금 큰 작업 돌리세요", "kshxxthm@gmail.com", "█", "77%"} {
+		if !strings.Contains(uv, want) {
+			t.Errorf("사용량 뷰에 %q 있어야 함:\n%s", want, uv)
+		}
+	}
+	// 다시 u → 관제 화면 복귀
+	back, _ := next.Update(key("u"))
+	if !strings.Contains(back.(Model).View(), "SESSION") {
+		t.Error("u 재입력 시 관제 화면 복귀")
+	}
+}
+
+func TestCtxBadgeOnRows(t *testing.T) {
+	m := fixtureModel(t)
+	used := 42.0
+	m.agents[0].CWD = "/Users/x/proj"
+	m.ctx = map[string]usage.CtxInfo{
+		"/Users/x/proj": {Model: "Opus 5 (1M context)", UsedPct: &used, TS: t0.Add(-10 * time.Minute)},
+	}
+	v := m.View()
+	if !strings.Contains(v, "Opus 5 (1M context)") || !strings.Contains(v, "ctx 42%") {
+		t.Errorf("행에 모델·ctx%% 표시:\n%s", v)
 	}
 }
 
