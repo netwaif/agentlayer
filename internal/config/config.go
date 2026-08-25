@@ -17,6 +17,8 @@ type Config struct {
 	NotifyDiscord bool `json:"notify_discord,omitempty"`
 	// multi-agent-starter 루트. 비면 자동 탐지(starter.DefaultRoot).
 	StarterRoot string `json:"starter_root,omitempty"`
+	// Discord 채널 ID → 사람이 읽을 라벨 (상세 카드 표시용, 선택)
+	ChannelLabels map[string]string `json:"channel_labels,omitempty"`
 }
 
 // MacOSEnabled는 기본값(true)을 반영한 접근자.
