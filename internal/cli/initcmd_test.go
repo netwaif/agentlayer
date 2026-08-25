@@ -34,7 +34,7 @@ func writeSettings(t *testing.T, content string) string {
 func TestInitAppendsPreservingExisting(t *testing.T) {
 	p := writeSettings(t, existingSettings)
 	var buf bytes.Buffer
-	if err := InstallClaudeHooks(&buf, p, false); err != nil {
+	if err := InstallClaudeHooks(&buf, p, "/abs/agentlayer", false); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p)
@@ -54,7 +54,7 @@ func TestInitAppendsPreservingExisting(t *testing.T) {
 	}
 	// 4개 이벤트 모두 등록
 	for _, ev := range []string{"post-tool-use", "notification", "stop", "session-start", "user-prompt-submit"} {
-		if !strings.Contains(out, "agentlayer hook claude --event "+ev) {
+		if !strings.Contains(out, "/abs/agentlayer hook claude --event "+ev) {
 			t.Errorf("%s hook 등록돼야 함", ev)
 		}
 	}
@@ -67,11 +67,11 @@ func TestInitAppendsPreservingExisting(t *testing.T) {
 func TestInitIdempotent(t *testing.T) {
 	p := writeSettings(t, existingSettings)
 	var buf bytes.Buffer
-	if err := InstallClaudeHooks(&buf, p, false); err != nil {
+	if err := InstallClaudeHooks(&buf, p, "/abs/agentlayer", false); err != nil {
 		t.Fatal(err)
 	}
 	first, _ := os.ReadFile(p)
-	if err := InstallClaudeHooks(&buf, p, false); err != nil {
+	if err := InstallClaudeHooks(&buf, p, "/abs/agentlayer", false); err != nil {
 		t.Fatal(err)
 	}
 	second, _ := os.ReadFile(p)
@@ -83,7 +83,7 @@ func TestInitIdempotent(t *testing.T) {
 func TestInitDryRunNoChanges(t *testing.T) {
 	p := writeSettings(t, existingSettings)
 	var buf bytes.Buffer
-	if err := InstallClaudeHooks(&buf, p, true); err != nil {
+	if err := InstallClaudeHooks(&buf, p, "/abs/agentlayer", true); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p)
@@ -98,14 +98,14 @@ func TestInitDryRunNoChanges(t *testing.T) {
 func TestInitMissingSettingsCreates(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "settings.json")
 	var buf bytes.Buffer
-	if err := InstallClaudeHooks(&buf, p, false); err != nil {
+	if err := InstallClaudeHooks(&buf, p, "/abs/agentlayer", false); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatal("settings.json 새로 생성돼야 함")
 	}
-	if !strings.Contains(string(b), "agentlayer hook claude") {
+	if !strings.Contains(string(b), "/abs/agentlayer hook claude") {
 		t.Error("hook 등록")
 	}
 }

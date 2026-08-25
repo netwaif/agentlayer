@@ -19,7 +19,7 @@ func TestInstallCodexNotifyInsertsBeforeSection(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.toml")
 	os.WriteFile(p, []byte(codexConfigFixture), 0o600)
 	var buf bytes.Buffer
-	if err := InstallCodexNotify(&buf, p, false); err != nil {
+	if err := InstallCodexNotify(&buf, p, "/abs/agentlayer", false); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p)
@@ -29,7 +29,7 @@ func TestInstallCodexNotifyInsertsBeforeSection(t *testing.T) {
 	if notifyIdx < 0 || sectionIdx < 0 || notifyIdx > sectionIdx {
 		t.Errorf("notify는 섹션 앞 최상위에:\n%s", content)
 	}
-	if !strings.Contains(content, `"agentlayer", "hook", "codex"`) {
+	if !strings.Contains(content, `"/abs/agentlayer", "hook", "codex"`) {
 		t.Errorf("명령 배열:\n%s", content)
 	}
 	if !strings.Contains(content, `model = "gpt-5.6"`) {
@@ -45,7 +45,7 @@ func TestInstallCodexNotifyExistingSkipped(t *testing.T) {
 	orig := "notify = [\"my-notifier\"]\n" + codexConfigFixture
 	os.WriteFile(p, []byte(orig), 0o600)
 	var buf bytes.Buffer
-	if err := InstallCodexNotify(&buf, p, false); err != nil {
+	if err := InstallCodexNotify(&buf, p, "/abs/agentlayer", false); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p)
@@ -61,7 +61,7 @@ func TestInstallCodexNotifyDryRun(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.toml")
 	os.WriteFile(p, []byte(codexConfigFixture), 0o600)
 	var buf bytes.Buffer
-	if err := InstallCodexNotify(&buf, p, true); err != nil {
+	if err := InstallCodexNotify(&buf, p, "/abs/agentlayer", true); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p)
@@ -73,7 +73,7 @@ func TestInstallCodexNotifyDryRun(t *testing.T) {
 func TestInstallCodexNotifyNoFile(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.toml")
 	var buf bytes.Buffer
-	if err := InstallCodexNotify(&buf, p, false); err != nil {
+	if err := InstallCodexNotify(&buf, p, "/abs/agentlayer", false); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p)
@@ -86,7 +86,7 @@ func TestInstallCodexNotifyNoSections(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.toml")
 	os.WriteFile(p, []byte("model = \"x\"\n"), 0o600)
 	var buf bytes.Buffer
-	if err := InstallCodexNotify(&buf, p, false); err != nil {
+	if err := InstallCodexNotify(&buf, p, "/abs/agentlayer", false); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(p)

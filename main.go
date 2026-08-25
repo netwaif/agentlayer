@@ -192,23 +192,23 @@ func runInit(args []string) error {
 	if err != nil {
 		return err
 	}
+	binPath, _ := os.Executable()
 	settingsPath := filepath.Join(home, ".claude", "settings.json")
 	fmt.Println("Claude Code hook 등록:", settingsPath)
-	if err := cli.InstallClaudeHooks(os.Stdout, settingsPath, *dryRun); err != nil {
+	if err := cli.InstallClaudeHooks(os.Stdout, settingsPath, binPath, *dryRun); err != nil {
 		return err
 	}
 	fmt.Println()
 	codexConfig := filepath.Join(home, ".codex", "config.toml")
 	if _, err := os.Stat(filepath.Dir(codexConfig)); err == nil {
 		fmt.Println("Codex notify 등록:", codexConfig)
-		if err := cli.InstallCodexNotify(os.Stdout, codexConfig, *dryRun); err != nil {
+		if err := cli.InstallCodexNotify(os.Stdout, codexConfig, binPath, *dryRun); err != nil {
 			return err
 		}
 		fmt.Println()
 	}
 	// prefix 'a' 충돌 검사: list-keys가 성공하면 이미 바인딩된 것
 	conflict := exec.Command(tmuxx.Bin(), "list-keys", "-T", "prefix", "a").Run() == nil
-	binPath, _ := os.Executable()
 	cli.PrintTmuxBinding(os.Stdout, conflict, binPath)
 	return nil
 }
