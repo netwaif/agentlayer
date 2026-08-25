@@ -1,0 +1,30 @@
+# goreleaser 설정 — GitHub 공개 후 `goreleaser release`로 brew tap까지 배포.
+# mat과 같은 netwaif/homebrew-tap을 쓴다.
+version: 2
+
+builds:
+  - id: agentlayer
+    main: .
+    binary: agentlayer
+    env: [CGO_ENABLED=0]
+    goos: [darwin]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+brews:
+  - name: agentlayer
+    repository:
+      owner: netwaif
+      name: homebrew-tap
+    homepage: https://github.com/netwaif/agentlayer
+    description: "iTerm2+tmux 멀티 에이전트 관제탑 — 상태·알림·worktree"
+    license: MIT
+    test: |
+      system "#{bin}/agentlayer", "status", "--json"
+
+checksum:
+  name_template: "checksums.txt"

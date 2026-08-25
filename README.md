@@ -29,9 +29,10 @@ tmux가 모르는 것(에이전트의 의미 상태)만 채운다.
 ## 설치
 
 ```bash
-brew install netwaif/tap/agentlayer   # (Phase 4에서 제공 예정)
+brew install netwaif/tap/agentlayer   # (GitHub 공개 후 제공)
 # 또는 소스 빌드 (Go 1.22+)
-git clone https://github.com/netwaif/agentlayer.git && cd agentlayer && go build .
+git clone https://github.com/netwaif/agentlayer.git && cd agentlayer
+make install   # ~/.local/bin/agentlayer
 ```
 
 설정은 한 번:
@@ -51,7 +52,20 @@ agentlayer            # TUI 관제탑 (j/k 이동, enter 점프+읽음, o 읽음
 agentlayer status     # plain 표 — SSH·스크립트용
 agentlayer status --json
 agentlayer card       # Discord 상태 카드 업서트 (주기 실행용) / --out은 JSON만
+agentlayer resume     # 죽은 claude 대화 목록 / resume <id>로 구조
+agentlayer wt ...     # worktree 병렬 모드 (아래 참고)
 ```
+
+## 에이전트별 상태 신호
+
+| 에이전트 | 신호 | 상태 |
+|---|---|---|
+| Claude Code | hooks (PostToolUse/Notification/Stop) | WORK/WAIT/DONE 전부 |
+| Codex | config.toml notify (turn-complete) | DONE (나머지는 스캐너) |
+| Gemini | 프로세스·pane 감지 | 존재·소실만 (lifecycle 신호 없음) |
+
+`agentlayer init` 한 번으로 Claude hook과 Codex notify가 함께 등록된다
+(기존 설정 보존·백업·멱등).
 
 ## 사용량·컨텍스트 (선택적 통합)
 
@@ -112,7 +126,8 @@ agentlayer wt clean auth-api                    # 보존 우선 정리
 
 ## 로드맵
 
-- **Phase 1 (현재)**: 상태 관제 코어 — TUI·status CLI·Claude hook
-- **Phase 2**: 사용량 뷰(coach 통합)·macOS/Discord 알림·Discord 상태 카드
-- **Phase 3**: worktree 병렬 모드 — 생성·diff 코멘트 회신·테스트 수집·보존 우선 정리
-- **Phase 4**: Codex/Gemini 어댑터 완성·MultiAgent 패널·비상 resume·brew 배포
+- **Phase 1 ✔**: 상태 관제 코어 — TUI·status CLI·Claude hook
+- **Phase 2 ✔**: 사용량 뷰(coach 통합)·macOS/Discord 알림·Discord 상태 카드
+- **Phase 3 ✔**: worktree 병렬 모드 — 생성·diff 코멘트 회신·테스트 수집·보존 우선 정리
+- **Phase 4 ✔**: Codex 어댑터·MultiAgent 패널·비상 resume·배포 준비
+- **다음**: GitHub 공개 + brew tap 반영
