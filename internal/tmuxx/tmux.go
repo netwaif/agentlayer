@@ -95,6 +95,17 @@ func (t Tmux) JumpTo(r Ref) error {
 	return err
 }
 
+// NewWindow는 현재 세션에 이름·시작 디렉터리·실행 명령을 지정해 window를
+// 만든다. 기존 window는 건드리지 않는다.
+func (t Tmux) NewWindow(name, dir, command string) error {
+	args := []string{"new-window", "-n", name, "-c", dir}
+	if command != "" {
+		args = append(args, command)
+	}
+	_, err := t.run(args...)
+	return err
+}
+
 // InsideTmux는 tmux 안에서 실행 중인지.
 func InsideTmux() bool {
 	return os.Getenv("TMUX") != ""
