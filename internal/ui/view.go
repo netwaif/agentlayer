@@ -236,6 +236,9 @@ func (m Model) View() string {
 		line := fmt.Sprintf("%s %-7s %-20s %-30s %s · %s",
 			stateBadge(a, m.now), a.Kind, a.Tmux.Session, task,
 			cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
+		if br, ok := m.wtBranch[a.CWD]; ok {
+			line += " " + styleTitle.Render("⎇ "+br)
+		}
 		if badge := m.ctxBadge(a); badge != "" {
 			line += " " + badge
 		}

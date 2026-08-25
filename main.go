@@ -44,6 +44,15 @@ func run(args []string) error {
 		return runInit(args[1:])
 	case "card":
 		return runCard(args[1:])
+	case "wt":
+		st, err := state.NewStore(state.DefaultDir())
+		if err != nil {
+			return err
+		}
+		if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
+			_ = scan.Sync(st, panes, time.Now())
+		}
+		return cli.RunWT(os.Stdout, state.DefaultDir(), st, tmuxx.Tmux{}, args[1:])
 	default:
 		return fmt.Errorf("알 수 없는 명령: %s", args[0])
 	}

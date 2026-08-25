@@ -10,6 +10,7 @@ import (
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/usage"
+	"github.com/netwaif/agentlayer/internal/wt"
 )
 
 const (
@@ -19,8 +20,9 @@ const (
 
 // refreshMsg는 저장소를 다시 읽은 결과.
 type refreshMsg struct {
-	agents []*state.Agent
-	now    time.Time
+	agents     []*state.Agent
+	wtBranches map[string]string // worktree 경로 → 브랜치
+	now        time.Time
 }
 
 type tickMsg time.Time
@@ -49,6 +51,7 @@ type Model struct {
 	showUsage bool // u 키: 사용량 전용 뷰
 	usagePay  *usage.Payload
 	ctx       map[string]usage.CtxInfo // CWD(절대경로) → 모델·ctx%
+	wtBranch  map[string]string        // worktree 경로 → 브랜치
 	// 주입점 (테스트용)
 	coachRunner func() ([]byte, error)
 	snapshotDir string
@@ -110,7 +113,13 @@ func (m Model) refreshCmd() tea.Cmd {
 		if err != nil {
 			return refreshMsg{agents: nil, now: now}
 		}
-		return refreshMsg{agents: agents, now: now}
+		branches := map[string]string{}
+		if metas, err := wt.ListMetas(st.Dir); err == nil {
+			for _, m := range metas {
+				branches[m.Path] = m.Branch
+			}
+		}
+		return refreshMsg{agents: agents, wtBranches: branches, now: now}
 	}
 }
 
@@ -146,6 +155,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case refreshMsg:
 		m.agents = msg.agents
+		m.wtBranch = msg.wtBranches
 		m.now = msg.now
 		if m.cursor >= len(m.agents) {
 			m.cursor = max(0, len(m.agents)-1)

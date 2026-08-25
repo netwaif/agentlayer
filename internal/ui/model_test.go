@@ -21,10 +21,10 @@ func fixtureModel(t *testing.T) Model {
 	}
 	agents := []*state.Agent{
 		{ID: "claude-7", Kind: "claude", Task: "승인 대기", State: state.StateWaiting,
-			Tmux: state.TmuxRef{Session: "collab-bot", Window: 0, PaneID: "%7"},
+			Tmux:      state.TmuxRef{Session: "collab-bot", Window: 0, PaneID: "%7"},
 			UpdatedAt: t0, StateSince: t0},
 		{ID: "claude-3", Kind: "claude", Task: "핸드오프 문서 확인", State: state.StateDoneUnread,
-			Tmux: state.TmuxRef{Session: "ai", Window: 1, PaneID: "%3"},
+			Tmux:      state.TmuxRef{Session: "ai", Window: 1, PaneID: "%3"},
 			UpdatedAt: t0, StateSince: t0},
 	}
 	for _, a := range agents {
