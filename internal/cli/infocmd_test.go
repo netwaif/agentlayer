@@ -33,7 +33,7 @@ func TestRenderInfoFull(t *testing.T) {
 		"zzukumi-bot", "~/ai-folder/youtube-members/zzukumi",
 		"Opus 5 (1M context)", "ctx 8%",
 		"folder-bot zzukumi",
-		"쭈꾸미방 (1533…2294)", "허용 1명", "mention 불필요",
+		"쭈꾸미방 (1533823223442182294)", "허용 1명", "mention 불필요",
 		"com.folder-bot.zzukumi",
 		"0b6fcba", "agentlayer resume claude-6",
 		"멤버십 글 정리",

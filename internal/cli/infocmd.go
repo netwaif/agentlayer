@@ -49,11 +49,9 @@ func RenderInfo(w io.Writer, d InfoData, now time.Time) {
 	}
 	if dc := d.Wiring.Discord; dc != nil {
 		for _, ch := range dc.Channels {
-			label := ch.Label
-			if label == "" {
-				label = wiring.ShortID(ch.ID)
-			} else {
-				label += " (" + wiring.ShortID(ch.ID) + ")"
+			label := ch.ID
+			if ch.Label != "" {
+				label = ch.Label + " (" + ch.ID + ")"
 			}
 			mention := "mention 불필요"
 			if ch.RequireMention {
@@ -71,11 +69,9 @@ func RenderInfo(w io.Writer, d InfoData, now time.Time) {
 		}
 		fmt.Fprintf(w, "  Discord    codex 브리지 (%s) · %s\n", ShortenHome(br.Dir), alive)
 		for _, id := range br.Channels {
-			label := d.Labels[id]
-			if label == "" {
-				label = wiring.ShortID(id)
-			} else {
-				label += " (" + wiring.ShortID(id) + ")"
+			label := id
+			if d.Labels[id] != "" {
+				label = d.Labels[id] + " (" + id + ")"
 			}
 			fmt.Fprintf(w, "             채널 %s\n", label)
 		}
