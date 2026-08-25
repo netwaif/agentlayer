@@ -14,6 +14,7 @@ var claudeEvents = []struct{ settingsKey, eventArg string }{
 	{"Notification", "notification"},
 	{"Stop", "stop"},
 	{"SessionStart", "session-start"},
+	{"UserPromptSubmit", "user-prompt-submit"},
 }
 
 // InstallClaudeHooks는 settings.json에 agentlayer hook을 등록한다.

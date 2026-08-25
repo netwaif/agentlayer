@@ -35,7 +35,7 @@ func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) 
 
 	var to state.AgentState
 	switch event {
-	case "post-tool-use", "session-start":
+	case "post-tool-use", "session-start", "user-prompt-submit":
 		to = state.StateWorking
 	case "notification":
 		to = state.StateWaiting
@@ -51,6 +51,13 @@ func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) 
 		a = &state.Agent{ID: id, Kind: "claude", State: state.StateIdle,
 			Tmux:      state.TmuxRef{PaneID: pane}, // 세션·창은 다음 Sync가 채운다
 			UpdatedAt: now, StateSince: now}
+	}
+	// 턴 종료(DONE) 후의 Notification은 "입력 기다림" 유휴 에코다 —
+	// 진짜 승인 요청은 턴 진행 중(WORKING)에만 오므로, DONE을 덮지 않는다.
+	// (UserPromptSubmit이 새 턴 시작 시 WORKING으로 되돌려 놓는 전제)
+	if event == "notification" && a.State == state.StateDoneUnread {
+		a.UpdatedAt = now
+		return st.Save(a)
 	}
 	if p.SessionID != "" {
 		a.SessionID = p.SessionID

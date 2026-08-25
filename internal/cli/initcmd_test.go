@@ -53,7 +53,7 @@ func TestInitAppendsPreservingExisting(t *testing.T) {
 		}
 	}
 	// 4개 이벤트 모두 등록
-	for _, ev := range []string{"post-tool-use", "notification", "stop", "session-start"} {
+	for _, ev := range []string{"post-tool-use", "notification", "stop", "session-start", "user-prompt-submit"} {
 		if !strings.Contains(out, "agentlayer hook claude --event "+ev) {
 			t.Errorf("%s hook 등록돼야 함", ev)
 		}

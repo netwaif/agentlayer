@@ -38,6 +38,7 @@ func TestEventTransitions(t *testing.T) {
 	}{
 		{"post-tool-use", state.StateWorking},
 		{"session-start", state.StateWorking},
+		{"user-prompt-submit", state.StateWorking},
 		{"notification", state.StateWaiting},
 		{"stop", state.StateDoneUnread},
 	}
@@ -80,6 +81,33 @@ func TestNotificationMessageBecomesTask(t *testing.T) {
 	a, _ = st.Load(scan.IDForPane("claude", "%3"))
 	if a.Task == "" {
 		t.Error("기존 Task 유지돼야 함")
+	}
+}
+
+func TestIdleNotificationKeepsDone(t *testing.T) {
+	// 턴 종료 후 60초 유휴 알림이 DONE_UNREAD를 WAIT로 덮으면 안 된다
+	st := newStore(t)
+	if err := RunClaude(st, "stop", strings.NewReader(`{"session_id":"s"}`), env("%3"), t0); err != nil {
+		t.Fatal(err)
+	}
+	idle := `{"session_id":"s","message":"Claude is waiting for your input"}`
+	if err := RunClaude(st, "notification", strings.NewReader(idle), env("%3"), t0.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.Load(scan.IDForPane("claude", "%3"))
+	if a.State != state.StateDoneUnread {
+		t.Errorf("유휴 에코는 DONE 유지: %s", a.State)
+	}
+	// 새 턴 시작(user-prompt-submit) 후의 notification은 진짜 승인 대기 → WAIT
+	if err := RunClaude(st, "user-prompt-submit", strings.NewReader(`{"session_id":"s"}`), env("%3"), t0.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunClaude(st, "notification", strings.NewReader(`{"session_id":"s","message":"Bash 승인 필요"}`), env("%3"), t0.Add(3*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	a, _ = st.Load(scan.IDForPane("claude", "%3"))
+	if a.State != state.StateWaiting {
+		t.Errorf("턴 중 알림은 WAIT: %s", a.State)
 	}
 }
 
