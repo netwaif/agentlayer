@@ -112,13 +112,16 @@ func TestInitMissingSettingsCreates(t *testing.T) {
 
 func TestTmuxBindingAdvice(t *testing.T) {
 	var buf bytes.Buffer
-	PrintTmuxBinding(&buf, false) // 충돌 없음 케이스
+	PrintTmuxBinding(&buf, false, "/Users/x/.local/bin/agentlayer") // 충돌 없음 케이스
 	out := buf.String()
 	if !strings.Contains(out, "bind-key a display-popup") {
 		t.Errorf("바인딩 안내 포함: %s", out)
 	}
+	if !strings.Contains(out, "/Users/x/.local/bin/agentlayer") {
+		t.Errorf("절대 경로로 안내해야 함 (tmux 서버 최소 PATH): %s", out)
+	}
 	buf.Reset()
-	PrintTmuxBinding(&buf, true) // 충돌 케이스
+	PrintTmuxBinding(&buf, true, "/x") // 충돌 케이스
 	if !strings.Contains(buf.String(), "이미") {
 		t.Error("충돌 경고 포함")
 	}

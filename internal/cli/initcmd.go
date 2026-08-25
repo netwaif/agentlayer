@@ -100,12 +100,18 @@ func hasCommand(entries []any, cmd string) bool {
 
 // PrintTmuxBinding은 popup 바인딩 안내를 출력한다. .tmux.conf를 자동
 // 수정하지 않는다 — 키 바인딩은 사용자의 영역이다.
-func PrintTmuxBinding(w io.Writer, conflict bool) {
+// binPath는 반드시 절대 경로 — tmux 서버는 최소 PATH(/usr/bin:/bin...)로
+// 뜨는 경우가 많아, 명령 이름만 쓰면 팝업이 즉시 닫힌다(깜빡임).
+func PrintTmuxBinding(w io.Writer, conflict bool, binPath string) {
 	if conflict {
 		fmt.Fprintln(w, "⚠ prefix 'a' 키가 이미 바인딩되어 있습니다. 다른 키를 고르세요.")
 		return
 	}
+	if binPath == "" {
+		binPath = "agentlayer"
+	}
 	fmt.Fprintln(w, "tmux 팝업을 쓰려면 ~/.tmux.conf에 다음 한 줄을 추가하세요 (C-b a):")
-	fmt.Fprintln(w, `  bind-key a display-popup -E -w 90% -h 80% "agentlayer"`)
+	fmt.Fprintf(w, "  bind-key a display-popup -E -w 90%% -h 80%% \"%s\"\n", binPath)
 	fmt.Fprintln(w, "적용: tmux source-file ~/.tmux.conf")
+	fmt.Fprintln(w, "(절대 경로인 이유: tmux 서버는 PATH가 최소한이라 명령 이름만 쓰면 팝업이 바로 닫힙니다)")
 }
