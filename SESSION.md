@@ -17,16 +17,18 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 
 **v1.0.0 배포 완료** (08-26): https://github.com/netwaif/agentlayer 공개 + 릴리즈(darwin amd64/arm64)
 + brew tap 반영(`brew install netwaif/tap/agentlayer`). 3사(claude·codex·gemini/agy) 완전 편입 상태.
-전체 조망은 `agentlayer-handoff-2026-08-26.md` 참조. 영상 세션(agentlayer-29)에 핸드오프 문서
+전체 조망은 `agentlayer-handoff-2026-08-26.md` 참조. 영상 세션에 핸드오프 문서
 + 킬러 데모 5종 + 촬영 가이드(더미 세션 구성·W 안전 절차) 전달 완료 — 후속 질문 응대만 남음.
-주의: 이 Mac은 CLT가 낡아 로컬 brew install만 실패(formula는 정상 인식) — 로컬은 make install 사용.
+**brew 설치 실검증 통과** (08-26, 이 Mac CLT 16.2 갱신 후 install→status 실행까지 확인, 검증 후 uninstall).
+로컬은 계속 make install 사용. TUI 리사이즈 잘림 수정(가로 클램프+세로 스크롤) 완료·커밋됨.
+Discord 대시보드 카드는 새 서버로 이전 완료(웹훅 교체). 미커밋 변경 없음.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. 영상 세션(agentlayer-29) 후속 질문 응대 — 촬영 중 기술 확인, Orca 실측 요청 오면 사용자 승인 먼저
-2. **brew 설치 실검증 1회 필수** (아직 어떤 머신에서도 끝까지 통과 안 됨) — 다른 머신 또는 이 Mac CLT 갱신 후. 영상 게시 전 반드시
-3. 실사용 피드백 수렴 — Discord 카드 안정성, Codex 재시작 후 turn-complete(DONE) 감지 재확인
+1. 영상 세션 후속 질문 응대 — 촬영 중 기술 확인, Orca 실측 요청 오면 사용자 승인 먼저
+2. 실사용 피드백 수렴 — Discord 카드 안정성(새 서버 웹훅), Codex 재시작 후 turn-complete(DONE) 감지 재확인
+3. `version` 서브커맨드 추가 검토 — brew 사용자가 `agentlayer version` 시도하면 "알 수 없는 명령" (실검증 중 발견)
 4. 보류 아이디어: MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용)
 
 ## 결정 기록
@@ -61,6 +63,10 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-08-26 v1.0.0 릴리즈: gh repo create(netwaif/agentlayer, public) → 태그 v1.0.0 → goreleaser release(GITHUB_TOKEN=$(gh auth token)). brew formula는 tap의 Formula/ 디렉터리에 있어야 함(.goreleaser.yaml에 directory: Formula 추가, 루트에 갔던 첫 파일은 git mv로 이동). 이 Mac은 CLT 낡아 brew install 로컬 검증만 불가(다른 머신은 정상)
 - 2026-08-26 촬영 가이드(영상 세션에 전달): **별도 tmux 서버(-L) 금지** — 상태 저장소가 공유라 pane ID 충돌로 실세션 레코드 덮어씀 + demo 서버에서 TUI 열면 실세션 전부 DEAD 오판. 같은 서버 + 더미 폴더(SESSION.md 필수) 세션으로 촬영. W 촬영은 실봇 종료(dead는 대상 제외) 후 더미만 남기고
 - 2026-08-26 brew 경로는 아직 미실검증 (formula 인식·아카이브·체크섬까지만 확인) — 영상 게시 전 실검증 필수를 다음 단계로 등재
+- 2026-08-26 brew 실검증 통과 (위 결정 해소): 이 Mac CLT 14.3.1→16.2 갱신(softwareupdate -i "Command Line Tools for Xcode-16.2") 후 `brew install netwaif/tap/agentlayer` 성공, `/usr/local/bin/agentlayer status` 실행·상태 출력 정상. 검증 후 brew uninstall(로컬은 make install 본 유지). 영상 게시 차단 요인 해소
+- 2026-08-26 Discord 대시보드 채널 새 서버 이전: 웹훅은 채널 종속이라 이전 불가 → 새 채널(1542162018596036660) 웹훅으로 `~/.config/agentlayer/config.json` 교체 + `discord-card.json` message_id 리셋(옛 채널 메시지 무효) → `agentlayer card` 게시·채널 확인. LaunchAgent는 같은 설정을 읽어 그대로 동작
+- 2026-08-26 TUI 리사이즈 잘림 수정: bubbletea(altscreen)는 폭 초과 줄을 안 잘라줘 터미널 래핑→화면 깨짐. View()=viewBody()+clampLines(x/ansi.Truncate, ANSI 폭 계산·리셋 후행)로 가로 클램프, 목록은 listWindow(커서 추적 스크롤, capacity=height-10, "↑/↓ N줄 더" 표시)로 세로 해결. previewHeight와 상수 공유
+- 2026-08-26 미리보기 가로 잘림은 agentlayer 문제 아님 — headless 생성 tmux 세션이 기본 80x24라 원본 pane이 80칸(claude-discord 실사례). resize-window -x 212 -y 51 즉시 적용 + `~/.tmux.conf`에 `set -g default-size 212x50` 영구 설정으로 해결
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -89,4 +95,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - `main.go` resumeCommand(3사 분기), hook gemini 라우팅(stdout "{}"), init에 gemini 2계열 등록
 - 시스템 상태 추가: `~/.gemini/config/hooks.json`(agy 훅), `~/.gemini/settings.json`(stock 훅 5종)
 - `agentlayer-handoff-2026-08-26.md` 기능 완성 시점 핸드오프 (전체 조망·커밋 스토리·한계·파일 지도)
+- `internal/ui/view.go` View()→viewBody() 분리, clampLines(가로 ANSI 클램프)·listWindow(세로 커서 스크롤)
+- `internal/ui/view_test.go` TestViewClampsToWidth·TestViewScrollsListToHeight·TestClampLinesANSI
+- `go.mod` charmbracelet/x/ansi 직접 의존성 승격
+- 시스템 상태 추가: `~/.tmux.conf` 끝에 default-size 212x50, `~/.config/agentlayer/config.json` 새 서버 웹훅
 - 외부: 테스트 체크리스트 Artifact https://claude.ai/code/artifact/3cd3ee37-9863-462e-8ca4-603cae896ba4
