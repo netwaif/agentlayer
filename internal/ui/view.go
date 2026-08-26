@@ -155,6 +155,19 @@ func ctxStyle(used float64) lipgloss.Style {
 	}
 }
 
+// defaultModelLine은 헤더의 Claude Code 기본 모델 조각.
+// Fable이 기본이면 새로 띄우는 모든 claude가 최상위 티어로 돌아 토큰이 샌다 — 경고색.
+func (m Model) defaultModelLine() string {
+	if m.claudeModel == "" {
+		return ""
+	}
+	pretty := usage.PrettyModel(m.claudeModel)
+	if usage.IsFable(m.claudeModel) {
+		return levelStyle["red"].Render("⚠ 기본모델 " + pretty)
+	}
+	return styleHelp.Render("기본모델 ") + styleModel.Render(pretty)
+}
+
 // ctxBadge는 행 끝의 "[모델 · ctx% · age]" 조각.
 func (m Model) ctxBadge(a *state.Agent) string {
 	info, ok := m.ctx[a.CWD]
@@ -163,7 +176,11 @@ func (m Model) ctxBadge(a *state.Agent) string {
 	}
 	var parts []string
 	if info.Model != "" {
-		parts = append(parts, styleModel.Render(info.Model))
+		st := styleModel
+		if usage.IsFable(info.Model) {
+			st = levelStyle["yellow"].Bold(true) // Fable로 도는 세션은 한눈에
+		}
+		parts = append(parts, st.Render(info.Model))
 	}
 	if info.UsedPct != nil {
 		parts = append(parts, ctxStyle(*info.UsedPct).Bold(true).Render(fmt.Sprintf("ctx %d%%", int(*info.UsedPct))))
@@ -344,7 +361,11 @@ func (m Model) View() string {
 		return m.usageView()
 	}
 	var b strings.Builder
-	b.WriteString(styleTitle.Render("AgentLayer") + "  " + summary(m.agents) + "\n")
+	b.WriteString(styleTitle.Render("AgentLayer") + "  " + summary(m.agents))
+	if s := m.defaultModelLine(); s != "" {
+		b.WriteString(styleHelp.Render("  ·  ") + s)
+	}
+	b.WriteString("\n")
 	if s := m.usageSummaryLine(); s != "" {
 		b.WriteString(s + "\n")
 	} else if m.usagePay == nil {

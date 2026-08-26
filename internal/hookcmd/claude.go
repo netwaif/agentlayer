@@ -19,6 +19,7 @@ type claudePayload struct {
 	SessionID string `json:"session_id"`
 	CWD       string `json:"cwd"`
 	Message   string `json:"message"` // Notification 이벤트의 안내 문구
+	Source    string `json:"source"`  // SessionStart 이벤트의 기동 사유 (startup·resume·clear·compact)
 }
 
 // RunClaude는 `agentlayer hook claude --event <event>`의 본체.
@@ -36,8 +37,12 @@ func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) 
 
 	var to state.AgentState
 	switch event {
-	case "post-tool-use", "session-start", "user-prompt-submit":
+	case "post-tool-use", "user-prompt-submit":
 		to = state.StateWorking
+	case "session-start":
+		// 세션이 떴다고 일하는 게 아니다 — 부팅 시 폴더 봇 자동 기동이
+		// 전부 WORK로 보이던 오탐의 원인. 프롬프트가 들어와야 WORK다.
+		to = state.StateIdle
 	case "notification":
 		to = state.StateWaiting
 	case "stop":
@@ -61,6 +66,14 @@ func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) 
 	if event == "notification" &&
 		(strings.Contains(p.Message, "waiting for your input") || a.State == state.StateDoneUnread) {
 		a.UpdatedAt = now
+		return st.Save(a)
+	}
+	// 컨텍스트 압축(compact)의 SessionStart는 작업 도중 발생 — 상태를 내리지 않는다.
+	if event == "session-start" && p.Source == "compact" {
+		a.UpdatedAt = now
+		if p.SessionID != "" {
+			a.SessionID = p.SessionID
+		}
 		return st.Save(a)
 	}
 	if p.SessionID != "" {

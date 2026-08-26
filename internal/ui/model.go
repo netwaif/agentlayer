@@ -4,6 +4,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -38,10 +39,11 @@ type usageTickMsg time.Time
 
 // usageMsg는 coach·세션 컨텍스트 수집 결과.
 type usageMsg struct {
-	payload *usage.Payload
-	ctx     map[string]usage.CtxInfo
-	starter []starter.Task
-	discord map[string]bool // CWD → Discord 연결 여부 (⌁ 마크)
+	payload     *usage.Payload
+	ctx         map[string]usage.CtxInfo
+	starter     []starter.Task
+	discord     map[string]bool // CWD → Discord 연결 여부 (⌁ 마크)
+	claudeModel string          // Claude Code 기본 모델 설정 (빈 값 = 미설정/미확인)
 }
 
 // jumpDoneMsg는 점프 실행 후 종료 신호.
@@ -78,11 +80,13 @@ type Model struct {
 	wtBranch     map[string]string        // worktree 경로 → 브랜치
 	discordWired map[string]bool          // CWD → Discord 연결 (⌁)
 	starterTasks []starter.Task           // MultiAgent 활성 작업
+	claudeModel  string                   // Claude Code 기본 모델 설정
 	// 주입점 (테스트용)
 	coachRunner func() ([]byte, error)
 	snapshotDir string
 	codexRoot   string
 	starterRoot string
+	homeDir     string
 }
 
 func New(st *state.Store, tm tmuxx.Tmux) Model {
@@ -90,11 +94,13 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 	if root == "" {
 		root = starter.DefaultRoot()
 	}
+	home, _ := os.UserHomeDir()
 	return Model{store: st, tm: tm, now: time.Now(),
 		coachRunner: usage.CoachRunner,
 		snapshotDir: usage.SnapshotsDir(),
 		codexRoot:   usage.CodexSessionsRoot(),
-		starterRoot: root}
+		starterRoot: root,
+		homeDir:     home}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -114,7 +120,7 @@ func usageTickCmd() tea.Cmd {
 // 어떤 소스가 없어도 관제는 계속된다.
 func (m Model) usageCmd() tea.Cmd {
 	runner, snapDir, codexRoot, st := m.coachRunner, m.snapshotDir, m.codexRoot, m.store
-	starterRoot := m.starterRoot
+	starterRoot, home := m.starterRoot, m.homeDir
 	return func() tea.Msg {
 		pay := usage.FetchCached(st.Dir, 5*time.Minute, runner, time.Now())
 		ctx := usage.LoadSnapshots(snapDir)
@@ -141,7 +147,8 @@ func (m Model) usageCmd() tea.Cmd {
 				dc[a.CWD] = w.DiscordConnected()
 			}
 		}
-		return usageMsg{payload: pay, ctx: ctx, starter: starter.ActiveTasks(starterRoot), discord: dc}
+		return usageMsg{payload: pay, ctx: ctx, starter: starter.ActiveTasks(starterRoot), discord: dc,
+			claudeModel: usage.ClaudeDefaultModel(home)}
 	}
 }
 
@@ -230,6 +237,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.discord != nil {
 			m.discordWired = msg.discord
 		}
+		m.claudeModel = msg.claudeModel
 		return m, nil
 
 	case refreshMsg:

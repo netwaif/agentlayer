@@ -37,7 +37,7 @@ func TestEventTransitions(t *testing.T) {
 		want  state.AgentState
 	}{
 		{"post-tool-use", state.StateWorking},
-		{"session-start", state.StateWorking},
+		{"session-start", state.StateIdle},
 		{"user-prompt-submit", state.StateWorking},
 		{"notification", state.StateWaiting},
 		{"stop", state.StateDoneUnread},
@@ -61,6 +61,42 @@ func TestEventTransitions(t *testing.T) {
 		if a.CWD != "/Users/soonho/ai-folder/dev/agentlayer" {
 			t.Errorf("cwd 기록돼야 함: %q", a.CWD)
 		}
+	}
+}
+
+func TestSessionStartIsIdleNotWork(t *testing.T) {
+	// 부팅 시 폴더 봇들이 자동 기동하면 SessionStart만 발화한다.
+	// 아무 작업도 시작 안 한 세션이 WORK로 보이면 안 된다 (아침 관제탑 오탐).
+	st := newStore(t)
+	pre := &state.Agent{ID: scan.IDForPane("claude", "%3"), Kind: "claude",
+		State: state.StateWorking, UpdatedAt: t0, StateSince: t0,
+		Tmux: state.TmuxRef{PaneID: "%3"}}
+	if err := st.Save(pre); err != nil {
+		t.Fatal(err)
+	}
+	in := `{"session_id":"s-new","source":"startup"}`
+	if err := RunClaude(st, "session-start", strings.NewReader(in), env("%3"), t0.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.Load(pre.ID)
+	if a.State != state.StateIdle {
+		t.Errorf("session-start(startup)는 IDLE로: %s", a.State)
+	}
+}
+
+func TestSessionStartCompactKeepsWorking(t *testing.T) {
+	// 컨텍스트 압축(compact)은 작업 도중 발생한다 — WORK를 IDLE로 내리면 안 된다.
+	st := newStore(t)
+	if err := RunClaude(st, "user-prompt-submit", strings.NewReader(`{"session_id":"s"}`), env("%3"), t0); err != nil {
+		t.Fatal(err)
+	}
+	in := `{"session_id":"s","source":"compact"}`
+	if err := RunClaude(st, "session-start", strings.NewReader(in), env("%3"), t0.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.Load(scan.IDForPane("claude", "%3"))
+	if a.State != state.StateWorking {
+		t.Errorf("session-start(compact)는 상태 유지: %s", a.State)
 	}
 }
 
