@@ -38,8 +38,9 @@ func fixtureAgents() ([]*state.Agent, map[string]usage.CtxInfo) {
 		{ID: "claude-9", Kind: "claude", State: state.StateDead,
 			CWD: "/Users/soonho/gone", StateSince: t0.Add(-time.Hour)},
 	}
+	// 에이전트 ID 키 — 같은 폴더의 다른 종류 에이전트와 오귀속되지 않게
 	ctx := map[string]usage.CtxInfo{
-		"/Users/soonho/ai-folder/collab": {Model: "Opus 5 (1M context)", UsedPct: pf(16)},
+		"claude-7": {Model: "Opus 5 (1M context)", UsedPct: pf(16)},
 	}
 	return agents, ctx
 }

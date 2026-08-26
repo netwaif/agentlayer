@@ -186,7 +186,7 @@ func (m Model) defaultModelLine() string {
 
 // ctxBadge는 행 끝의 "[모델 · ctx% · age]" 조각.
 func (m Model) ctxBadge(a *state.Agent) string {
-	info, ok := m.ctx[a.CWD]
+	info, ok := m.ctx[a.ID]
 	if !ok {
 		return ""
 	}
@@ -199,7 +199,7 @@ func (m Model) ctxBadge(a *state.Agent) string {
 		parts = append(parts, st.Render(info.Model))
 	}
 	if info.UsedPct != nil {
-		parts = append(parts, ctxStyle(*info.UsedPct).Bold(true).Render(fmt.Sprintf("ctx %d%%", int(*info.UsedPct))))
+		parts = append(parts, ctxStyle(*info.UsedPct).Bold(true).Render("ctx "+ctxPctText(info)))
 	}
 	if !info.TS.IsZero() {
 		parts = append(parts, styleHeader.Render(cli.Since(info.TS, m.now)))
@@ -210,9 +210,18 @@ func (m Model) ctxBadge(a *state.Agent) string {
 	return styleHeader.Render("[") + strings.Join(parts, styleHeader.Render(" · ")) + styleHeader.Render("]")
 }
 
+// ctxPctText는 % 숫자 조각 — 근사값(gemini류)은 ~ 접두로 정직하게 표시.
+func ctxPctText(info usage.CtxInfo) string {
+	s := fmt.Sprintf("%d%%", int(*info.UsedPct))
+	if info.Approx {
+		return "~" + s
+	}
+	return s
+}
+
 // ctxBadgePlain은 색 없는 컨텍스트 뱃지 (선택 바 렌더용).
 func (m Model) ctxBadgePlain(a *state.Agent) string {
-	info, ok := m.ctx[a.CWD]
+	info, ok := m.ctx[a.ID]
 	if !ok {
 		return ""
 	}
@@ -221,7 +230,7 @@ func (m Model) ctxBadgePlain(a *state.Agent) string {
 		parts = append(parts, info.Model)
 	}
 	if info.UsedPct != nil {
-		parts = append(parts, fmt.Sprintf("ctx %d%%", int(*info.UsedPct)))
+		parts = append(parts, "ctx "+ctxPctText(info))
 	}
 	if !info.TS.IsZero() {
 		parts = append(parts, cli.Since(info.TS, m.now))

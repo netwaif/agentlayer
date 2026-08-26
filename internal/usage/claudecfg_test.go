@@ -92,9 +92,41 @@ func TestGeminiLatest(t *testing.T) {
 	if info.TS.IsZero() {
 		t.Error("TS는 파일 mtime")
 	}
+	// 마지막 턴 tokens.total 220 / 1M → 0.022% (근사 표시)
+	if info.UsedPct == nil || *info.UsedPct <= 0 || *info.UsedPct > 1 {
+		t.Errorf("tokens 기반 ctx%%: %+v", info.UsedPct)
+	}
+	if !info.Approx {
+		t.Error("gemini ctx%%는 근사값 표시")
+	}
 	// 하위 폴더로 cd한 경우 — 조상 매핑으로 폴백
 	if info := GeminiLatest(gd, "/w/proj/sub/dir"); info.Model != "gemini-3-pro" {
 		t.Errorf("조상 프로젝트 매칭: %q", info.Model)
+	}
+}
+
+func TestAgyCtx(t *testing.T) {
+	home := t.TempDir()
+	gd := filepath.Join(home, ".gemini")
+	if info := AgyCtx(gd, "no-such-conv"); info.UsedPct != nil {
+		t.Errorf("transcript 없으면 빈 값: %+v", info)
+	}
+	// 40KB transcript → ≈10k 토큰 추정 → 1% (1M 창 기준)
+	big := make([]byte, 40*1024)
+	for i := range big {
+		big[i] = 'a'
+	}
+	writeFile(t, filepath.Join(gd, "antigravity-cli", "brain", "cid-1",
+		".system_generated", "logs", "transcript_full.jsonl"), string(big))
+	info := AgyCtx(gd, "cid-1")
+	if info.UsedPct == nil || *info.UsedPct < 0.5 || *info.UsedPct > 2 {
+		t.Errorf("크기 기반 추정 ctx%%: %+v", info.UsedPct)
+	}
+	if !info.Approx {
+		t.Error("agy ctx%%는 근사값 표시")
+	}
+	if info.TS.IsZero() {
+		t.Error("TS는 파일 mtime")
 	}
 }
 

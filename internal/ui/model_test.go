@@ -158,12 +158,24 @@ func TestCtxBadgeOnRows(t *testing.T) {
 	m := fixtureModel(t)
 	used := 42.0
 	m.agents[0].CWD = "/Users/x/proj"
+	// 에이전트 ID 키 — 같은 폴더의 다른 종류 에이전트와 오귀속되지 않게
 	m.ctx = map[string]usage.CtxInfo{
-		"/Users/x/proj": {Model: "Opus 5 (1M context)", UsedPct: &used, TS: t0.Add(-10 * time.Minute)},
+		m.agents[0].ID: {Model: "Opus 5 (1M context)", UsedPct: &used, TS: t0.Add(-10 * time.Minute)},
 	}
 	v := m.View()
 	if !strings.Contains(v, "Opus 5 (1M context)") || !strings.Contains(v, "ctx 42%") {
 		t.Errorf("행에 모델·ctx%% 표시:\n%s", v)
+	}
+}
+
+func TestCtxBadgeApprox(t *testing.T) {
+	m := fixtureModel(t)
+	used := 7.0
+	m.ctx = map[string]usage.CtxInfo{
+		m.agents[0].ID: {Model: "gemini-3.6-flash", UsedPct: &used, Approx: true, TS: t0},
+	}
+	if v := m.View(); !strings.Contains(v, "ctx ~7%") {
+		t.Errorf("근사값은 ~ 접두 표시:\n%s", v)
 	}
 }
 

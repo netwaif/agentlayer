@@ -185,7 +185,7 @@ func agentsContainer(agents []*state.Agent, ctx map[string]usage.CtxInfo, wired 
 		if a.State == state.StateDead {
 			continue
 		}
-		info := ctx[a.CWD]
+		info := ctx[a.ID]
 		tag := info.Model
 		if tag == "" {
 			tag = a.Kind
@@ -204,6 +204,9 @@ func agentsContainer(agents []*state.Agent, ctx map[string]usage.CtxInfo, wired 
 		pct := "—"
 		if r.info.UsedPct != nil {
 			pct = fmt.Sprintf("%d", int(*r.info.UsedPct+0.5))
+			if r.info.Approx {
+				pct = "~" + pct // 근사값(gemini류) 정직 표시
+			}
 			if worst == nil || *r.info.UsedPct > *worst {
 				worst = r.info.UsedPct
 			}

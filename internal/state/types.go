@@ -61,6 +61,19 @@ type Agent struct {
 	StateSince time.Time  `json:"state_since"`
 }
 
+// KindRank는 대시보드의 종류 그룹 순서: claude → codex → gemini → 기타.
+func KindRank(kind string) int {
+	switch kind {
+	case "claude":
+		return 0
+	case "codex":
+		return 1
+	case "gemini":
+		return 2
+	}
+	return 3
+}
+
 // Transition은 상태를 바꾸고 시각을 갱신한다.
 // 같은 상태로의 재진입은 heartbeat로 취급해 StateSince를 유지한다.
 func (a *Agent) Transition(to AgentState, now time.Time) {

@@ -6,14 +6,18 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/netwaif/agentlayer/internal/state"
 )
 
 // CtxInfo는 한 작업 폴더의 최근 에이전트 세션 정보.
 type CtxInfo struct {
 	Model   string
 	UsedPct *float64
+	Approx  bool // true면 근사값 (표시에 ~ 접두)
 	TS      time.Time
 }
 
@@ -91,6 +95,14 @@ func GeminiDir() string {
 }
 
 var geminiModelRe = regexp.MustCompile(`"model":"([^"]+)"`)
+var geminiTokensRe = regexp.MustCompile(`"tokens":\{[^}]*"total":(\d+)`)
+
+// geminiWindow: Gemini 3 계열의 컨텍스트 창(1M). 세션 파일에 창 크기가
+// 기록되지 않아 상수로 둔다 — 그래서 %는 근사값(Approx)이다.
+const geminiWindow = 1_000_000
+
+// agyBytesPerToken: transcript 바이트 → 토큰 근사 계수.
+const agyBytesPerToken = 4
 
 // GeminiLatest는 workdir에서 가장 최근 stock Gemini CLI 세션의 모델을 찾는다.
 // 매핑은 ~/.gemini/projects.json(경로→tmp 폴더명), 정확 일치가 없으면 가장 긴
@@ -155,7 +167,84 @@ func GeminiLatest(geminiDir, workdir string) CtxInfo {
 	if m := geminiModelRe.FindAllStringSubmatch(string(tail), -1); len(m) > 0 {
 		info.Model = m[len(m)-1][1]
 	}
+	// 마지막 턴의 tokens.total ≈ 현재 컨텍스트 규모. 창 크기가 상수 가정이라 근사값.
+	if m := geminiTokensRe.FindAllStringSubmatch(string(tail), -1); len(m) > 0 {
+		if total, err := strconv.ParseFloat(m[len(m)-1][1], 64); err == nil && total > 0 {
+			pct := total / geminiWindow * 100
+			if pct > 100 {
+				pct = 100
+			}
+			info.UsedPct = &pct
+			info.Approx = true
+		}
+	}
 	return info
+}
+
+// AgyCtx는 agy(Antigravity CLI) 대화의 컨텍스트 사용률을 추정한다.
+// agy는 토큰 수를 디스크에 안 남기므로 brain transcript 크기로 근사한다
+// (bytes/4 ≈ 토큰, 1M 창 가정) — agy 세션 자신이 권한 외부 관제 방식.
+func AgyCtx(geminiDir, conversationID string) CtxInfo {
+	if conversationID == "" {
+		return CtxInfo{}
+	}
+	logs := filepath.Join(geminiDir, "antigravity-cli", "brain", conversationID,
+		".system_generated", "logs")
+	var st os.FileInfo
+	for _, name := range []string{"transcript_full.jsonl", "transcript.jsonl"} {
+		if s, err := os.Stat(filepath.Join(logs, name)); err == nil {
+			st = s
+			break
+		}
+	}
+	if st == nil {
+		return CtxInfo{}
+	}
+	pct := float64(st.Size()) / agyBytesPerToken / geminiWindow * 100
+	if pct > 100 {
+		pct = 100
+	}
+	return CtxInfo{UsedPct: &pct, Approx: true, TS: st.ModTime()}
+}
+
+// AgentCtx는 에이전트별(ID 키) 컨텍스트 정보를 종류에 맞는 소스에서 모은다.
+// 폴더(CWD) 키를 쓰면 같은 폴더를 쓰는 claude 스냅샷이 codex·gemini 행을
+// 덮는 오귀속이 생긴다 — 종류별 소스로 에이전트마다 따로 판다.
+// TUI·Discord 카드·info가 같은 규칙을 쓰도록 여기 한 곳에 둔다.
+func AgentCtx(agents []*state.Agent, snapshots map[string]CtxInfo, codexRoot, geminiDir string) map[string]CtxInfo {
+	out := map[string]CtxInfo{}
+	for _, a := range agents {
+		if a.CWD == "" {
+			continue
+		}
+		switch a.Kind {
+		case "claude":
+			if info, ok := snapshots[a.CWD]; ok {
+				out[a.ID] = info
+			}
+		case "codex":
+			if info := CodexLatest(codexRoot, a.CWD); info.Model != "" || info.UsedPct != nil {
+				out[a.ID] = info
+			}
+		case "gemini":
+			// 소스 둘 중 신선한 쪽: stock CLI 세션 파일 vs agy transcript 추정
+			info := GeminiLatest(geminiDir, a.CWD)
+			if agy := AgyCtx(geminiDir, a.SessionID); agy.UsedPct != nil &&
+				(info.TS.IsZero() || agy.TS.After(info.TS)) {
+				info = agy
+			}
+			if info.Model == "" && a.Model != "" {
+				info.Model = a.Model // hook이 기록한 모델
+			}
+			if info.TS.IsZero() {
+				info.TS = a.UpdatedAt
+			}
+			if info.Model != "" || info.UsedPct != nil {
+				out[a.ID] = info
+			}
+		}
+	}
+	return out
 }
 
 // codex rollout에서 컨텍스트 % 계산 시 제외하는 기본 오버헤드 (codex TUI와 동일).

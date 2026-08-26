@@ -123,16 +123,8 @@ func runCard(args []string) error {
 		return err
 	}
 	pay := usage.FetchCached(st.Dir, 4*time.Minute, usage.CoachRunner, now)
-	ctx := usage.LoadSnapshots(usage.SnapshotsDir())
-	for _, a := range agents {
-		if a.Kind == "codex" && a.CWD != "" {
-			if _, ok := ctx[a.CWD]; !ok {
-				if info := usage.CodexLatest(usage.CodexSessionsRoot(), a.CWD); info.Model != "" || info.UsedPct != nil {
-					ctx[a.CWD] = info
-				}
-			}
-		}
-	}
+	ctx := usage.AgentCtx(agents, usage.LoadSnapshots(usage.SnapshotsDir()),
+		usage.CodexSessionsRoot(), usage.GeminiDir())
 	home, _ := os.UserHomeDir()
 	// Discord 연결 표시: 채널 라벨이 있으면 ⌁라벨, 없으면 ⌁
 	cfgForCard := config.Load()
@@ -296,10 +288,12 @@ func runInfo(args []string) error {
 		return fmt.Errorf("에이전트 %q 없음 — agentlayer status로 확인하세요", args[0])
 	}
 	cfg := config.Load()
+	infoCtx := usage.AgentCtx([]*state.Agent{a}, usage.LoadSnapshots(usage.SnapshotsDir()),
+		usage.CodexSessionsRoot(), usage.GeminiDir())
 	d := cli.InfoData{
 		Agent:  a,
 		Wiring: wiring.Collect(wiring.DefaultPaths(), a.CWD, a.Tmux.Session, cfg.ChannelLabels),
-		Ctx:    usage.LoadSnapshots(usage.SnapshotsDir())[a.CWD],
+		Ctx:    infoCtx[a.ID],
 		Labels: cfg.ChannelLabels,
 	}
 	if metas, err := wt.ListMetas(state.DefaultDir()); err == nil {

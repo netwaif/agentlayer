@@ -100,6 +100,11 @@ func (s *Store) List() ([]*Agent, error) {
 		out = append(out, &a)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
+		// 3사 정보가 섞이지 않게 종류 그룹 먼저, 그룹 안에서 급한 순
+		ki, kj := KindRank(out[i].Kind), KindRank(out[j].Kind)
+		if ki != kj {
+			return ki < kj
+		}
 		pi, pj := out[i].State.Priority(), out[j].State.Priority()
 		if pi != pj {
 			return pi < pj

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/netwaif/agentlayer/internal/state"
 )
 
 func writeFile(t *testing.T, path, content string) {
@@ -67,6 +69,23 @@ func TestCodexLatest(t *testing.T) {
 	// (30400-12000)/(272000-12000)*100 ≈ 7.08
 	if info.UsedPct == nil || *info.UsedPct < 7.0 || *info.UsedPct > 7.2 {
 		t.Errorf("used%%: %+v", info.UsedPct)
+	}
+}
+
+func TestAgentCtxNoCrossKindShadow(t *testing.T) {
+	// 같은 폴더의 claude 스냅샷이 gemini 행에 오귀속되면 안 된다
+	agents := []*state.Agent{
+		{ID: "claude-1", Kind: "claude", CWD: "/w"},
+		{ID: "gemini-2", Kind: "gemini", CWD: "/w", Model: "gemini-3.6-flash",
+			UpdatedAt: time.Now()},
+	}
+	snaps := map[string]CtxInfo{"/w": {Model: "Opus 5 (1M context)"}}
+	out := AgentCtx(agents, snaps, t.TempDir(), t.TempDir())
+	if out["claude-1"].Model != "Opus 5 (1M context)" {
+		t.Errorf("claude는 스냅샷 모델: %+v", out["claude-1"])
+	}
+	if out["gemini-2"].Model != "gemini-3.6-flash" {
+		t.Errorf("gemini는 자기 모델: %+v", out["gemini-2"])
 	}
 }
 

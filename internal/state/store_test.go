@@ -65,6 +65,32 @@ func TestListSortsByPriorityThenSince(t *testing.T) {
 	}
 }
 
+func TestListGroupsByKindFirst(t *testing.T) {
+	// 3사 정보가 섞이지 않게 종류별 그룹 우선, 그룹 안에서 상태 우선순위.
+	s := newTestStore(t)
+	mk := func(id, kind string, st AgentState) {
+		if err := s.Save(&Agent{ID: id, Kind: kind, State: st, StateSince: t0, UpdatedAt: t0}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mk("g-wait", "gemini", StateWaiting)
+	mk("c-work", "claude", StateWorking)
+	mk("x-done", "codex", StateDoneUnread)
+	mk("c-done", "claude", StateDoneUnread)
+	got, err := s.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, a := range got {
+		ids = append(ids, a.ID)
+	}
+	want := []string{"c-done", "c-work", "x-done", "g-wait"}
+	if fmt.Sprint(ids) != fmt.Sprint(want) {
+		t.Errorf("종류 그룹 정렬 = %v, want %v", ids, want)
+	}
+}
+
 func TestListSkipsCorruptFiles(t *testing.T) {
 	s := newTestStore(t)
 	if err := s.Save(&Agent{ID: "ok", State: StateIdle, UpdatedAt: t0, StateSince: t0}); err != nil {

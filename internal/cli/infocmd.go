@@ -36,7 +36,11 @@ func RenderInfo(w io.Writer, d InfoData, now time.Time) {
 		engine += " · " + d.Ctx.Model
 	}
 	if d.Ctx.UsedPct != nil {
-		engine += fmt.Sprintf(" · ctx %d%%", int(*d.Ctx.UsedPct))
+		approx := ""
+		if d.Ctx.Approx {
+			approx = "~"
+		}
+		engine += fmt.Sprintf(" · ctx %s%d%%", approx, int(*d.Ctx.UsedPct))
 	}
 	fmt.Fprintf(w, "  엔진       %s\n", engine)
 	if d.Branch != "" {

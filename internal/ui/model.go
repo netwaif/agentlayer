@@ -76,7 +76,7 @@ type Model struct {
 	preview      string // 선택 pane 화면 미리보기
 	previewPane  string
 	usagePay     *usage.Payload
-	ctx          map[string]usage.CtxInfo // CWD(절대경로) → 모델·ctx%
+	ctx          map[string]usage.CtxInfo // 에이전트 ID → 모델·ctx%
 	wtBranch     map[string]string        // worktree 경로 → 브랜치
 	discordWired map[string]bool          // CWD → Discord 연결 (⌁)
 	starterTasks []starter.Task           // MultiAgent 활성 작업
@@ -125,31 +125,9 @@ func (m Model) usageCmd() tea.Cmd {
 	starterRoot, home, geminiDir := m.starterRoot, m.homeDir, m.geminiDir
 	return func() tea.Msg {
 		pay := usage.FetchCached(st.Dir, 5*time.Minute, runner, time.Now())
-		ctx := usage.LoadSnapshots(snapDir)
+		ctx := map[string]usage.CtxInfo{}
 		if agents, err := st.List(); err == nil {
-			for _, a := range agents {
-				if a.CWD == "" {
-					continue
-				}
-				if _, ok := ctx[a.CWD]; ok {
-					continue
-				}
-				switch a.Kind {
-				case "codex":
-					if info := usage.CodexLatest(codexRoot, a.CWD); info.Model != "" || info.UsedPct != nil {
-						ctx[a.CWD] = info
-					}
-				case "gemini":
-					// 소스 둘 중 신선한 쪽: stock CLI 세션 파일 vs hook이 기록한 모델(agy)
-					info := usage.GeminiLatest(geminiDir, a.CWD)
-					if a.Model != "" && (info.Model == "" || a.UpdatedAt.After(info.TS)) {
-						info = usage.CtxInfo{Model: a.Model, TS: a.UpdatedAt}
-					}
-					if info.Model != "" {
-						ctx[a.CWD] = info
-					}
-				}
-			}
+			ctx = usage.AgentCtx(agents, usage.LoadSnapshots(snapDir), codexRoot, geminiDir)
 		}
 		dc := map[string]bool{}
 		if agents, err := st.List(); err == nil {
@@ -390,7 +368,7 @@ func (m Model) buildInfo(a *state.Agent) string {
 	d := cli.InfoData{
 		Agent:  a,
 		Wiring: wiring.Collect(wiring.DefaultPaths(), a.CWD, a.Tmux.Session, cfg.ChannelLabels),
-		Ctx:    m.ctx[a.CWD],
+		Ctx:    m.ctx[a.ID],
 		Labels: cfg.ChannelLabels,
 	}
 	if br, ok := m.wtBranch[a.CWD]; ok {
