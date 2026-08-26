@@ -81,15 +81,90 @@ func LoadSnapshots(dir string) map[string]CtxInfo {
 	return out
 }
 
+// GeminiDir는 Gemini CLI 생태계 루트(~/.gemini).
+func GeminiDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".gemini")
+}
+
+var geminiModelRe = regexp.MustCompile(`"model":"([^"]+)"`)
+
+// GeminiLatest는 workdir에서 가장 최근 stock Gemini CLI 세션의 모델을 찾는다.
+// 매핑은 ~/.gemini/projects.json(경로→tmp 폴더명), 정확 일치가 없으면 가장 긴
+// 조상 경로로 폴백(봇이 하위 폴더로 cd 해도 안 끊긴다). 세션 파일 각 모델 턴에
+// "model" 키가 있어 마지막 것을 쓴다. 컨텍스트 창 크기는 기록되지 않아 %는 없다.
+// agy(Antigravity CLI) 세션은 파일에 모델을 안 남기므로 hook의 modelName이 담당.
+func GeminiLatest(geminiDir, workdir string) CtxInfo {
+	b, err := os.ReadFile(filepath.Join(geminiDir, "projects.json"))
+	if err != nil {
+		return CtxInfo{}
+	}
+	var pj struct {
+		Projects map[string]string `json:"projects"`
+	}
+	if json.Unmarshal(b, &pj) != nil {
+		return CtxInfo{}
+	}
+	name, best := "", -1
+	for path, n := range pj.Projects {
+		if workdir != path && !strings.HasPrefix(workdir, path+string(filepath.Separator)) {
+			continue
+		}
+		if len(path) > best {
+			name, best = n, len(path)
+		}
+	}
+	if name == "" {
+		return CtxInfo{}
+	}
+	files, _ := filepath.Glob(filepath.Join(geminiDir, "tmp", name, "chats", "session-*.jsonl"))
+	var latest string
+	var latestMod time.Time
+	for _, f := range files {
+		st, err := os.Stat(f)
+		if err != nil {
+			continue
+		}
+		if latest == "" || st.ModTime().After(latestMod) {
+			latest, latestMod = f, st.ModTime()
+		}
+	}
+	if latest == "" {
+		return CtxInfo{}
+	}
+	// 꼬리 64KB에서 마지막 model을 찾는다 (세션이 길어도 최근 턴이면 충분)
+	f, err := os.Open(latest)
+	if err != nil {
+		return CtxInfo{}
+	}
+	defer f.Close()
+	st, _ := f.Stat()
+	var tail []byte
+	if st != nil {
+		off := st.Size() - 65536
+		if off < 0 {
+			off = 0
+		}
+		tail = make([]byte, st.Size()-off)
+		f.ReadAt(tail, off)
+	}
+	info := CtxInfo{TS: latestMod}
+	if m := geminiModelRe.FindAllStringSubmatch(string(tail), -1); len(m) > 0 {
+		info.Model = m[len(m)-1][1]
+	}
+	return info
+}
+
 // codex rollout에서 컨텍스트 % 계산 시 제외하는 기본 오버헤드 (codex TUI와 동일).
 const codexBaseline = 12000
 
 var codexModelRe = regexp.MustCompile(`"model":"([^"]+)"`)
 
-// CodexLatest는 workdir에서 가장 최근 활동한 codex 세션의 모델·컨텍스트%를
-// 찾는다. rollout 첫 줄의 session_meta cwd로 판별하고, 파일 꼬리에서
-// 마지막 token_count를 읽는다. 못 찾으면 빈 CtxInfo.
-func CodexLatest(root, workdir string) CtxInfo {
+// codexRolloutsByRecency는 rollout 파일을 최신순으로 나열한다 (최대 400개).
+func codexRolloutsByRecency(root string) []string {
 	files, _ := filepath.Glob(filepath.Join(root, "*", "*", "*", "*.jsonl"))
 	sort.Slice(files, func(i, j int) bool {
 		fi, _ := os.Stat(files[i])
@@ -102,6 +177,39 @@ func CodexLatest(root, workdir string) CtxInfo {
 	if len(files) > 400 {
 		files = files[:400]
 	}
+	return files
+}
+
+var codexSessionIDRe = regexp.MustCompile(`"session_id":"([^"]+)"`)
+
+// CodexSessionID는 workdir의 가장 최근 codex rollout에서 session_id를 찾는다.
+// codex notify에는 세션 ID가 없어 resume은 이 경로로 얻는다.
+func CodexSessionID(root, workdir string) string {
+	needle := `"cwd":"` + workdir + `"`
+	for _, path := range codexRolloutsByRecency(root) {
+		f, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		head := make([]byte, 4096)
+		n, _ := f.Read(head)
+		f.Close()
+		h := string(head[:n])
+		if !strings.Contains(h, needle) {
+			continue
+		}
+		if m := codexSessionIDRe.FindStringSubmatch(h); m != nil {
+			return m[1]
+		}
+	}
+	return ""
+}
+
+// CodexLatest는 workdir에서 가장 최근 활동한 codex 세션의 모델·컨텍스트%를
+// 찾는다. rollout 첫 줄의 session_meta cwd로 판별하고, 파일 꼬리에서
+// 마지막 token_count를 읽는다. 못 찾으면 빈 CtxInfo.
+func CodexLatest(root, workdir string) CtxInfo {
+	files := codexRolloutsByRecency(root)
 	needle := `"cwd":"` + workdir + `"`
 	for _, path := range files {
 		f, err := os.Open(path)

@@ -207,6 +207,24 @@ func runInit(args []string) error {
 		}
 		fmt.Println()
 	}
+	// agy(Antigravity CLI)가 설치된 경우에만 — 전역 훅 파일에 등록
+	geminiHooks := filepath.Join(home, ".gemini", "config", "hooks.json")
+	if _, err := os.Stat(filepath.Dir(geminiHooks)); err == nil {
+		fmt.Println("Gemini(agy) hook 등록:", geminiHooks)
+		if err := cli.InstallGeminiHooks(os.Stdout, geminiHooks, binPath, *dryRun); err != nil {
+			return err
+		}
+		fmt.Println()
+	}
+	// stock Gemini CLI — ~/.gemini/settings.json의 hooks에 등록
+	geminiSettings := filepath.Join(home, ".gemini", "settings.json")
+	if _, err := os.Stat(filepath.Dir(geminiSettings)); err == nil {
+		fmt.Println("Gemini CLI hook 등록:", geminiSettings)
+		if err := cli.InstallGeminiCLIHooks(os.Stdout, geminiSettings, binPath, *dryRun); err != nil {
+			return err
+		}
+		fmt.Println()
+	}
 	// prefix 'a' 충돌 검사: list-keys가 성공하면 이미 바인딩된 것
 	conflict := exec.Command(tmuxx.Bin(), "list-keys", "-T", "prefix", "a").Run() == nil
 	cli.PrintTmuxBinding(os.Stdout, conflict, binPath)
@@ -245,6 +263,13 @@ func runHook(args []string) error {
 		if err := hookcmd.RunCodex(st, fs.Args(), os.Getenv, time.Now()); err != nil {
 			fmt.Fprintln(os.Stderr, "agentlayer hook:", err)
 		}
+	case "gemini":
+		if err := hookcmd.RunGemini(st, *event, os.Stdin, os.Getenv, time.Now()); err != nil {
+			fmt.Fprintln(os.Stderr, "agentlayer hook:", err)
+		}
+		// agy 훅 출력 규약: stdout으로 JSON 응답. 빈 객체 = 아무 개입 없음
+		// (Stop에서 decision을 안 내면 종료 허용, PostToolUse는 {} 기대).
+		fmt.Println("{}")
 	}
 	return nil
 }
@@ -338,18 +363,22 @@ func runResume(args []string) error {
 		var found bool
 		fmt.Println("resume 가능한 세션 (죽었거나 에러난 것 우선):")
 		for _, a := range agents {
-			if a.SessionID == "" || a.Kind != "claude" {
+			if _, err := resumeCommand(a); err != nil {
 				continue
 			}
 			marker := " "
 			if a.State == state.StateDead || a.State == state.StateError {
 				marker = "!"
 			}
-			fmt.Printf("  %s %-14s %-8s %s  (%s)\n", marker, a.ID, a.State, cli.ShortenHome(a.CWD), a.SessionID[:8])
+			sid := a.SessionID
+			if len(sid) > 8 {
+				sid = sid[:8]
+			}
+			fmt.Printf("  %s %-14s %-8s %s  (%s)\n", marker, a.ID, a.State, cli.ShortenHome(a.CWD), sid)
 			found = true
 		}
 		if !found {
-			fmt.Println("  없음 — session_id가 기록된 claude 세션이 없습니다.")
+			fmt.Println("  없음 — 재개 가능한 세션이 없습니다.")
 		}
 		fmt.Println("\n사용법: agentlayer resume <id>")
 		return nil
@@ -359,14 +388,49 @@ func runResume(args []string) error {
 	if err != nil {
 		return err
 	}
-	if a.Kind != "claude" || a.SessionID == "" {
-		return fmt.Errorf("resume은 session_id가 기록된 claude 세션만 지원합니다")
+	cmd, err := resumeCommand(a)
+	if err != nil {
+		return err
 	}
 	tm := tmuxx.Tmux{}
 	name := "resume-" + id
-	if err := tm.NewWindow(name, a.CWD, fmt.Sprintf("claude --resume %s", a.SessionID)); err != nil {
+	if err := tm.NewWindow(name, a.CWD, cmd); err != nil {
 		return err
 	}
 	fmt.Printf("새 window %q에서 대화를 이어갑니다 (%s)\n", name, cli.ShortenHome(a.CWD))
 	return nil
+}
+
+// resumeCommand는 에이전트 종류별 대화 재개 명령을 만든다.
+//   - claude: claude --resume <session_id>
+//   - codex:  codex resume <session_id> (notify에 세션 ID가 없어 rollout에서 추출)
+//   - gemini: agy --conversation <id> (agy 대화만 — stock Gemini CLI는 재개 CLI가 없다)
+func resumeCommand(a *state.Agent) (string, error) {
+	switch a.Kind {
+	case "claude":
+		if a.SessionID == "" {
+			return "", fmt.Errorf("session_id가 기록되지 않은 claude 세션입니다")
+		}
+		return fmt.Sprintf("claude --resume %s", a.SessionID), nil
+	case "codex":
+		if a.CWD == "" {
+			return "", fmt.Errorf("cwd가 없는 codex 세션입니다")
+		}
+		sid := usage.CodexSessionID(usage.CodexSessionsRoot(), a.CWD)
+		if sid == "" {
+			return "", fmt.Errorf("codex rollout에서 세션을 못 찾았습니다: %s", a.CWD)
+		}
+		return fmt.Sprintf("codex resume %s", sid), nil
+	case "gemini":
+		if a.SessionID == "" {
+			return "", fmt.Errorf("대화 ID가 기록되지 않은 gemini 세션입니다")
+		}
+		// agy 대화인지 확인 — brain 폴더가 있으면 agy, 없으면 stock CLI(재개 불가)
+		brain := filepath.Join(usage.GeminiDir(), "antigravity-cli", "brain", a.SessionID)
+		if _, err := os.Stat(brain); err != nil {
+			return "", fmt.Errorf("stock Gemini CLI 세션은 CLI 재개를 지원하지 않습니다 (agy 대화만 가능)")
+		}
+		return fmt.Sprintf("agy --conversation %s", a.SessionID), nil
+	}
+	return "", fmt.Errorf("%s 종류는 resume을 지원하지 않습니다", a.Kind)
 }

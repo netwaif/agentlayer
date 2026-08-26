@@ -63,6 +63,39 @@ func TestGeminiDefaultModel(t *testing.T) {
 	if got := GeminiDefaultModel(home); got != "gemini-3-pro" {
 		t.Errorf("객체 형식: %q", got)
 	}
+	// Antigravity CLI(agy) 설정이 있으면 우선 — 실사용 CLI가 agy이기 때문
+	writeFile(t, filepath.Join(home, ".gemini", "antigravity-cli", "settings.json"),
+		`{"model":"Gemini 3.6 Flash (Medium)"}`)
+	if got := GeminiDefaultModel(home); got != "Gemini 3.6 Flash (Medium)" {
+		t.Errorf("agy settings 우선: %q", got)
+	}
+}
+
+func TestGeminiLatest(t *testing.T) {
+	home := t.TempDir()
+	gd := filepath.Join(home, ".gemini")
+	if info := GeminiLatest(gd, "/w/proj"); info.Model != "" {
+		t.Errorf("아무것도 없으면 빈 CtxInfo: %+v", info)
+	}
+	writeFile(t, filepath.Join(gd, "projects.json"),
+		`{"projects":{"/w/proj":"proj","/w":"w"}}`)
+	writeFile(t, filepath.Join(gd, "tmp", "proj", "chats", "session-2026-08-01T00-00-aaaa.jsonl"),
+		`{"sessionId":"aaaa","kind":"main"}
+{"type":"user","content":"hi"}
+{"type":"gemini","model":"gemini-3-flash-preview","tokens":{"input":100,"output":10,"total":110}}
+{"type":"gemini","model":"gemini-3-pro","tokens":{"input":200,"output":20,"total":220}}
+`)
+	info := GeminiLatest(gd, "/w/proj")
+	if info.Model != "gemini-3-pro" {
+		t.Errorf("마지막 model 레코드: %q", info.Model)
+	}
+	if info.TS.IsZero() {
+		t.Error("TS는 파일 mtime")
+	}
+	// 하위 폴더로 cd한 경우 — 조상 매핑으로 폴백
+	if info := GeminiLatest(gd, "/w/proj/sub/dir"); info.Model != "gemini-3-pro" {
+		t.Errorf("조상 프로젝트 매칭: %q", info.Model)
+	}
 }
 
 func TestDefaultModels(t *testing.T) {

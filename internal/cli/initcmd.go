@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 )
 
+type hookEvent struct{ settingsKey, eventArg string }
+
 // hook 이벤트 ↔ Claude Code settings.json의 이벤트 키.
-var claudeEvents = []struct{ settingsKey, eventArg string }{
+var claudeEvents = []hookEvent{
 	{"PostToolUse", "post-tool-use"},
 	{"Notification", "notification"},
 	{"Stop", "stop"},
@@ -17,14 +19,36 @@ var claudeEvents = []struct{ settingsKey, eventArg string }{
 	{"UserPromptSubmit", "user-prompt-submit"},
 }
 
-// InstallClaudeHooks는 settings.json에 agentlayer hook을 등록한다.
+// hook 이벤트 ↔ stock Gemini CLI settings.json의 이벤트 키.
+// (Antigravity CLI의 hooks.json은 형식이 달라 geminiinit.go가 따로 담당.)
+var geminiCLIEvents = []hookEvent{
+	{"SessionStart", "session-start"},
+	{"BeforeAgent", "before-agent"},
+	{"AfterTool", "after-tool"},
+	{"AfterAgent", "after-agent"},
+	{"Notification", "notification"},
+}
+
+// InstallClaudeHooks는 Claude Code settings.json에 agentlayer hook을 등록한다.
+func InstallClaudeHooks(w io.Writer, settingsPath, binPath string, dryRun bool) error {
+	return installJSONHooks(w, settingsPath, binPath, "claude", claudeEvents, dryRun)
+}
+
+// InstallGeminiCLIHooks는 stock Gemini CLI의 ~/.gemini/settings.json에
+// agentlayer hook을 등록한다. 이벤트 스키마가 Claude Code와 같은 구조
+// (이벤트 키 → [{matcher?, hooks: [...]}])라 설치기를 공유한다.
+func InstallGeminiCLIHooks(w io.Writer, settingsPath, binPath string, dryRun bool) error {
+	return installJSONHooks(w, settingsPath, binPath, "gemini", geminiCLIEvents, dryRun)
+}
+
+// installJSONHooks는 settings.json류 파일에 agentlayer hook을 등록한다.
 // 원칙: 기존 설정(다른 hook 포함)을 절대 훼손하지 않는다 — map[string]any로
 // 읽어 모르는 필드를 그대로 보존하고, 쓰기 전 .agentlayer.bak 백업을 남긴다.
 // 이미 등록된 이벤트는 건너뛴다(멱등).
 // binPath는 절대 경로 — LaunchAgent가 띄운 세션은 PATH가 최소라 명령
 // 이름만 쓰면 hook이 "command not found"로 조용히 죽는다.
 // 이전 버전이 등록한 이름-only 항목은 절대 경로로 마이그레이션한다.
-func InstallClaudeHooks(w io.Writer, settingsPath, binPath string, dryRun bool) error {
+func installJSONHooks(w io.Writer, settingsPath, binPath, agent string, events []hookEvent, dryRun bool) error {
 	if binPath == "" {
 		binPath = "agentlayer"
 	}
@@ -47,9 +71,9 @@ func InstallClaudeHooks(w io.Writer, settingsPath, binPath string, dryRun bool) 
 	}
 
 	changed := false
-	for _, ev := range claudeEvents {
-		bare := "agentlayer hook claude --event " + ev.eventArg
-		cmd := binPath + " hook claude --event " + ev.eventArg
+	for _, ev := range events {
+		bare := "agentlayer hook " + agent + " --event " + ev.eventArg
+		cmd := binPath + " hook " + agent + " --event " + ev.eventArg
 		entries, _ := hooks[ev.settingsKey].([]any)
 		// 이름-only 옛 항목 제거 (절대 경로로 교체)
 		if pruned, removed := removeCommand(entries, bare); removed {

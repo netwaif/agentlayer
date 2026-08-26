@@ -31,6 +31,8 @@ func TestDetectKind(t *testing.T) {
 		{tmuxx.Pane{Command: "node", Title: "✳ collab-bot"}, "claude"},
 		{tmuxx.Pane{Command: "codex", Title: "workspace | weekly 85% left"}, "codex"},
 		{tmuxx.Pane{Command: "gemini", Title: ""}, "gemini"},
+		{tmuxx.Pane{Command: "agy", Title: "gemini"}, "gemini"}, // Antigravity CLI
+		{tmuxx.Pane{Command: "agy", Title: ""}, "gemini"},
 		{tmuxx.Pane{Command: "python3.11", Title: "gwonsunhouiiMac"}, ""},
 		{tmuxx.Pane{Command: "zsh", Title: ""}, ""},
 		{tmuxx.Pane{Command: "2.1.241", Title: ""}, "claude"},             // 버전형 = Claude (로케일 무관 판정)

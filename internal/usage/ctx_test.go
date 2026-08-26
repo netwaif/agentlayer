@@ -70,6 +70,19 @@ func TestCodexLatest(t *testing.T) {
 	}
 }
 
+func TestCodexSessionID(t *testing.T) {
+	root := t.TempDir()
+	head := `{"timestamp":"2026-08-26T00:00:00Z","type":"session_meta","payload":{"session_id":"01a03b74-0823-7450","id":"01a03b74-0823-7450","cwd":"/Users/x/codexproj"}}
+`
+	writeFile(t, filepath.Join(root, "2026", "08", "26", "s1.jsonl"), head)
+	if got := CodexSessionID(root, "/Users/x/codexproj"); got != "01a03b74-0823-7450" {
+		t.Errorf("session_id 추출: %q", got)
+	}
+	if got := CodexSessionID(root, "/다른/폴더"); got != "" {
+		t.Errorf("cwd 불일치는 빈 값: %q", got)
+	}
+}
+
 func TestCodexLatestNoMatch(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "2026", "08", "25", "s1.jsonl"), codexHead)

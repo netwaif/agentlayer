@@ -30,7 +30,8 @@ func DetectKind(p tmuxx.Pane) string {
 		return "claude"
 	case strings.HasPrefix(cmd, "codex"):
 		return "codex"
-	case strings.HasPrefix(cmd, "gemini"):
+	case strings.HasPrefix(cmd, "gemini"), strings.HasPrefix(cmd, "agy"):
+		// agy = Antigravity CLI (Gemini 계열) — 같은 gemini kind로 관제한다
 		return "gemini"
 	case versionRe.MatchString(cmd):
 		// 버전 형식 command = Claude Code (프로세스명을 버전으로 바꿈)

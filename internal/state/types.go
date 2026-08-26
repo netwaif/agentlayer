@@ -55,6 +55,7 @@ type Agent struct {
 	Tmux       TmuxRef    `json:"tmux"`
 	CWD        string     `json:"cwd,omitempty"`
 	SessionID  string     `json:"session_id,omitempty"` // 비상 복구(resume)용
+	Model      string     `json:"model,omitempty"`      // hook이 알려준 사용 모델 (agy modelName 등)
 	PID        int        `json:"pid,omitempty"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 	StateSince time.Time  `json:"state_since"`

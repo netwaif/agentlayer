@@ -52,28 +52,35 @@ func CodexDefaultModel(home string) (model, effort string) {
 
 var codexTomlRe = regexp.MustCompile(`^(model|model_reasoning_effort)\s*=\s*"([^"]*)"`)
 
-// GeminiDefaultModel은 ~/.gemini/settings.json의 model 설정을 읽는다.
+// GeminiDefaultModel은 Gemini 계열 CLI의 기본 모델 설정을 읽는다.
+// Antigravity CLI(agy)의 ~/.gemini/antigravity-cli/settings.json이 있으면 우선,
+// 없으면 stock Gemini CLI의 ~/.gemini/settings.json.
 // 구형(문자열)·신형({"name": ...}) 스키마 모두 허용.
 func GeminiDefaultModel(home string) string {
-	b, err := os.ReadFile(filepath.Join(home, ".gemini", "settings.json"))
-	if err != nil {
-		return ""
-	}
-	var s struct {
-		Model json.RawMessage `json:"model"`
-	}
-	if json.Unmarshal(b, &s) != nil || len(s.Model) == 0 {
-		return ""
-	}
-	var str string
-	if json.Unmarshal(s.Model, &str) == nil {
-		return str
-	}
-	var obj struct {
-		Name string `json:"name"`
-	}
-	if json.Unmarshal(s.Model, &obj) == nil {
-		return obj.Name
+	for _, path := range []string{
+		filepath.Join(home, ".gemini", "antigravity-cli", "settings.json"),
+		filepath.Join(home, ".gemini", "settings.json"),
+	} {
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var s struct {
+			Model json.RawMessage `json:"model"`
+		}
+		if json.Unmarshal(b, &s) != nil || len(s.Model) == 0 {
+			continue
+		}
+		var str string
+		if json.Unmarshal(s.Model, &str) == nil && str != "" {
+			return str
+		}
+		var obj struct {
+			Name string `json:"name"`
+		}
+		if json.Unmarshal(s.Model, &obj) == nil && obj.Name != "" {
+			return obj.Name
+		}
 	}
 	return ""
 }

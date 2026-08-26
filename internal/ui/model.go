@@ -85,6 +85,7 @@ type Model struct {
 	coachRunner func() ([]byte, error)
 	snapshotDir string
 	codexRoot   string
+	geminiDir   string
 	starterRoot string
 	homeDir     string
 }
@@ -99,6 +100,7 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 		coachRunner: usage.CoachRunner,
 		snapshotDir: usage.SnapshotsDir(),
 		codexRoot:   usage.CodexSessionsRoot(),
+		geminiDir:   usage.GeminiDir(),
 		starterRoot: root,
 		homeDir:     home}
 }
@@ -120,17 +122,30 @@ func usageTickCmd() tea.Cmd {
 // 어떤 소스가 없어도 관제는 계속된다.
 func (m Model) usageCmd() tea.Cmd {
 	runner, snapDir, codexRoot, st := m.coachRunner, m.snapshotDir, m.codexRoot, m.store
-	starterRoot, home := m.starterRoot, m.homeDir
+	starterRoot, home, geminiDir := m.starterRoot, m.homeDir, m.geminiDir
 	return func() tea.Msg {
 		pay := usage.FetchCached(st.Dir, 5*time.Minute, runner, time.Now())
 		ctx := usage.LoadSnapshots(snapDir)
 		if agents, err := st.List(); err == nil {
 			for _, a := range agents {
-				if a.Kind != "codex" || a.CWD == "" {
+				if a.CWD == "" {
 					continue
 				}
-				if _, ok := ctx[a.CWD]; !ok {
+				if _, ok := ctx[a.CWD]; ok {
+					continue
+				}
+				switch a.Kind {
+				case "codex":
 					if info := usage.CodexLatest(codexRoot, a.CWD); info.Model != "" || info.UsedPct != nil {
+						ctx[a.CWD] = info
+					}
+				case "gemini":
+					// 소스 둘 중 신선한 쪽: stock CLI 세션 파일 vs hook이 기록한 모델(agy)
+					info := usage.GeminiLatest(geminiDir, a.CWD)
+					if a.Model != "" && (info.Model == "" || a.UpdatedAt.After(info.TS)) {
+						info = usage.CtxInfo{Model: a.Model, TS: a.UpdatedAt}
+					}
+					if info.Model != "" {
 						ctx[a.CWD] = info
 					}
 				}
