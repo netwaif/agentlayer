@@ -120,6 +120,27 @@ func TestNotificationMessageBecomesTask(t *testing.T) {
 	}
 }
 
+func TestIdleEchoRecoversMissedStop(t *testing.T) {
+	// 백그라운드 셸이 살아 있으면 턴이 끝나도 Stop hook이 유예된다 (Esc 인터럽트도
+	// Stop 미발화). 이때 세션은 프롬프트에서 대기 중인데 WORK로 계속 보인다 —
+	// 60초 뒤 오는 유휴 에코가 "실은 놀고 있다"는 신호이므로 WAIT로 복구한다.
+	st := newStore(t)
+	if err := RunClaude(st, "user-prompt-submit", strings.NewReader(`{"session_id":"s"}`), env("%3"), t0); err != nil {
+		t.Fatal(err)
+	}
+	idle := `{"session_id":"s","message":"Claude is waiting for your input"}`
+	if err := RunClaude(st, "notification", strings.NewReader(idle), env("%3"), t0.Add(5*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.Load(scan.IDForPane("claude", "%3"))
+	if a.State != state.StateWaiting {
+		t.Errorf("WORK 중 유휴 에코 → WAIT 복구: %s", a.State)
+	}
+	if a.Task != "" {
+		t.Errorf("유휴 에코가 Task를 덮으면 안 됨: %q", a.Task)
+	}
+}
+
 func TestIdleNotificationKeepsDone(t *testing.T) {
 	// 턴 종료 후 60초 유휴 알림이 DONE_UNREAD를 WAIT로 덮으면 안 된다
 	st := newStore(t)

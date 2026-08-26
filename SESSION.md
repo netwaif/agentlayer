@@ -58,6 +58,8 @@ worktree 전 사이클(코멘트 회신 포함). init·팝업 바인딩·notify_
 - 2026-08-26 agy ctx 추정에 고정 오버헤드 100KB 가산 — transcript 30KB 시점 실제 요청 134KB 실측(gen_metadata blob). transcript만으로는 0%로 보이던 문제 해결 (agyBaselineBytes)
 - 2026-08-26 wiring plist 매칭 오탐 2건 수정: ① 경로 부분일치 → 뒤 경계 정규식(상위 폴더가 하위 폴더 봇 plist에 매칭돼 "Discord 연결됨" 오표시) ② 4자 미만 세션명("ai")은 매칭 제외(ai.openclaw.gateway 오탐)
 - 2026-08-26 TUI 목록에 종류 그룹 구분선("── codex ───…", provider 색 라벨) — previewHeight에 구분선 수 반영
+- 2026-08-26 usageCmd를 usageCmd(coach만·느림)/ctxCmd(모델·ctx·⌁·기본모델·MultiAgent, 파일 읽기·즉시)로 분리 — 콜드 coach가 빠른 정보 표시를 막던 문제
+- 2026-08-26 유휴 에코 규칙 정교화(8-25 결정 보완): WORK 상태에서 온 "waiting for your input" 에코는 놓친 종료 신호 → WAIT로 복구. 원인: 백그라운드 셸 생존 시 Stop 유예, Esc 인터럽트 시 Stop 미발화 (SendManual 세션 WORK 고착 실사례). DONE·IDLE·WAIT는 기존대로 안 덮음
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->

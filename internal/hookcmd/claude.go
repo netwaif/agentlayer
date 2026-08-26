@@ -58,15 +58,30 @@ func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) 
 			Tmux:      state.TmuxRef{PaneID: pane}, // 세션·창은 다음 Sync가 채운다
 			UpdatedAt: now, StateSince: now}
 	}
-	// 유휴 에코 무시: Claude Code는 60초 입력이 없으면
+	// 유휴 에코: Claude Code는 프롬프트에서 60초 입력이 없으면
 	// "Claude is waiting for your input" Notification을 보낸다.
-	// 이건 승인 요청이 아니므로 어떤 상태(DONE·IDLE 포함)도 WAIT로 덮지 않는다.
-	// 진짜 승인·질문 알림은 다른 문구("needs your permission" 등)로 온다.
+	// 승인 요청이 아니므로 DONE·IDLE·WAIT를 덮지 않는다. 단 WORK 상태에서
+	// 온 유휴 에코는 "실은 프롬프트에서 놀고 있다"는 신호다 — 백그라운드 셸이
+	// 살아 있으면 턴이 끝나도 Stop이 유예되고, Esc 인터럽트도 Stop이 안 오는데,
+	// 그때 놓친 종료를 응답 필요(WAIT)로 복구한다.
 	// 문구가 못 잡히는 미래 변경 대비로 DONE 상태 방어도 유지한다.
-	if event == "notification" &&
-		(strings.Contains(p.Message, "waiting for your input") || a.State == state.StateDoneUnread) {
-		a.UpdatedAt = now
-		return st.Save(a)
+	if event == "notification" {
+		idleEcho := strings.Contains(p.Message, "waiting for your input")
+		if idleEcho && a.State == state.StateWorking {
+			prev := a.State
+			a.Transition(state.StateWaiting, now)
+			if err := st.Save(a); err != nil {
+				return err
+			}
+			if onTransition != nil {
+				onTransition(a, prev, state.StateWaiting)
+			}
+			return nil
+		}
+		if idleEcho || a.State == state.StateDoneUnread {
+			a.UpdatedAt = now
+			return st.Save(a)
+		}
 	}
 	// 컨텍스트 압축(compact)의 SessionStart는 작업 도중 발생 — 상태를 내리지 않는다.
 	if event == "session-start" && p.Source == "compact" {
