@@ -17,6 +17,7 @@ archives:
 
 brews:
   - name: agentlayer
+    directory: Formula # tap에 Formula/가 있으면 brew는 거기만 본다
     repository:
       owner: netwaif
       name: homebrew-tap
