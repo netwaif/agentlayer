@@ -15,21 +15,18 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-v0.8.2, main 브랜치, 전체 테스트 그린. Phase 1~4 완성 + 학원 SSH 실전 테스트에서
-25건 이상 수정 완료. 기능 전부 실사용 검증됨: TUI(팝업 C-b a, 미리보기 패널, i 상세,
-g lazygit, W/C 전체 기상·마감), status/card/wt/resume/wake-all/close-all/broadcast/info CLI,
-Claude hook(유휴 에코 무시)·Codex notify, Discord 카드(LaunchAgent 5분 주기)·단문 알림,
-worktree 전 사이클(코멘트 회신 포함). init·팝업 바인딩·notify_discord 활성화까지 완료 상태.
+기능 완성 선언(사용자, 08-26). main 클린, 전체 테스트 그린, HEAD=핸드오프 커밋.
+3사(claude·codex·gemini/agy) 완전 편입: hook 상태추적·모델·ctx(gemini는 근사 `~`)·resume·
+그룹 정렬+구분선·기본모델 헤더(Fable 경고)·빠른/느린 로딩 분리·유휴 에코 WORK 복구까지.
+전체 조망은 `agentlayer-handoff-2026-08-26.md` 참조. 영상 제작은 별도 세션 담당.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. 사용자 실사용 피드백 수집 — 특히 close-all 첫 실전(C 키 y 확인, v0.8.2에서 잘림 수정됨)과
-   Discord 카드 안정성(고아 카드 수동 삭제 필요: 최신 1개만 남기기)
-2. Codex 재시작 후 turn-complete(DONE) 감지 확인 (notify는 codex 시작 시 로드 — 미검증 항목)
-3. macOS 알림 배너 확인 (집 Mac 화면에서만 가능 — 체크리스트 5-a)
-4. GitHub 공개 + brew tap 배포 — 사용자 결정 대기 (goreleaser 설정 완료, netwaif/agentlayer 예정)
-5. 보류 아이디어: MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용)
+1. GitHub 공개 + brew tap 배포 — 사용자 결정 대기 (goreleaser 설정 완료, netwaif/agentlayer 예정)
+2. 실사용 피드백 수렴 — Discord 카드 안정성, Codex 재시작 후 turn-complete(DONE) 감지 재확인
+3. 영상 제작 세션 지원 요청 오면 `agentlayer-handoff-2026-08-26.md`의 "커밋 스토리" 섹션 전달
+4. 보류 아이디어: MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용)
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -87,4 +84,5 @@ worktree 전 사이클(코멘트 회신 포함). init·팝업 바인딩·notify_
 - `internal/state/types.go` Agent.Model 필드
 - `main.go` resumeCommand(3사 분기), hook gemini 라우팅(stdout "{}"), init에 gemini 2계열 등록
 - 시스템 상태 추가: `~/.gemini/config/hooks.json`(agy 훅), `~/.gemini/settings.json`(stock 훅 5종)
+- `agentlayer-handoff-2026-08-26.md` 기능 완성 시점 핸드오프 (전체 조망·커밋 스토리·한계·파일 지도)
 - 외부: 테스트 체크리스트 Artifact https://claude.ai/code/artifact/3cd3ee37-9863-462e-8ca4-603cae896ba4

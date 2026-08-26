@@ -29,7 +29,7 @@ tmux가 모르는 것(에이전트의 의미 상태)만 채운다.
 ## 설치
 
 ```bash
-brew install netwaif/tap/agentlayer   # (GitHub 공개 후 제공)
+brew install netwaif/tap/agentlayer
 # 또는 소스 빌드 (Go 1.22+)
 git clone https://github.com/netwaif/agentlayer.git && cd agentlayer
 make install   # ~/.local/bin/agentlayer
@@ -134,4 +134,5 @@ agentlayer wt clean auth-api                    # 보존 우선 정리
 - **Phase 2 ✔**: 사용량 뷰(coach 통합)·macOS/Discord 알림·Discord 상태 카드
 - **Phase 3 ✔**: worktree 병렬 모드 — 생성·diff 코멘트 회신·테스트 수집·보존 우선 정리
 - **Phase 4 ✔**: Codex 어댑터·MultiAgent 패널·비상 resume·배포 준비
-- **다음**: GitHub 공개 + brew tap 반영
+- **v1.0 ✔**: Gemini(Antigravity CLI·stock CLI) 완전 편입 — hook 상태추적·모델·ctx(근사)·resume,
+  3사 그룹 정렬·구분선, 기본모델 헤더(Fable 경고), GitHub 공개 + brew tap
