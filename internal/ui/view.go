@@ -9,6 +9,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/usage"
@@ -405,7 +406,62 @@ func windowOrder(ws map[string]usage.Window) []string {
 	return append(std, rest...)
 }
 
+// View는 viewBody 출력을 화면 폭으로 클램프한다. bubbletea는 폭 초과 줄을
+// 잘라주지 않아, 좁은 터미널에서 래핑된 줄이 화면 높이를 밀어내며 깨진다.
 func (m Model) View() string {
+	return clampLines(m.viewBody(), m.width)
+}
+
+// clampLines는 폭을 넘는 줄만 ANSI 인식으로 자른다 (색 이스케이프는 폭 계산 제외).
+func clampLines(s string, width int) string {
+	if width <= 0 {
+		return s
+	}
+	lines := strings.Split(s, "\n")
+	for i, ln := range lines {
+		if ansi.StringWidth(ln) <= width {
+			continue
+		}
+		cut := ansi.Truncate(ln, width, "…")
+		if strings.Contains(cut, "\x1b") {
+			cut += "\x1b[0m" // 잘린 지점에 열린 스타일이 다음 줄로 번지지 않게
+		}
+		lines[i] = cut
+	}
+	return strings.Join(lines, "\n")
+}
+
+// listWindow는 목록 행 중 화면 높이에 들어갈 창만 골라낸다. 넘치면 커서가
+// 보이게 창을 밀고, 가장자리에 가려진 줄 수를 표시한다.
+func (m Model) listWindow(rows []string, cursorRow int) []string {
+	capacity := m.height - 10 // previewHeight와 같은 상수: 상단≈5 + 하단≈5
+	if capacity < 3 {
+		capacity = 3
+	}
+	if m.height <= 0 || len(rows) <= capacity {
+		return rows
+	}
+	body := capacity - 2 // 위·아래 표시줄 자리
+	start := cursorRow - body/2
+	if start > len(rows)-body {
+		start = len(rows) - body
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + body
+	out := make([]string, 0, capacity)
+	if start > 0 {
+		out = append(out, styleHelp.Render(fmt.Sprintf("  ↑ %d줄 더", start)))
+	}
+	out = append(out, rows[start:end]...)
+	if end < len(rows) {
+		out = append(out, styleHelp.Render(fmt.Sprintf("  ↓ %d줄 더", len(rows)-end)))
+	}
+	return out
+}
+
+func (m Model) viewBody() string {
 	if m.showInfo {
 		return styleTitle.Render("AgentLayer — 상세") + "\n\n" + m.infoText +
 			"\n" + styleHelp.Render("i/esc 닫기 · enter 점프 · q 종료")
@@ -429,10 +485,16 @@ func (m Model) View() string {
 	}
 	b.WriteString(styleHeader.Render("STATE    "+cli.PadRight("AGENT", 8)+cli.PadRight("SESSION", 21)+cli.PadRight("TASK", 31)+"DIR·SINCE") + "\n")
 
+	// 행을 먼저 만들고 화면 높이에 맞는 창만 출력한다 (커서 추적 스크롤).
+	var rows []string
+	cursorRow := 0
 	for i, a := range m.agents {
 		// 종류 그룹 경계 구분선 — 3사 정보가 시각적으로 섞이지 않게
 		if i > 0 && m.agents[i-1].Kind != a.Kind {
-			b.WriteString(m.kindDivider(a.Kind) + "\n")
+			rows = append(rows, m.kindDivider(a.Kind))
+		}
+		if i == m.cursor {
+			cursorRow = len(rows)
 		}
 		task := runewidth.Truncate(a.Task, 28, "…")
 		if i == m.cursor {
@@ -461,7 +523,7 @@ func (m Model) View() string {
 			line := styleSelected.Render("▸ ") +
 				stateStyles[a.State].Background(selBg).Bold(true).Render(st) +
 				styleSelected.Render(rest)
-			b.WriteString(line + "\n")
+			rows = append(rows, line)
 			continue
 		}
 		line := fmt.Sprintf("  %s %s %s %s %s · %s",
@@ -477,7 +539,10 @@ func (m Model) View() string {
 		if badge := m.ctxBadge(a); badge != "" {
 			line += " " + badge
 		}
-		b.WriteString(line + "\n")
+		rows = append(rows, line)
+	}
+	for _, ln := range m.listWindow(rows, cursorRow) {
+		b.WriteString(ln + "\n")
 	}
 	if len(m.agents) == 0 {
 		b.WriteString(styleHelp.Render("  tmux에서 실행 중인 claude/codex/gemini가 없습니다\n"))
