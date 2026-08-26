@@ -15,17 +15,17 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-기능 완성 선언(사용자, 08-26). main 클린, 전체 테스트 그린, HEAD=핸드오프 커밋.
-3사(claude·codex·gemini/agy) 완전 편입: hook 상태추적·모델·ctx(gemini는 근사 `~`)·resume·
-그룹 정렬+구분선·기본모델 헤더(Fable 경고)·빠른/느린 로딩 분리·유휴 에코 WORK 복구까지.
+**v1.0.0 배포 완료** (08-26): https://github.com/netwaif/agentlayer 공개 + 릴리즈(darwin amd64/arm64)
++ brew tap 반영(`brew install netwaif/tap/agentlayer`). 3사(claude·codex·gemini/agy) 완전 편입 상태.
 전체 조망은 `agentlayer-handoff-2026-08-26.md` 참조. 영상 제작은 별도 세션 담당.
+주의: 이 Mac은 CLT가 낡아 로컬 brew install만 실패(formula는 정상 인식) — 로컬은 make install 사용.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. GitHub 공개 + brew tap 배포 — 사용자 결정 대기 (goreleaser 설정 완료, netwaif/agentlayer 예정)
+1. 영상 제작 세션 지원 요청 오면 `agentlayer-handoff-2026-08-26.md`의 "커밋 스토리" 섹션 전달
 2. 실사용 피드백 수렴 — Discord 카드 안정성, Codex 재시작 후 turn-complete(DONE) 감지 재확인
-3. 영상 제작 세션 지원 요청 오면 `agentlayer-handoff-2026-08-26.md`의 "커밋 스토리" 섹션 전달
+3. (선택) 이 Mac CLT 갱신되면 `brew install netwaif/tap/agentlayer` 로컬 재검증
 4. 보류 아이디어: MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용)
 
 ## 결정 기록
@@ -57,6 +57,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-08-26 TUI 목록에 종류 그룹 구분선("── codex ───…", provider 색 라벨) — previewHeight에 구분선 수 반영
 - 2026-08-26 usageCmd를 usageCmd(coach만·느림)/ctxCmd(모델·ctx·⌁·기본모델·MultiAgent, 파일 읽기·즉시)로 분리 — 콜드 coach가 빠른 정보 표시를 막던 문제
 - 2026-08-26 유휴 에코 규칙 정교화(8-25 결정 보완): WORK 상태에서 온 "waiting for your input" 에코는 놓친 종료 신호 → WAIT로 복구. 원인: 백그라운드 셸 생존 시 Stop 유예, Esc 인터럽트 시 Stop 미발화 (SendManual 세션 WORK 고착 실사례). DONE·IDLE·WAIT는 기존대로 안 덮음
+- 2026-08-26 v1.0.0 릴리즈: gh repo create(netwaif/agentlayer, public) → 태그 v1.0.0 → goreleaser release(GITHUB_TOKEN=$(gh auth token)). brew formula는 tap의 Formula/ 디렉터리에 있어야 함(.goreleaser.yaml에 directory: Formula 추가, 루트에 갔던 첫 파일은 git mv로 이동). 이 Mac은 CLT 낡아 brew install 로컬 검증만 불가(다른 머신은 정상)
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
