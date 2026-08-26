@@ -50,7 +50,7 @@ func TestDefaultModelInHeader(t *testing.T) {
 	if strings.Contains(m.View(), "기본모델") {
 		t.Error("기본 모델 미수집 상태에서는 표시하지 않는다")
 	}
-	next, _ := m.Update(usageMsg{defModels: map[string]string{
+	next, _ := m.Update(ctxMsg{defModels: map[string]string{
 		"claude": "claude-fable-5", "codex": "gpt-5.6-sol high", "gemini": ""}})
 	v := next.(Model).View()
 	for _, want := range []string{"기본모델", "Claude Fable 5", "Codex gpt-5.6-sol high", "Gemini 자동"} {

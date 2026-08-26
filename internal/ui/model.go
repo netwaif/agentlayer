@@ -37,11 +37,16 @@ type tickMsg time.Time
 
 type usageTickMsg time.Time
 
-// usageMsg는 coach·세션 컨텍스트 수집 결과.
+// usageMsg는 coach 사용량 수집 결과 (느림 — 콜드 실행은 분 단위).
 type usageMsg struct {
-	payload     *usage.Payload
-	ctx         map[string]usage.CtxInfo
-	starter     []starter.Task
+	payload *usage.Payload
+}
+
+// ctxMsg는 빠른 로컬 수집 결과 — 파일 읽기뿐이라 즉시 뜬다.
+// coach가 느려도 이 정보(모델·ctx·⌁·기본모델·MultiAgent)는 기다리지 않는다.
+type ctxMsg struct {
+	ctx       map[string]usage.CtxInfo
+	starter   []starter.Task
 	discord   map[string]bool   // CWD → Discord 연결 여부 (⌁ 마크)
 	defModels map[string]string // CLI별 기본 모델 설정 (빈 값 = 미설정/자동)
 }
@@ -106,7 +111,7 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.refreshCmd(), tickCmd(), m.usageCmd(), usageTickCmd())
+	return tea.Batch(m.refreshCmd(), tickCmd(), m.ctxCmd(), m.usageCmd(), usageTickCmd())
 }
 
 func tickCmd() tea.Cmd {
@@ -117,20 +122,26 @@ func usageTickCmd() tea.Cmd {
 	return tea.Tick(usageInterval, func(t time.Time) tea.Msg { return usageTickMsg(t) })
 }
 
-// usageCmd는 coach 사용량과 폴더별 세션 컨텍스트를 백그라운드에서 모은다.
+// usageCmd는 coach 사용량만 백그라운드에서 가져온다.
 // coach는 콜드 실행이 분 단위라 5분 파일 캐시 + 실행 중복 방지로 감싼다.
-// 어떤 소스가 없어도 관제는 계속된다.
+// 느린 건 이것뿐이므로 빠른 로컬 정보(ctxCmd)와 분리해 화면을 막지 않는다.
 func (m Model) usageCmd() tea.Cmd {
-	runner, snapDir, codexRoot, st := m.coachRunner, m.snapshotDir, m.codexRoot, m.store
-	starterRoot, home, geminiDir := m.starterRoot, m.homeDir, m.geminiDir
+	runner, st := m.coachRunner, m.store
 	return func() tea.Msg {
-		pay := usage.FetchCached(st.Dir, 5*time.Minute, runner, time.Now())
+		return usageMsg{payload: usage.FetchCached(st.Dir, 5*time.Minute, runner, time.Now())}
+	}
+}
+
+// ctxCmd는 빠른 로컬 정보를 모은다 — 전부 파일 읽기라 즉시 완료된다.
+// 어떤 소스가 없어도 관제는 계속된다.
+func (m Model) ctxCmd() tea.Cmd {
+	snapDir, codexRoot, geminiDir, st := m.snapshotDir, m.codexRoot, m.geminiDir, m.store
+	starterRoot, home := m.starterRoot, m.homeDir
+	return func() tea.Msg {
 		ctx := map[string]usage.CtxInfo{}
-		if agents, err := st.List(); err == nil {
-			ctx = usage.AgentCtx(agents, usage.LoadSnapshots(snapDir), codexRoot, geminiDir)
-		}
 		dc := map[string]bool{}
 		if agents, err := st.List(); err == nil {
+			ctx = usage.AgentCtx(agents, usage.LoadSnapshots(snapDir), codexRoot, geminiDir)
 			wp := wiring.DefaultPaths()
 			for _, a := range agents {
 				if a.CWD == "" || dc[a.CWD] {
@@ -140,7 +151,7 @@ func (m Model) usageCmd() tea.Cmd {
 				dc[a.CWD] = w.DiscordConnected()
 			}
 		}
-		return usageMsg{payload: pay, ctx: ctx, starter: starter.ActiveTasks(starterRoot), discord: dc,
+		return ctxMsg{ctx: ctx, starter: starter.ActiveTasks(starterRoot), discord: dc,
 			defModels: usage.DefaultModels(home)}
 	}
 }
@@ -217,12 +228,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.refreshCmd(), tickCmd())
 
 	case usageTickMsg:
-		return m, tea.Batch(m.usageCmd(), usageTickCmd())
+		return m, tea.Batch(m.usageCmd(), m.ctxCmd(), usageTickCmd())
 
 	case usageMsg:
 		if msg.payload != nil {
 			m.usagePay = msg.payload
 		}
+		return m, nil
+
+	case ctxMsg:
 		if msg.ctx != nil {
 			m.ctx = msg.ctx
 		}
@@ -298,7 +312,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.previewCmd()
 		case "r":
-			return m, tea.Batch(m.refreshCmd(), m.usageCmd())
+			return m, tea.Batch(m.refreshCmd(), m.usageCmd(), m.ctxCmd())
 		case "u":
 			m.showUsage = !m.showUsage
 			m.showInfo = false
