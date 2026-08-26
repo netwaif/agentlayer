@@ -31,6 +31,50 @@ func TestClaudeDefaultModel(t *testing.T) {
 	}
 }
 
+func TestCodexDefaultModel(t *testing.T) {
+	home := t.TempDir()
+	if m, e := CodexDefaultModel(home); m != "" || e != "" {
+		t.Errorf("config 없으면 빈 값: %q %q", m, e)
+	}
+	// 최상위 키만 읽는다 — [profiles.*] 안의 model은 기본값이 아니다
+	writeFile(t, filepath.Join(home, ".codex", "config.toml"), `model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+
+[profiles.lightweight]
+model = "gpt-5.4-mini"
+`)
+	m, e := CodexDefaultModel(home)
+	if m != "gpt-5.6-sol" || e != "high" {
+		t.Errorf("최상위 model·effort: %q %q", m, e)
+	}
+}
+
+func TestGeminiDefaultModel(t *testing.T) {
+	home := t.TempDir()
+	if got := GeminiDefaultModel(home); got != "" {
+		t.Errorf("설정 없으면 빈 값: %q", got)
+	}
+	writeFile(t, filepath.Join(home, ".gemini", "settings.json"), `{"model":"gemini-2.5-pro"}`)
+	if got := GeminiDefaultModel(home); got != "gemini-2.5-pro" {
+		t.Errorf("문자열 형식: %q", got)
+	}
+	// 신형 스키마: model이 객체({"name": ...})인 경우
+	writeFile(t, filepath.Join(home, ".gemini", "settings.json"), `{"model":{"name":"gemini-3-pro"}}`)
+	if got := GeminiDefaultModel(home); got != "gemini-3-pro" {
+		t.Errorf("객체 형식: %q", got)
+	}
+}
+
+func TestDefaultModels(t *testing.T) {
+	home := t.TempDir()
+	writeFile(t, filepath.Join(home, ".claude", "settings.json"), `{"model":"claude-opus-5"}`)
+	writeFile(t, filepath.Join(home, ".codex", "config.toml"), `model = "gpt-5.6-sol"`)
+	got := DefaultModels(home)
+	if got["claude"] != "claude-opus-5" || got["codex"] != "gpt-5.6-sol" || got["gemini"] != "" {
+		t.Errorf("DefaultModels = %+v", got)
+	}
+}
+
 func TestPrettyModel(t *testing.T) {
 	cases := map[string]string{
 		"claude-fable-5":            "Fable 5",

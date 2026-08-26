@@ -27,6 +27,71 @@ func ClaudeDefaultModel(home string) string {
 	return ""
 }
 
+// CodexDefaultModel은 ~/.codex/config.toml 최상위의 model·model_reasoning_effort를
+// 읽는다. [profiles.*] 등 섹션 안의 model은 기본값이 아니므로 첫 섹션 헤더에서 멈춘다.
+func CodexDefaultModel(home string) (model, effort string) {
+	b, err := os.ReadFile(filepath.Join(home, ".codex", "config.toml"))
+	if err != nil {
+		return "", ""
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "[") {
+			break // 섹션 시작 — 최상위 끝
+		}
+		if m := codexTomlRe.FindStringSubmatch(t); m != nil {
+			if m[1] == "model" {
+				model = m[2]
+			} else {
+				effort = m[2]
+			}
+		}
+	}
+	return model, effort
+}
+
+var codexTomlRe = regexp.MustCompile(`^(model|model_reasoning_effort)\s*=\s*"([^"]*)"`)
+
+// GeminiDefaultModel은 ~/.gemini/settings.json의 model 설정을 읽는다.
+// 구형(문자열)·신형({"name": ...}) 스키마 모두 허용.
+func GeminiDefaultModel(home string) string {
+	b, err := os.ReadFile(filepath.Join(home, ".gemini", "settings.json"))
+	if err != nil {
+		return ""
+	}
+	var s struct {
+		Model json.RawMessage `json:"model"`
+	}
+	if json.Unmarshal(b, &s) != nil || len(s.Model) == 0 {
+		return ""
+	}
+	var str string
+	if json.Unmarshal(s.Model, &str) == nil {
+		return str
+	}
+	var obj struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(s.Model, &obj) == nil {
+		return obj.Name
+	}
+	return ""
+}
+
+// DefaultModels는 세 CLI의 기본 모델 설정을 모은다. 빈 값 = 미설정(자동).
+// codex는 effort가 있으면 "model effort"로 합친다.
+func DefaultModels(home string) map[string]string {
+	cx, effort := CodexDefaultModel(home)
+	if cx != "" && effort != "" {
+		cx += " " + effort
+	}
+	return map[string]string{
+		"claude": ClaudeDefaultModel(home),
+		"codex":  cx,
+		"gemini": GeminiDefaultModel(home),
+	}
+}
+
 // modelIDRe: "claude-fable-5", "claude-haiku-4-5-20251001" 류의 모델 ID.
 var modelIDRe = regexp.MustCompile(`^claude-([a-z]+)-(\d+(?:-\d+)?)(?:-\d{8})?$`)
 

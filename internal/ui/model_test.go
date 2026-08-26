@@ -48,12 +48,15 @@ func key(s string) tea.KeyMsg {
 func TestDefaultModelInHeader(t *testing.T) {
 	m := fixtureModel(t)
 	if strings.Contains(m.View(), "기본모델") {
-		t.Error("기본 모델 미확인 상태에서는 표시하지 않는다")
+		t.Error("기본 모델 미수집 상태에서는 표시하지 않는다")
 	}
-	next, _ := m.Update(usageMsg{claudeModel: "claude-fable-5"})
+	next, _ := m.Update(usageMsg{defModels: map[string]string{
+		"claude": "claude-fable-5", "codex": "gpt-5.6-sol high", "gemini": ""}})
 	v := next.(Model).View()
-	if !strings.Contains(v, "기본모델") || !strings.Contains(v, "Fable 5") {
-		t.Errorf("헤더에 기본 모델 표시돼야 함:\n%s", v)
+	for _, want := range []string{"기본모델", "Claude Fable 5", "Codex gpt-5.6-sol high", "Gemini 자동"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("헤더에 %q 표시돼야 함:\n%s", want, v)
+		}
 	}
 }
 

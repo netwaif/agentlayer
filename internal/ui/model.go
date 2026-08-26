@@ -42,8 +42,8 @@ type usageMsg struct {
 	payload     *usage.Payload
 	ctx         map[string]usage.CtxInfo
 	starter     []starter.Task
-	discord     map[string]bool // CWD → Discord 연결 여부 (⌁ 마크)
-	claudeModel string          // Claude Code 기본 모델 설정 (빈 값 = 미설정/미확인)
+	discord   map[string]bool   // CWD → Discord 연결 여부 (⌁ 마크)
+	defModels map[string]string // CLI별 기본 모델 설정 (빈 값 = 미설정/자동)
 }
 
 // jumpDoneMsg는 점프 실행 후 종료 신호.
@@ -80,7 +80,7 @@ type Model struct {
 	wtBranch     map[string]string        // worktree 경로 → 브랜치
 	discordWired map[string]bool          // CWD → Discord 연결 (⌁)
 	starterTasks []starter.Task           // MultiAgent 활성 작업
-	claudeModel  string                   // Claude Code 기본 모델 설정
+	defModels    map[string]string        // CLI별 기본 모델 설정
 	// 주입점 (테스트용)
 	coachRunner func() ([]byte, error)
 	snapshotDir string
@@ -148,7 +148,7 @@ func (m Model) usageCmd() tea.Cmd {
 			}
 		}
 		return usageMsg{payload: pay, ctx: ctx, starter: starter.ActiveTasks(starterRoot), discord: dc,
-			claudeModel: usage.ClaudeDefaultModel(home)}
+			defModels: usage.DefaultModels(home)}
 	}
 }
 
@@ -237,7 +237,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.discord != nil {
 			m.discordWired = msg.discord
 		}
-		m.claudeModel = msg.claudeModel
+		m.defModels = msg.defModels
 		return m, nil
 
 	case refreshMsg:

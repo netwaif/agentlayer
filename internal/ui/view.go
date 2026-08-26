@@ -155,17 +155,33 @@ func ctxStyle(used float64) lipgloss.Style {
 	}
 }
 
-// defaultModelLine은 헤더의 Claude Code 기본 모델 조각.
-// Fable이 기본이면 새로 띄우는 모든 claude가 최상위 티어로 돌아 토큰이 샌다 — 경고색.
+// defaultModelLine은 헤더의 CLI별 기본 모델 조각 — 관제탑은 3사 공통이므로
+// claude·codex·gemini 모두 보여준다. 미설정은 "자동"(그 CLI가 알아서 고른다는 뜻).
+// Claude 기본이 Fable이면 새로 띄우는 모든 claude가 최상위 티어로 돌아 토큰이 샌다 — 경고색.
 func (m Model) defaultModelLine() string {
-	if m.claudeModel == "" {
-		return ""
+	if m.defModels == nil {
+		return "" // 아직 미수집 (usageCmd 첫 응답 전)
 	}
-	pretty := usage.PrettyModel(m.claudeModel)
-	if usage.IsFable(m.claudeModel) {
-		return levelStyle["red"].Render("⚠ 기본모델 " + pretty)
+	entries := []struct{ key, label, styleKey string }{
+		{"claude", "Claude", "claude"},
+		{"codex", "Codex", "codex"},
+		{"gemini", "Gemini", "antigravity"}, // 같은 Google 계열 보라
 	}
-	return styleHelp.Render("기본모델 ") + styleModel.Render(pretty)
+	var parts []string
+	for _, e := range entries {
+		v := m.defModels[e.key]
+		switch {
+		case v == "":
+			parts = append(parts, styleHelp.Render(e.label+" 자동"))
+		case e.key == "claude" && usage.IsFable(v):
+			parts = append(parts, levelStyle["red"].Render("⚠ "+e.label+" "+usage.PrettyModel(v)))
+		case e.key == "claude":
+			parts = append(parts, provStyle[e.styleKey].Render(e.label+" "+usage.PrettyModel(v)))
+		default:
+			parts = append(parts, provStyle[e.styleKey].Render(e.label+" "+v))
+		}
+	}
+	return styleHelp.Render("기본모델 ") + strings.Join(parts, styleHelp.Render(" · "))
 }
 
 // ctxBadge는 행 끝의 "[모델 · ctx% · age]" 조각.
