@@ -166,16 +166,24 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 	// 3) 구동 LaunchAgent — 세션 이름·폴더·(브리지면) 브리지 경로를 언급하는 plist
 	// 세션 이름은 단어 경계로 매칭 — "ai" 같은 짧은 이름이 "ai-folder"
 	// 경로에 부분 일치해 무관한 plist를 잡는 오탐을 막는다.
+	// 4자 미만 세션명("ai" 등)은 plist 라벨(ai.openclaw.gateway)에 단어
+	// 경계로도 오탐되므로 세션명 매칭에서 제외한다.
 	var sessionRe *regexp.Regexp
-	if session != "" {
+	if len(session) >= 4 {
 		sessionRe = regexp.MustCompile(`(^|[^A-Za-z0-9_-])` + regexp.QuoteMeta(session) + `($|[^A-Za-z0-9_-])`)
 	}
-	var pathNeedles []string
+	// 경로는 뒤 경계까지 확인 — "/a/b"가 "/a/b-x"(형제)나 "/a/b/c"(하위 폴더
+	// 봇)의 plist에 부분 일치해 "Discord 연결됨" 오표시를 내는 것을 막는다.
+	var pathRes []*regexp.Regexp
+	addNeedle := func(n string) {
+		pathRes = append(pathRes,
+			regexp.MustCompile(regexp.QuoteMeta(n)+`($|[^A-Za-z0-9_\-./])`))
+	}
 	if folder != "" {
-		pathNeedles = append(pathNeedles, folder)
+		addNeedle(folder)
 	}
 	if info.Bridge != nil {
-		pathNeedles = append(pathNeedles, info.Bridge.Dir)
+		addNeedle(info.Bridge.Dir)
 	}
 	if entries, err := os.ReadDir(p.LaunchAgentsDir); err == nil {
 		for _, e := range entries {
@@ -189,8 +197,8 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 			s := string(b)
 			matched := sessionRe != nil && sessionRe.MatchString(s)
 			if !matched {
-				for _, n := range pathNeedles {
-					if strings.Contains(s, n) {
+				for _, re := range pathRes {
+					if re.MatchString(s) {
 						matched = true
 						break
 					}

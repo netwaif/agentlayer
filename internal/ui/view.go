@@ -155,6 +155,34 @@ func ctxStyle(used float64) lipgloss.Style {
 	}
 }
 
+// kindDivider는 종류 그룹 사이의 얇은 구분선 ("── codex ────…").
+func (m Model) kindDivider(kind string) string {
+	st, ok := provStyle[kind]
+	if kind == "gemini" {
+		st, ok = provStyle["antigravity"], true // 같은 Google 계열 보라
+	}
+	if !ok {
+		st = styleHeader
+	}
+	width := m.width
+	if width < 20 {
+		width = 80
+	}
+	return styleHeader.Render("── ") + st.Render(kind) + " " +
+		styleHeader.Render(strings.Repeat("─", max(0, width-runewidth.StringWidth(kind)-5)))
+}
+
+// kindGroupCount는 목록의 종류 그룹 수 (구분선 줄 수 계산용).
+func (m Model) kindGroupCount() int {
+	n := 0
+	for i, a := range m.agents {
+		if i == 0 || m.agents[i-1].Kind != a.Kind {
+			n++
+		}
+	}
+	return n
+}
+
 // defaultModelLine은 헤더의 CLI별 기본 모델 조각 — 관제탑은 3사 공통이므로
 // claude·codex·gemini 모두 보여준다. 미설정은 "자동"(그 CLI가 알아서 고른다는 뜻).
 // Claude 기본이 Fable이면 새로 띄우는 모든 claude가 최상위 티어로 돌아 토큰이 샌다 — 경고색.
@@ -402,6 +430,10 @@ func (m Model) View() string {
 	b.WriteString(styleHeader.Render("STATE    "+cli.PadRight("AGENT", 8)+cli.PadRight("SESSION", 21)+cli.PadRight("TASK", 31)+"DIR·SINCE") + "\n")
 
 	for i, a := range m.agents {
+		// 종류 그룹 경계 구분선 — 3사 정보가 시각적으로 섞이지 않게
+		if i > 0 && m.agents[i-1].Kind != a.Kind {
+			b.WriteString(m.kindDivider(a.Kind) + "\n")
+		}
 		task := runewidth.Truncate(a.Task, 28, "…")
 		if i == m.cursor {
 			// 선택 행: 화면 전체 폭 바. 조각마다 같은 배경을 입혀

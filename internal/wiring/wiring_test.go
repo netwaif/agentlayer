@@ -99,6 +99,46 @@ func TestCollectBridge(t *testing.T) {
 	}
 }
 
+func TestCollectPathBoundaryNoAncestorMatch(t *testing.T) {
+	// 상위 폴더 에이전트(~/W)가 하위 폴더 봇(~/W/discord)의 plist에
+	// 오매칭되면 "Discord 연결됨" 오표시가 난다 — 실전에서 발견된 버그.
+	laDir := filepath.Join(t.TempDir(), "LaunchAgents")
+	if err := os.MkdirAll(laDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(laDir, "com.soonho.claude-discord.plist"),
+		[]byte(`<plist>cd /Users/x/VSCodeWorkspace/discord && run</plist>`), 0o644)
+	p := Paths{BotsJSON: "/없음", LaunchAgentsDir: laDir}
+
+	info := Collect(p, "/Users/x/VSCodeWorkspace", "", nil)
+	if len(info.LaunchAgents) != 0 {
+		t.Errorf("조상 경로가 하위 폴더 plist에 오매칭: %v", info.LaunchAgents)
+	}
+	if info.DiscordConnected() {
+		t.Error("연결 오표시")
+	}
+	// 정확히 그 폴더는 매칭
+	info = Collect(p, "/Users/x/VSCodeWorkspace/discord", "", nil)
+	if len(info.LaunchAgents) != 1 {
+		t.Errorf("정확한 폴더는 매칭돼야 함: %v", info.LaunchAgents)
+	}
+}
+
+func TestCollectShortSessionNameIgnored(t *testing.T) {
+	// "ai" 같은 초단문 tmux 세션명은 plist 라벨(ai.openclaw.gateway 등)에
+	// 단어 경계로도 오탐된다 — 4자 미만은 세션명 매칭에 쓰지 않는다.
+	laDir := filepath.Join(t.TempDir(), "LaunchAgents")
+	if err := os.MkdirAll(laDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(laDir, "ai.openclaw.gateway.plist"),
+		[]byte(`<plist>Label ai.openclaw.gateway</plist>`), 0o644)
+	info := Collect(Paths{BotsJSON: "/없음", LaunchAgentsDir: laDir}, "/어딘가", "ai", nil)
+	if len(info.LaunchAgents) != 0 {
+		t.Errorf("짧은 세션명 오탐: %v", info.LaunchAgents)
+	}
+}
+
 func TestDiscordConnectedByLaunchAgent(t *testing.T) {
 	i := Info{LaunchAgents: []string{"com.soonho.claude-discord"}}
 	if !i.DiscordConnected() {

@@ -111,7 +111,7 @@ func TestAgyCtx(t *testing.T) {
 	if info := AgyCtx(gd, "no-such-conv"); info.UsedPct != nil {
 		t.Errorf("transcript 없으면 빈 값: %+v", info)
 	}
-	// 40KB transcript → ≈10k 토큰 추정 → 1% (1M 창 기준)
+	// 40KB transcript + 100KB 고정 오버헤드 → ≈35k 토큰 → ~3.5% (1M 창 기준)
 	big := make([]byte, 40*1024)
 	for i := range big {
 		big[i] = 'a'
@@ -119,8 +119,8 @@ func TestAgyCtx(t *testing.T) {
 	writeFile(t, filepath.Join(gd, "antigravity-cli", "brain", "cid-1",
 		".system_generated", "logs", "transcript_full.jsonl"), string(big))
 	info := AgyCtx(gd, "cid-1")
-	if info.UsedPct == nil || *info.UsedPct < 0.5 || *info.UsedPct > 2 {
-		t.Errorf("크기 기반 추정 ctx%%: %+v", info.UsedPct)
+	if info.UsedPct == nil || *info.UsedPct < 3 || *info.UsedPct > 4 {
+		t.Errorf("크기+오버헤드 기반 추정 ctx%%: %+v", info.UsedPct)
 	}
 	if !info.Approx {
 		t.Error("agy ctx%%는 근사값 표시")

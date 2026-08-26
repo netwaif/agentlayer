@@ -179,6 +179,21 @@ func TestCtxBadgeApprox(t *testing.T) {
 	}
 }
 
+func TestKindDividerBetweenGroups(t *testing.T) {
+	m := fixtureModel(t)
+	m.agents = append(m.agents, &state.Agent{ID: "gemini-9", Kind: "gemini",
+		State: state.StateIdle, Tmux: state.TmuxRef{Session: "g"},
+		UpdatedAt: t0, StateSince: t0})
+	v := m.View()
+	if !strings.Contains(v, "── gemini") {
+		t.Errorf("종류 경계에 구분선 나와야 함:\n%s", v)
+	}
+	// 같은 종류 사이(claude 두 행)에는 구분선 없음 — claude 그룹 시작엔 divider가 없다
+	if strings.Contains(v, "── claude") {
+		t.Errorf("첫 그룹 앞에는 구분선 없음:\n%s", v)
+	}
+}
+
 func TestViewContainsCoreTokens(t *testing.T) {
 	m := fixtureModel(t)
 	v := m.View()

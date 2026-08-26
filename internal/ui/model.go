@@ -188,9 +188,9 @@ func (m Model) previewCmd() tea.Cmd {
 
 // previewHeight는 목록·헤더·도움말을 빼고 남는 미리보기 줄 수.
 func (m Model) previewHeight() int {
-	// 헤더≈5 + 목록 + 하단(구분선·확인/알림줄·도움말·여유)=5
+	// 헤더≈5 + 목록(+종류 구분선) + 하단(구분선·확인/알림줄·도움말·여유)=5
 	// 확인줄(y/N) 자리를 항상 예약해야 C·W 프롬프트가 잘리지 않는다.
-	used := 5 + len(m.agents) + 5
+	used := 5 + len(m.agents) + max(0, m.kindGroupCount()-1) + 5
 	h := m.height - used
 	if h > 40 {
 		h = 40

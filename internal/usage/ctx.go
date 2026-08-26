@@ -104,6 +104,11 @@ const geminiWindow = 1_000_000
 // agyBytesPerToken: transcript 바이트 → 토큰 근사 계수.
 const agyBytesPerToken = 4
 
+// agyBaselineBytes: agy 모델 요청의 고정 오버헤드(시스템 프롬프트·스킬·도구 정의).
+// transcript에는 안 잡히지만 실제 컨텍스트를 차지한다.
+// 2026-08 실측: transcript 30KB 시점의 실제 요청 크기 134KB → 오버헤드 ≈ 105KB.
+const agyBaselineBytes = 100_000
+
 // GeminiLatest는 workdir에서 가장 최근 stock Gemini CLI 세션의 모델을 찾는다.
 // 매핑은 ~/.gemini/projects.json(경로→tmp 폴더명), 정확 일치가 없으면 가장 긴
 // 조상 경로로 폴백(봇이 하위 폴더로 cd 해도 안 끊긴다). 세션 파일 각 모델 턴에
@@ -190,21 +195,28 @@ func AgyCtx(geminiDir, conversationID string) CtxInfo {
 	}
 	logs := filepath.Join(geminiDir, "antigravity-cli", "brain", conversationID,
 		".system_generated", "logs")
-	var st os.FileInfo
+	var size int64 = -1
+	var ts time.Time
 	for _, name := range []string{"transcript_full.jsonl", "transcript.jsonl"} {
-		if s, err := os.Stat(filepath.Join(logs, name)); err == nil {
-			st = s
-			break
+		s, err := os.Stat(filepath.Join(logs, name))
+		if err != nil {
+			continue
+		}
+		if s.Size() > size {
+			size = s.Size()
+		}
+		if s.ModTime().After(ts) {
+			ts = s.ModTime()
 		}
 	}
-	if st == nil {
+	if size < 0 {
 		return CtxInfo{}
 	}
-	pct := float64(st.Size()) / agyBytesPerToken / geminiWindow * 100
+	pct := float64(agyBaselineBytes+size) / agyBytesPerToken / geminiWindow * 100
 	if pct > 100 {
 		pct = 100
 	}
-	return CtxInfo{UsedPct: &pct, Approx: true, TS: st.ModTime()}
+	return CtxInfo{UsedPct: &pct, Approx: true, TS: ts}
 }
 
 // AgentCtx는 에이전트별(ID 키) 컨텍스트 정보를 종류에 맞는 소스에서 모은다.
