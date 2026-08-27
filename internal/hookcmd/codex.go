@@ -18,7 +18,7 @@ type codexPayload struct {
 // codex는 JSON 하나를 마지막 인자로 넘긴다. notify는 codex의 자식
 // 프로세스라 TMUX_PANE을 상속하므로 pane 식별이 그대로 된다.
 func RunCodex(st *state.Store, args []string, env func(string) string, now time.Time) error {
-	pane := env("TMUX_PANE")
+	pane := hookPane(env)
 	if pane == "" {
 		return nil
 	}

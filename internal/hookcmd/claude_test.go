@@ -22,8 +22,11 @@ func newStore(t *testing.T) *state.Store {
 
 func env(pane string) func(string) string {
 	return func(k string) string {
-		if k == "TMUX_PANE" {
+		switch k {
+		case "TMUX_PANE":
 			return pane
+		case "TMUX":
+			return "/private/tmp/tmux-501/default,123,0" // 기본 서버
 		}
 		return ""
 	}

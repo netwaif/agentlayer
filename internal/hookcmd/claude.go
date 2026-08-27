@@ -25,9 +25,9 @@ type claudePayload struct {
 // RunClaude는 `agentlayer hook claude --event <event>`의 본체.
 // env는 os.Getenv 주입점(테스트용), now도 주입한다.
 func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) string, now time.Time) error {
-	pane := env("TMUX_PANE")
+	pane := hookPane(env)
 	if pane == "" {
-		return nil // tmux 밖 세션은 관제 대상이 아니다
+		return nil // tmux 밖(또는 비기본 서버) 세션은 관제 대상이 아니다
 	}
 
 	var p claudePayload
