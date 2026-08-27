@@ -97,8 +97,8 @@ func TestRunRestoreRemovesDeadRecord(t *testing.T) {
 		t.Skip("tmux 없음")
 	}
 	sock := fmt.Sprintf("al-restore-%d", os.Getpid())
-	tm := tmuxx.Tmux{Args: []string{"-L", sock}}
-	t.Cleanup(func() { exec.Command("tmux", "-L", sock, "kill-server").Run() })
+	tm := tmuxx.Tmux{Args: []string{"-f", "/dev/null", "-L", sock}}
+	t.Cleanup(func() { exec.Command("tmux", "-f", "/dev/null", "-L", sock, "kill-server").Run() })
 	st, err := state.NewStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

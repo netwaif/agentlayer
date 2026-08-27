@@ -26,13 +26,13 @@ func TestEndToEnd(t *testing.T) {
 	sock := fmt.Sprintf("agentlayer-e2e-%d", os.Getpid())
 	tmux := func(args ...string) string {
 		t.Helper()
-		out, err := exec.Command("tmux", append([]string{"-L", sock}, args...)...).CombinedOutput()
+		out, err := exec.Command("tmux", append([]string{"-f", "/dev/null", "-L", sock}, args...)...).CombinedOutput()
 		if err != nil {
 			t.Fatalf("tmux %v: %v (%s)", args, err, out)
 		}
 		return strings.TrimSpace(string(out))
 	}
-	t.Cleanup(func() { exec.Command("tmux", "-L", sock, "kill-server").Run() })
+	t.Cleanup(func() { exec.Command("tmux", "-f", "/dev/null", "-L", sock, "kill-server").Run() })
 
 	tmux("new-session", "-d", "-s", "e2e", "-x", "120", "-y", "30")
 	// Claude Code처럼 보이게: 제목에 ✳ 신호를 남긴다 (화면 스크래핑 아님 — 메타데이터)
@@ -43,7 +43,7 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tm := tmuxx.Tmux{Args: []string{"-L", sock}}
+	tm := tmuxx.Tmux{Args: []string{"-f", "/dev/null", "-L", sock}}
 	now := time.Now()
 
 	// 1) 스캐너가 발견
@@ -65,8 +65,11 @@ func TestEndToEnd(t *testing.T) {
 
 	// 2) hook 이벤트: 작업 시작 → 대기 → 완료
 	env := func(k string) string {
-		if k == "TMUX_PANE" {
+		switch k {
+		case "TMUX_PANE":
 			return paneID
+		case "TMUX":
+			return "/private/tmp/tmux-501/default,123,0" // hook 가드 통과용 기본 서버
 		}
 		return ""
 	}
@@ -132,18 +135,18 @@ func TestTUILaunchesInTmux(t *testing.T) {
 	stateDir := t.TempDir()
 	tmux := func(args ...string) string {
 		t.Helper()
-		out, err := exec.Command("tmux", append([]string{"-L", sock}, args...)...).CombinedOutput()
+		out, err := exec.Command("tmux", append([]string{"-f", "/dev/null", "-L", sock}, args...)...).CombinedOutput()
 		if err != nil {
 			t.Fatalf("tmux %v: %v (%s)", args, err, out)
 		}
 		return string(out)
 	}
-	t.Cleanup(func() { exec.Command("tmux", "-L", sock, "kill-server").Run() })
+	t.Cleanup(func() { exec.Command("tmux", "-f", "/dev/null", "-L", sock, "kill-server").Run() })
 
 	tmux("new-session", "-d", "-s", "tui", "-x", "120", "-y", "30",
 		"env", "AGENTLAYER_STATE_DIR="+stateDir, bin)
 	var screen string
-	for i := 0; i < 20; i++ { // 최대 2초 대기
+	for i := 0; i < 100; i++ { // 최대 10초 대기 (전체 스위트 병렬 부하 여유)
 		time.Sleep(100 * time.Millisecond)
 		screen = tmux("capture-pane", "-p", "-t", "tui:0.0")
 		if strings.Contains(screen, "AgentLayer") {
@@ -166,13 +169,13 @@ func TestWorktreeEndToEnd(t *testing.T) {
 	sock := fmt.Sprintf("agentlayer-wt-%d", os.Getpid())
 	tmux := func(args ...string) string {
 		t.Helper()
-		out, err := exec.Command("tmux", append([]string{"-L", sock}, args...)...).CombinedOutput()
+		out, err := exec.Command("tmux", append([]string{"-f", "/dev/null", "-L", sock}, args...)...).CombinedOutput()
 		if err != nil {
 			t.Fatalf("tmux %v: %v (%s)", args, err, out)
 		}
 		return strings.TrimSpace(string(out))
 	}
-	t.Cleanup(func() { exec.Command("tmux", "-L", sock, "kill-server").Run() })
+	t.Cleanup(func() { exec.Command("tmux", "-f", "/dev/null", "-L", sock, "kill-server").Run() })
 	tmux("new-session", "-d", "-s", "wt-e2e", "-x", "100", "-y", "30")
 	t.Setenv("TMUX", "/fake,1,0") // InsideTmux 통과용 — 실제 호출은 -L 소켓으로 감
 
@@ -197,7 +200,7 @@ func TestWorktreeEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tm := tmuxx.Tmux{Args: []string{"-L", sock}}
+	tm := tmuxx.Tmux{Args: []string{"-f", "/dev/null", "-L", sock}}
 
 	// new — 에이전트 명령 대신 window가 유지되도록 sh를 쓰는 편법 없이,
 	// claude가 없을 수 있으므로 window 생성만 확인하고 종료돼도 무방

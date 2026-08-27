@@ -47,16 +47,16 @@ func TestListPanesIntegration(t *testing.T) {
 		t.Skip("tmux 없음")
 	}
 	sock := fmt.Sprintf("agentlayer-test-%d", os.Getpid())
-	tm := Tmux{Args: []string{"-L", sock}}
+	tm := Tmux{Args: []string{"-f", "/dev/null", "-L", sock}}
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("tmux", append([]string{"-L", sock}, args...)...)
+		cmd := exec.Command("tmux", append([]string{"-f", "/dev/null", "-L", sock}, args...)...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("tmux %v: %v (%s)", args, err, out)
 		}
 	}
 	run("new-session", "-d", "-s", "al-test", "-x", "80", "-y", "24")
-	t.Cleanup(func() { exec.Command("tmux", "-L", sock, "kill-server").Run() })
+	t.Cleanup(func() { exec.Command("tmux", "-f", "/dev/null", "-L", sock, "kill-server").Run() })
 
 	panes, err := tm.ListPanes()
 	if err != nil {
@@ -73,8 +73,8 @@ func TestRestorePrimitivesIntegration(t *testing.T) {
 		t.Skip("tmux 없음")
 	}
 	sock := fmt.Sprintf("agentlayer-test-restore-%d", os.Getpid())
-	tm := Tmux{Args: []string{"-L", sock}}
-	t.Cleanup(func() { exec.Command("tmux", "-L", sock, "kill-server").Run() })
+	tm := Tmux{Args: []string{"-f", "/dev/null", "-L", sock}}
+	t.Cleanup(func() { exec.Command("tmux", "-f", "/dev/null", "-L", sock, "kill-server").Run() })
 
 	if tm.HasSession("ai") {
 		t.Fatal("서버도 없는데 세션이 있다고 함")
