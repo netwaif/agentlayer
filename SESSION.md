@@ -15,22 +15,19 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-v1.0.0 위에 기능 3종 추가·커밋 완료(340e7fd, **미push·미릴리즈**): ① Discord 카드 이벤트
-구동 갱신(hook 전이 → 2~3초 내 게시) ② 카드 표시 TUI 동등화 ③ `restore` 서브커맨드
-(재부팅 후 tmux 배치 재구성, `--resume`이면 대화까지 부활). ctx 오귀속 버그 수정 포함.
-make install 반영됨. restore-lab 실험으로 죽이기→부활 전 사이클 검증 완료.
-사용자가 workspace=세션 개념으로 폴더별 tmux 세션 분리 정리함(agentlayer dev·agentlayer youtube 등).
-사용자 실재부팅 테스트 예정. brew 배포본은 아직 v1.0.0.
+**v1.1.0 릴리즈 완료**(push+태그+goreleaser, brew formula 1.1.0 반영 확인). 포함: 카드 이벤트
+갱신·TUI 동등화·restore(기존 미릴리즈분) + version 서브커맨드 + hook 가드 + DEAD 이중 행
+정리 + **/orchestration 스킬**(go:embed 동봉, init이 ~/.claude/skills에 설치, claude+codex
+A/B 실검증 통과). 재부팅 실테스트 통과. agentlayer youtube 세션에 릴리즈·데모 소재 전달됨.
+로컬 make install = f623fbf 이후 빌드.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. 사용자 재부팅 실테스트 지원 — 절차: `restore --dry-run` 확인 → 마감했으면 `restore`+`wake-all`,
-   못 했으면 `restore --resume`. 피드백 수렴(예: restore 개별 선택 `restore <id>` 필요성)
-2. push + v1.1.0 릴리즈 검토 — 새 기능 3종을 brew 사용자에게 배포 (goreleaser, 사용자 승인 먼저)
-3. 영상 세션 후속 질문 응대 — 촬영 중 기술 확인, Orca 실측 요청 오면 사용자 승인 먼저
-4. `version` 서브커맨드 추가 검토 — brew 사용자가 `agentlayer version` 시도하면 "알 수 없는 명령"
-5. 보류 아이디어: MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용),
+1. 영상 세션 지원 — orchestration 데모 각본·기술 확인 요청 오면 응대 (소재는 이미 전달됨)
+2. goreleaser `brews` → `homebrew_casks` 이관 검토 — deprecated 경고 중(비차단이나 언젠가 제거됨)
+3. `restore <id>` 개별 선택 추가 검토 — restore-lab 무승인 부활 사고로 필요성 실증됨
+4. 보류 아이디어: MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용),
    provider 게이지 막대도 거슬리면 텍스트화
 
 ## 결정 기록
@@ -76,6 +73,15 @@ make install 반영됨. restore-lab 실험으로 죽이기→부활 전 사이�
 - 2026-08-27 restore 세부: 대상=Sync 후 DEAD만, 같은 window 분할 pane은 대표 1개, 폴더·세션명 없으면 사유와 건너뜀, 성공 시 원본 dead 레코드 즉시 삭제(status 이중 행 방지). DEAD는 재부팅/의도적 닫기 구분 불가 → 평상시엔 dry-run 먼저 권장
 - 2026-08-27 ctx 스냅샷 파일명=Claude session_id 발견 → LoadSnapshots가 sid 키도 등록, AgentCtx claude는 sid 우선·폴더 키 폴백 — 같은 폴더 두 claude 세션(restore-lab Opus vs 본세션 Fable)의 모델·ctx 오귀속 수정
 - 2026-08-27 agentlayer는 tmux만 필수(iTerm2 무관) — 코드에 iTerm2 의존 없음, osascript는 macOS 내장, coach·lazygit은 선택
+- 2026-08-27 재부팅 실테스트 통과 — restore로 claude 9세션 부활. codex-live는 브리지 LaunchAgent 관할(부팅 시 codex 업데이트 프롬프트에 걸림 → 사용자가 업데이트, `launchctl kickstart gui/501/com.codex-discord.tui`로 재기동)
+- 2026-08-27 Sync에 "밖에서 부활한 세션의 옛 DEAD 즉시 정리" 추가(808dfe0) — 브리지가 restore 안 거치고 같은 kind·세션명·cwd로 살리면 dead 이중 행이 24h 남던 문제. 대체 pane 없는 DEAD는 기존대로 24h 보존
+- 2026-08-27 restore+wake-all이 실험 세션(restore-lab)까지 부활·각성시켜 그 Opus가 무승인 구현·커밋(839f157, 본세션 미커밋 테스트까지 혼입) 사고 → 세션 kill, mixed reset으로 두 커밋(808dfe0 내 수정/f623fbf version, Opus 저작 표기 유지) 재구성. 교훈: 폴더당 조종사 1세션, `restore <id>` 개별 선택 필요
+- 2026-08-27 상태 오염 사고 근본원인 규명: e2e 테스트의 -L 격리 서버가 ~/.tmux.conf를 로드 → tmux-resurrect/continuum이 재부팅 전 레이아웃(실폴더 claude 4개 포함)을 테스트 서버 안에 자동 부활 → 유령들의 전역 hook이 본 서버 %0·%1·%3·%5 레코드의 session_id 오염(zzukumi-bot 실제 Opus가 Fable로 표시). 정리: 그림자 서버 kill-server + 오염 레코드 4건 sid 제거(폴더 폴백으로 즉시 정상)
+- 2026-08-27 재발 방지 2종 커밋: ① hookPane 가드(a23265d) — $TMUX 소켓 basename=="default"일 때만 hook 기록(3사 공통), TMUX 없는 잔류 환경도 차단 ② 테스트 tmux 호출 전부 -f /dev/null(78dfb55) — 사용자 설정(resurrect) 차단. TUI e2e 대기 2s→10s(스위트 병렬 부하)
+- 2026-08-28 /orchestration 스킬 신설(6a24d06) — Orca orchestration 대응: wt new 3사 워커 생성 → send-keys 2단 dispatch(+REPORT.md 보고 규약) → status DONE 폴링(화면 스크래핑 금지) → 취합·비교, 자동 머지 금지. 실검증: claude(Opus)+codex 워커 A/B 전 사이클 통과(신뢰 프롬프트→dispatch→DONE 감지→취합→정리)
+- 2026-08-28 스킬 배포 방식 확정: 플러그인 아닌 go:embed 동봉 + `agentlayer init` 설치(멱등, 갱신 시 .bak) — 스킬이 바이너리 명령 종속이라 버전 잠금이 핵심. 플러그인은 마켓플레이스 수요 생기면 후속
+- 2026-08-28 v1.1.0 릴리즈 완료: push(340a~6a24d06) → 태그 → goreleaser → GitHub 릴리즈+brew formula 1.1.0 확인. goreleaser brews deprecated 경고 지속(→homebrew_casks 이관 필요, 비차단)
+- 2026-08-28 MultiAgent(하네스)와 통합 안 함 확정 — 접점 규약만: REPORT.md≈worker-result.md 양식 공유, MultiAgent 코드 단계에 wt 선택 사용. 사용 기준: 승인·비평·재진입=MultiAgent, 병렬·A/B·worktree 격리=orchestration, 일상 작업=단일 세션
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -116,3 +122,9 @@ make install 반영됨. restore-lab 실험으로 죽이기→부활 전 사이�
 - `internal/usage/ctx.go` LoadSnapshots에 파일명(sid) 키 추가, AgentCtx claude sid 우선 매칭
 - `main.go` runCard --event/publishCard 분리(usageMaxAge 인자), runHook 전이 시 detached 발사(defer), runRestore 배선, cli.ResumeCommand 호출로 교체
 - 테스트: `internal/cli/restorecmd_test.go`(계획 7종+RunRestore 통합), `internal/tmuxx/tmux_test.go` TestRestorePrimitivesIntegration, `internal/usage/ctx_test.go` sid 키 2종, `internal/discord/card_test.go` TUI 동등 항목 검증
+- `internal/scan/scan.go` Sync에 liveSlot/occupied(부활 세션의 옛 DEAD 즉시 정리), scan_test.go TestSyncPurgesDeadSupersededByRevivedSession 외 1
+- `internal/hookcmd/guard.go` hookPane(기본 서버 가드), guard_test.go(3사×3케이스), claude.go·codex.go·gemini.go 진입점을 hookPane으로 교체, claude_test.go env에 TMUX 추가
+- `e2e_test.go`·`internal/tmuxx/tmux_test.go`·`internal/cli/restorecmd_test.go` 모든 tmux 호출에 -f /dev/null, e2e TUI 대기 100회(10s)로 상향
+- `internal/cli/versioncmd.go`·`versioncmd_test.go` FormatVersion/VersionInfo/IsReleaseVersion (원작 restore-lab Opus, 839f157→f623fbf 재구성), `main.go` version 라우팅+buildVersion, `.goreleaser.yaml` ldflags 명시
+- `internal/cli/orchskill.go` InstallOrchestrationSkill(go:embed·멱등·.bak 보존), `orchestration_skill.md`(스킬 본문 정본 — 여길 고치고 make install+init 재실행하면 갱신), orchskill_test.go 4종, `main.go` runInit 배선
+- 시스템 상태 추가: `~/.claude/skills/orchestration/SKILL.md`(init 설치본), GitHub 릴리즈 v1.1.0, brew tap Formula/agentlayer.rb 1.1.0
