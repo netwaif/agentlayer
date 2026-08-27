@@ -293,6 +293,13 @@ func runInit(args []string) error {
 		}
 		fmt.Println()
 	}
+	// /orchestration 스킬 — 바이너리 동봉본을 ~/.claude/skills에 설치
+	skillsDir := filepath.Join(home, ".claude", "skills")
+	fmt.Println("orchestration 스킬 설치:", skillsDir)
+	if err := cli.InstallOrchestrationSkill(os.Stdout, skillsDir, *dryRun); err != nil {
+		return err
+	}
+	fmt.Println()
 	// prefix 'a' 충돌 검사: list-keys가 성공하면 이미 바인딩된 것
 	conflict := exec.Command(tmuxx.Bin(), "list-keys", "-T", "prefix", "a").Run() == nil
 	cli.PrintTmuxBinding(os.Stdout, conflict, binPath)
