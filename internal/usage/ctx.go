@@ -69,6 +69,11 @@ func LoadSnapshots(dir string) map[string]CtxInfo {
 		if err := json.Unmarshal(b, &s); err != nil {
 			continue
 		}
+		ts := time.Unix(s.TS, 0)
+		info := CtxInfo{Model: s.Model, UsedPct: s.Used, TS: ts}
+		// 파일명이 곧 Claude session_id — 세션 단위 정확 매칭 키.
+		// 경로 키는 "/"로 시작하므로 충돌하지 않는다.
+		out[strings.TrimSuffix(e.Name(), ".json")] = info
 		key := s.ProjectDir
 		if key == "" {
 			key = s.CWD
@@ -76,11 +81,10 @@ func LoadSnapshots(dir string) map[string]CtxInfo {
 		if key == "" {
 			continue
 		}
-		ts := time.Unix(s.TS, 0)
 		if prev, ok := out[key]; ok && !ts.After(prev.TS) {
 			continue
 		}
-		out[key] = CtxInfo{Model: s.Model, UsedPct: s.Used, TS: ts}
+		out[key] = info
 	}
 	return out
 }
@@ -231,7 +235,11 @@ func AgentCtx(agents []*state.Agent, snapshots map[string]CtxInfo, codexRoot, ge
 		}
 		switch a.Kind {
 		case "claude":
-			if info, ok := snapshots[a.CWD]; ok {
+			// 자기 session_id 스냅샷 우선 — 같은 폴더에 세션이 여럿이어도
+			// 남의 모델·ctx가 붙지 않는다. 없으면 폴더 키 폴백.
+			if info, ok := snapshots[a.SessionID]; ok && a.SessionID != "" {
+				out[a.ID] = info
+			} else if info, ok := snapshots[a.CWD]; ok {
 				out[a.ID] = info
 			}
 		case "codex":

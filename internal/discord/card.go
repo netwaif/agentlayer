@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/starter"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/usage"
 )
@@ -166,64 +167,88 @@ func windowOrder(ws map[string]usage.Window) []string {
 	return append(std, rest...)
 }
 
-// agentsContainer는 에이전트 섹션: 상태 + 폴더 + 모델 + ctx 게이지 + 경과.
-// agentsContainer는 행이 하나도 없으면 nil (빈 섹션 금지).
-func agentsContainer(agents []*state.Agent, ctx map[string]usage.CtxInfo, wired map[string]string, home string, now time.Time) map[string]any {
+// agentsContainer는 에이전트 섹션 — TUI 관제 화면과 같은 정보를 담는다:
+// 상태 집계, 기본모델 3사, MultiAgent 활성 작업, 그리고 행마다
+// 세션 이름·폴더·상태·경과·⌁·⎇브랜치·모델·ctx%·스냅샷 나이·TASK.
+// 게이지 막대는 그리지 않는다(Discord 폰트에서 격자로 깨짐 — ctx는 텍스트).
+// 행이 하나도 없으면 nil (빈 섹션 금지).
+func agentsContainer(d CardData, now time.Time) map[string]any {
 	shorten := func(p string) string {
-		if home != "" && strings.HasPrefix(p, home) {
-			return "~" + strings.TrimPrefix(p, home)
+		if d.Home != "" && strings.HasPrefix(p, d.Home) {
+			return "~" + strings.TrimPrefix(p, d.Home)
 		}
 		return p
 	}
-	type row struct {
-		head string
-		a    *state.Agent
-		info usage.CtxInfo
-	}
-	var rows []row
-	for _, a := range agents {
+	var lines []string
+	var worst *float64
+	prevKind := ""
+	n := 0
+	for _, a := range d.Agents {
 		if a.State == state.StateDead {
 			continue
 		}
-		info := ctx[a.ID]
-		tag := info.Model
-		if tag == "" {
-			tag = a.Kind
+		n++
+		if a.Kind != prevKind {
+			lines = append(lines, "-# ── "+a.Kind+" ──────")
+			prevKind = a.Kind
 		}
-		rows = append(rows, row{head: fmt.Sprintf("%s  [%s]", shorten(a.CWD), tag), a: a, info: info})
-	}
-	width := 1
-	for _, r := range rows {
-		if len(r.head) > width {
-			width = len(r.head)
+		info := d.Ctx[a.ID]
+		if info.UsedPct != nil && (worst == nil || *info.UsedPct > *worst) {
+			worst = info.UsedPct
 		}
-	}
-	var lines []string
-	var worst *float64
-	for _, r := range rows {
-		pct := "—"
-		if r.info.UsedPct != nil {
-			pct = fmt.Sprintf("%d", int(*r.info.UsedPct+0.5))
-			if r.info.Approx {
-				pct = "~" + pct // 근사값(gemini류) 정직 표시
-			}
-			if worst == nil || *r.info.UsedPct > *worst {
-				worst = r.info.UsedPct
-			}
+		word := stateWord[a.State]
+		if a.Stale(now) {
+			word += "?" // WORK인데 갱신이 끊김 — hook 유실 의심 (TUI의 WORK?와 동일)
 		}
-		line := fmt.Sprintf("%s `%-*s  %s` **%s%%** · %s",
-			stateEmoji[r.a.State], width, r.head, usage.Gauge(r.info.UsedPct, barWidth),
-			pct, stateWord[r.a.State])
-		if r.a.State != state.StateIdle {
-			line += " " + since(r.a.StateSince, now)
+		line := stateEmoji[a.State]
+		if a.Tmux.Session != "" {
+			line += " **" + a.Tmux.Session + "**"
 		}
-		if w := wired[r.a.CWD]; w != "" {
+		line += " `" + shorten(a.CWD) + "` — " + word
+		if a.State != state.StateIdle {
+			line += " " + since(a.StateSince, now)
+		}
+		if w := d.Wired[a.CWD]; w != "" {
 			line += " · " + w
 		}
+		if br := d.Branches[a.CWD]; br != "" {
+			line += " · ⎇ " + br
+		}
 		lines = append(lines, line)
+		var sub []string
+		if info.Model != "" {
+			sub = append(sub, info.Model)
+		}
+		if info.UsedPct != nil {
+			pct := fmt.Sprintf("ctx %d%%", int(*info.UsedPct+0.5))
+			if info.Approx {
+				pct = fmt.Sprintf("ctx ~%d%%", int(*info.UsedPct+0.5)) // 근사값(gemini류) 정직 표시
+			}
+			sub = append(sub, pct)
+		}
+		if !info.TS.IsZero() {
+			sub = append(sub, since(info.TS, now))
+		}
+		if a.Task != "" {
+			sub = append(sub, truncateRunes(a.Task, 40))
+		}
+		if len(sub) > 0 {
+			lines = append(lines, "-# "+strings.Join(sub, " · "))
+		}
 	}
-	if len(lines) == 0 {
+	if n == 0 {
 		return nil // 빈 content는 Discord가 400으로 거부한다
+	}
+	head := "### 에이전트 — " + summaryLine(d.Agents)
+	var meta []string
+	if s := defaultModelsLine(d.DefModels); s != "" {
+		meta = append(meta, s)
+	}
+	if s := tasksLine(d.Tasks); s != "" {
+		meta = append(meta, s)
+	}
+	if len(meta) > 0 {
+		head += "\n" + strings.Join(meta, "\n")
 	}
 	color := "#565B66"
 	switch {
@@ -236,9 +261,78 @@ func agentsContainer(agents []*state.Agent, ctx map[string]usage.CtxInfo, wired 
 	}
 	return map[string]any{"type": typeContainer, "accent_color": accent(color),
 		"components": []any{
-			map[string]any{"type": typeText, "content": "### 에이전트"},
+			map[string]any{"type": typeText, "content": head},
 			map[string]any{"type": typeText, "content": strings.Join(lines, "\n")},
 		}}
+}
+
+// summaryLine은 TUI 헤더와 같은 상태 집계 ("🟡 응답 필요 1 · 🟢 작업중 2").
+func summaryLine(agents []*state.Agent) string {
+	counts := map[state.AgentState]int{}
+	for _, a := range agents {
+		counts[a.State]++
+	}
+	var parts []string
+	for _, s := range []state.AgentState{state.StateWaiting, state.StateDoneUnread,
+		state.StateError, state.StateWorking, state.StateIdle} {
+		if counts[s] > 0 {
+			parts = append(parts, fmt.Sprintf("%s %s %d", stateEmoji[s], stateWord[s], counts[s]))
+		}
+	}
+	if len(parts) == 0 {
+		return "없음"
+	}
+	return strings.Join(parts, " · ")
+}
+
+// defaultModelsLine은 TUI 헤더의 CLI별 기본 모델 조각. 미설정은 "자동",
+// Claude 기본이 Fable이면 경고(새로 띄우는 모든 claude가 최상위 티어).
+func defaultModelsLine(def map[string]string) string {
+	if def == nil {
+		return ""
+	}
+	entries := []struct{ key, label string }{
+		{"claude", "Claude"}, {"codex", "Codex"}, {"gemini", "Gemini"},
+	}
+	var parts []string
+	for _, e := range entries {
+		v := def[e.key]
+		switch {
+		case v == "":
+			parts = append(parts, e.label+" 자동")
+		case e.key == "claude" && usage.IsFable(v):
+			parts = append(parts, "⚠ "+e.label+" "+usage.PrettyModel(v))
+		case e.key == "claude":
+			parts = append(parts, e.label+" "+usage.PrettyModel(v))
+		default:
+			parts = append(parts, e.label+" "+v)
+		}
+	}
+	return "-# 기본모델 " + strings.Join(parts, " · ")
+}
+
+// tasksLine은 MultiAgent 활성 작업 요약 (활성 있을 때만, TUI와 동일 규칙).
+func tasksLine(tasks []starter.Task) string {
+	if len(tasks) == 0 {
+		return ""
+	}
+	var parts []string
+	for i, t := range tasks {
+		if i >= 3 {
+			parts = append(parts, fmt.Sprintf("외 %d", len(tasks)-3))
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s(%s)", t.Name, t.Status))
+	}
+	return "-# MultiAgent: " + strings.Join(parts, " · ")
+}
+
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }
 
 func since(from, now time.Time) string {
@@ -255,18 +349,29 @@ func since(from, now time.Time) string {
 	}
 }
 
-// BuildComponents는 카드 전체를 조립한다. usage가 nil이면 에이전트 섹션만.
-// wired는 CWD → Discord 연결 표시("⌁" 또는 "⌁라벨"), 없으면 nil 허용.
-func BuildComponents(pay *usage.Payload, agents []*state.Agent, ctx map[string]usage.CtxInfo, wired map[string]string, home string, now time.Time) []any {
+// CardData는 카드 한 장을 조립하는 데 필요한 재료 전부.
+type CardData struct {
+	Pay       *usage.Payload            // coach 사용량 (nil이면 provider 섹션 생략)
+	Agents    []*state.Agent            // store.List 순서 그대로 (종류 그룹 정렬)
+	Ctx       map[string]usage.CtxInfo  // 에이전트 ID → 모델·ctx% 스냅샷
+	Wired     map[string]string         // CWD → Discord 연결 표시("⌁" 또는 "⌁라벨")
+	Branches  map[string]string         // CWD → worktree 브랜치 (⎇)
+	DefModels map[string]string         // claude·codex·gemini 기본모델 (빈 값=자동)
+	Tasks     []starter.Task            // MultiAgent 활성 작업
+	Home      string                    // ~ 축약용
+}
+
+// BuildCard는 카드 전체를 조립한다. Pay가 nil이면 에이전트 섹션만.
+func BuildCard(d CardData, now time.Time) []any {
 	var comps []any
-	if pay != nil {
+	if d.Pay != nil {
 		for _, key := range []string{"claude", "codex", "antigravity"} {
-			if p, ok := pay.Providers[key]; ok {
+			if p, ok := d.Pay.Providers[key]; ok {
 				comps = append(comps, providerContainer(key, p))
 			}
 		}
 	}
-	if ac := agentsContainer(agents, ctx, wired, home, now); ac != nil {
+	if ac := agentsContainer(d, now); ac != nil {
 		comps = append(comps, ac)
 	}
 	comps = append(comps, map[string]any{"type": typeText,

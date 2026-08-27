@@ -19,6 +19,7 @@ import (
 	"github.com/netwaif/agentlayer/internal/hookcmd"
 	"github.com/netwaif/agentlayer/internal/notify"
 	"github.com/netwaif/agentlayer/internal/scan"
+	"github.com/netwaif/agentlayer/internal/starter"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/ui"
@@ -49,6 +50,8 @@ func run(args []string) error {
 		return runCard(args[1:])
 	case "resume":
 		return runResume(args[1:])
+	case "restore":
+		return runRestore(args[1:])
 	case "info":
 		return runInfo(args[1:])
 	case "wake-all", "close-all", "broadcast":
@@ -99,15 +102,29 @@ func runStatus(args []string) error {
 	return cli.Status(os.Stdout, st, *jsonOut, now)
 }
 
-// runCard: agentlayer card [--out]
+// runCard: agentlayer card [--out] [--event]
 // 사용량 + 에이전트 상태를 Discord 카드 하나로 업서트한다.
 // LaunchAgent 등에서 주기 실행하는 용도. --out은 payload JSON만 출력.
+// --event는 hook 전이가 발사하는 즉시 갱신 모드: 동시 발사를 single-flight로
+// 합치고, usage는 캐시만 쓴다(콜드 coach 실행 금지 — 5분 LaunchAgent 담당).
 func runCard(args []string) error {
 	fs := flag.NewFlagSet("card", flag.ContinueOnError)
 	outOnly := fs.Bool("out", false, "전송 없이 카드 JSON만 출력")
+	fromEvent := fs.Bool("event", false, "hook 전이 트리거 모드 (코얼레싱·캐시 usage)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if *fromEvent {
+		return discord.RunCoalesced(state.DefaultDir(), func() error {
+			return publishCard(false, 24*time.Hour)
+		})
+	}
+	return publishCard(*outOnly, 4*time.Minute)
+}
+
+// publishCard는 카드 한 장을 조립해 업서트한다. usageMaxAge는 coach 캐시
+// 허용 나이 — 이보다 오래됐을 때만 coach를 실제 실행한다.
+func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 	st, err := state.NewStore(state.DefaultDir())
 	if err != nil {
 		return err
@@ -122,7 +139,7 @@ func runCard(args []string) error {
 	if err != nil {
 		return err
 	}
-	pay := usage.FetchCached(st.Dir, 4*time.Minute, usage.CoachRunner, now)
+	pay := usage.FetchCached(st.Dir, usageMaxAge, usage.CoachRunner, now)
 	ctx := usage.AgentCtx(agents, usage.LoadSnapshots(usage.SnapshotsDir()),
 		usage.CodexSessionsRoot(), usage.GeminiDir())
 	home, _ := os.UserHomeDir()
@@ -144,9 +161,21 @@ func runCard(args []string) error {
 		}
 		wired[a.CWD] = mark
 	}
-	comps := discord.BuildComponents(pay, agents, ctx, wired, home, now)
+	// worktree 브랜치 표시 (TUI의 ⎇와 동일 소스)
+	branches := map[string]string{}
+	if metas, err := wt.ListMetas(state.DefaultDir()); err == nil {
+		for _, m := range metas {
+			branches[m.Path] = m.Branch
+		}
+	}
+	comps := discord.BuildCard(discord.CardData{
+		Pay: pay, Agents: agents, Ctx: ctx, Wired: wired, Branches: branches,
+		DefModels: usage.DefaultModels(home),
+		Tasks:     starter.ActiveTasks(starter.DefaultRoot()),
+		Home:      home,
+	}, now)
 
-	if *outOnly {
+	if outOnly {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(comps)
@@ -243,9 +272,29 @@ func runHook(args []string) error {
 	// 상태가 실제로 바뀐 순간에만 알림 (heartbeat 무음은 notify가 보장)
 	cfg := config.Load()
 	sender := notify.DefaultSender()
+	transitioned := false
 	hookcmd.SetTransitionHook(func(a *state.Agent, prev, to state.AgentState) {
+		if prev != to {
+			transitioned = true
+		}
 		notify.Notify(cfg, sender, a, prev, to)
 	})
+	// 전이가 실제로 있었으면 카드 즉시 갱신을 백그라운드로 발사한다.
+	// hook은 에이전트를 막으면 안 되므로 기다리지 않는다(detached).
+	defer func() {
+		if !transitioned || cfg.DiscordWebhookURL == "" {
+			return
+		}
+		self, err := os.Executable()
+		if err != nil {
+			return
+		}
+		cmd := exec.Command(self, "card", "--event")
+		cmd.Stdout, cmd.Stderr, cmd.Stdin = nil, nil, nil
+		if cmd.Start() == nil {
+			_ = cmd.Process.Release()
+		}
+	}()
 	switch agent {
 	case "claude":
 		if err := hookcmd.RunClaude(st, *event, os.Stdin, os.Getenv, time.Now()); err != nil {
@@ -357,7 +406,7 @@ func runResume(args []string) error {
 		var found bool
 		fmt.Println("resume 가능한 세션 (죽었거나 에러난 것 우선):")
 		for _, a := range agents {
-			if _, err := resumeCommand(a); err != nil {
+			if _, err := cli.ResumeCommand(a); err != nil {
 				continue
 			}
 			marker := " "
@@ -382,7 +431,7 @@ func runResume(args []string) error {
 	if err != nil {
 		return err
 	}
-	cmd, err := resumeCommand(a)
+	cmd, err := cli.ResumeCommand(a)
 	if err != nil {
 		return err
 	}
@@ -395,36 +444,17 @@ func runResume(args []string) error {
 	return nil
 }
 
-// resumeCommand는 에이전트 종류별 대화 재개 명령을 만든다.
-//   - claude: claude --resume <session_id>
-//   - codex:  codex resume <session_id> (notify에 세션 ID가 없어 rollout에서 추출)
-//   - gemini: agy --conversation <id> (agy 대화만 — stock Gemini CLI는 재개 CLI가 없다)
-func resumeCommand(a *state.Agent) (string, error) {
-	switch a.Kind {
-	case "claude":
-		if a.SessionID == "" {
-			return "", fmt.Errorf("session_id가 기록되지 않은 claude 세션입니다")
-		}
-		return fmt.Sprintf("claude --resume %s", a.SessionID), nil
-	case "codex":
-		if a.CWD == "" {
-			return "", fmt.Errorf("cwd가 없는 codex 세션입니다")
-		}
-		sid := usage.CodexSessionID(usage.CodexSessionsRoot(), a.CWD)
-		if sid == "" {
-			return "", fmt.Errorf("codex rollout에서 세션을 못 찾았습니다: %s", a.CWD)
-		}
-		return fmt.Sprintf("codex resume %s", sid), nil
-	case "gemini":
-		if a.SessionID == "" {
-			return "", fmt.Errorf("대화 ID가 기록되지 않은 gemini 세션입니다")
-		}
-		// agy 대화인지 확인 — brain 폴더가 있으면 agy, 없으면 stock CLI(재개 불가)
-		brain := filepath.Join(usage.GeminiDir(), "antigravity-cli", "brain", a.SessionID)
-		if _, err := os.Stat(brain); err != nil {
-			return "", fmt.Errorf("stock Gemini CLI 세션은 CLI 재개를 지원하지 않습니다 (agy 대화만 가능)")
-		}
-		return fmt.Sprintf("agy --conversation %s", a.SessionID), nil
+// runRestore: agentlayer restore [--resume] [--dry-run]
+// 재부팅으로 사라진 tmux 배치를 죽은 레코드로 재구성한다.
+func runRestore(args []string) error {
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return err
 	}
-	return "", fmt.Errorf("%s 종류는 resume을 지원하지 않습니다", a.Kind)
+	// tmux 현실과 먼저 동기화 — 서버가 아예 없으면(재부팅 직후) 저장된
+	// 레코드가 전부 DEAD로 떨어져 그대로 복원 대상이 된다.
+	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
+		_ = scan.Sync(st, panes, time.Now())
+	}
+	return cli.RunRestore(os.Stdout, st, tmuxx.Tmux{}, args)
 }

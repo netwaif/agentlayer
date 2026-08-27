@@ -67,6 +67,44 @@ func TestListPanesIntegration(t *testing.T) {
 	}
 }
 
+// 통합: restore가 쓰는 세션·window 생성 프리미티브.
+func TestRestorePrimitivesIntegration(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux 없음")
+	}
+	sock := fmt.Sprintf("agentlayer-test-restore-%d", os.Getpid())
+	tm := Tmux{Args: []string{"-L", sock}}
+	t.Cleanup(func() { exec.Command("tmux", "-L", sock, "kill-server").Run() })
+
+	if tm.HasSession("ai") {
+		t.Fatal("서버도 없는데 세션이 있다고 함")
+	}
+	pane, err := tm.NewSession("ai", os.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pane == "" {
+		t.Error("새 세션의 pane ID를 돌려줘야 함")
+	}
+	if !tm.HasSession("ai") {
+		t.Error("만든 세션을 감지해야 함")
+	}
+	if tm.HasSession("a") {
+		t.Error("접두 매칭 금지 — 이름 완전 일치만")
+	}
+	pane2, err := tm.NewWindowIn("ai", "w2", os.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pane2 == "" || pane2 == pane {
+		t.Errorf("새 window의 고유 pane ID: %q vs %q", pane2, pane)
+	}
+	panes, err := tm.ListPanes()
+	if err != nil || len(panes) != 2 {
+		t.Errorf("pane 2개여야 함: %+v (%v)", panes, err)
+	}
+}
+
 func TestPickLatestClient(t *testing.T) {
 	out := "1787580000\t/dev/ttys003\n1787581234\t/dev/ttys007\n1787580500\t/dev/ttys001\n"
 	if got := pickLatestClient(out); got != "/dev/ttys007" {

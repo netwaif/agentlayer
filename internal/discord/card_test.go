@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/starter"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/usage"
 )
@@ -30,24 +31,38 @@ func fixturePayload() *usage.Payload {
 	}}
 }
 
-func fixtureAgents() ([]*state.Agent, map[string]usage.CtxInfo) {
+func fixtureData() CardData {
 	agents := []*state.Agent{
 		{ID: "claude-7", Kind: "claude", State: state.StateWaiting, Task: "승인 대기",
 			Tmux: state.TmuxRef{Session: "collab-bot"}, CWD: "/Users/soonho/ai-folder/collab",
-			StateSince: t0.Add(-8 * time.Minute)},
+			StateSince: t0.Add(-8 * time.Minute), UpdatedAt: t0.Add(-8 * time.Minute)},
+		// WORK인데 갱신이 오래 끊김 → 정체 의심 "작업중?"
+		{ID: "codex-3", Kind: "codex", State: state.StateWorking,
+			Tmux: state.TmuxRef{Session: "codex-bridge"}, CWD: "/Users/soonho/bridge",
+			StateSince: t0.Add(-2 * time.Hour), UpdatedAt: t0.Add(-2 * time.Hour)},
 		{ID: "claude-9", Kind: "claude", State: state.StateDead,
 			CWD: "/Users/soonho/gone", StateSince: t0.Add(-time.Hour)},
 	}
 	// 에이전트 ID 키 — 같은 폴더의 다른 종류 에이전트와 오귀속되지 않게
 	ctx := map[string]usage.CtxInfo{
-		"claude-7": {Model: "Opus 5 (1M context)", UsedPct: pf(16)},
+		"claude-7": {Model: "Opus 5 (1M context)", UsedPct: pf(16), TS: t0.Add(-3 * time.Minute)},
 	}
-	return agents, ctx
+	return CardData{
+		Pay:    fixturePayload(),
+		Agents: agents,
+		Ctx:    ctx,
+		Wired:  map[string]string{"/Users/soonho/ai-folder/collab": "⌁collab방"},
+		Branches: map[string]string{
+			"/Users/soonho/ai-folder/collab": "agent/fix-card"},
+		DefModels: map[string]string{"claude": "claude-fable-5", "codex": "gpt-5.6-sol"},
+		Tasks:     []starter.Task{{Name: "hwpx-tag", Status: "진행중"}},
+		Home:      "/Users/soonho",
+	}
 }
 
-func TestBuildComponents(t *testing.T) {
-	agents, ctx := fixtureAgents()
-	comps := BuildComponents(fixturePayload(), agents, ctx, map[string]string{"/Users/soonho/ai-folder/collab": "⌁collab방"}, "/Users/soonho", t0)
+func TestBuildCard(t *testing.T) {
+	d := fixtureData()
+	comps := BuildCard(d, t0)
 	b, err := json.Marshal(comps)
 	if err != nil {
 		t.Fatal(err)
@@ -60,6 +75,20 @@ func TestBuildComponents(t *testing.T) {
 		"### 에이전트", "~/ai-folder/collab", "Opus 5 (1M context)", "응답 필요", "8분",
 		"갱신 \\u003ct:", // json.Marshal이 <를 이스케이프 — Discord는 정상 해석
 		"⌁collab방",
+		// TUI 동등 정보
+		"collab-bot",              // tmux 세션 이름
+		"승인 대기",                 // TASK
+		"⎇ agent/fix-card",        // worktree 브랜치
+		"작업중?",                  // WORK 정체 의심
+		"ctx 16%",                 // 게이지 대신 텍스트
+		"3분",                     // ctx 스냅샷 나이
+		"응답 필요 1",              // 상태 집계 요약
+		"기본모델",                 // 기본모델 라인
+		"⚠",                       // claude 기본이 Fable → 경고
+		"gpt-5.6-sol",             // codex 기본모델
+		"Gemini 자동",              // 미설정 = 자동
+		"MultiAgent", "hwpx-tag(진행중)",
+		"── claude", "── codex", // 종류 그룹 구분선
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("카드에 %q 있어야 함", want)
@@ -75,11 +104,17 @@ func TestBuildComponents(t *testing.T) {
 	}
 }
 
-func TestBuildComponentsNoUsage(t *testing.T) {
-	agents, ctx := fixtureAgents()
-	comps := BuildComponents(nil, agents, ctx, nil, "/Users/soonho", t0)
-	b, _ := json.Marshal(comps)
-	if !strings.Contains(string(b), "### 에이전트") {
+// 에이전트 행에는 게이지 막대를 그리지 않는다 — Discord 폰트에서 격자로
+// 깨져 보이고, TUI도 행에는 "ctx N%" 텍스트만 쓴다 (게이지는 provider 창 전용).
+func TestBuildCardAgentRowsHaveNoGauge(t *testing.T) {
+	d := fixtureData()
+	d.Pay = nil // provider 컨테이너 제외하고 에이전트 섹션만
+	b, _ := json.Marshal(BuildCard(d, t0))
+	out := string(b)
+	if strings.Contains(out, "█") || strings.Contains(out, "░") {
+		t.Error("에이전트 섹션에 게이지 막대가 있으면 안 됨")
+	}
+	if !strings.Contains(out, "### 에이전트") {
 		t.Error("coach 없이도 에이전트 섹션은 나옴")
 	}
 }

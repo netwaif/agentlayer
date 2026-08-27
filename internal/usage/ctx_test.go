@@ -89,6 +89,48 @@ func TestAgentCtxNoCrossKindShadow(t *testing.T) {
 	}
 }
 
+// 스냅샷 파일명이 곧 Claude session_id — 파일명 키로도 찾을 수 있어야
+// 같은 폴더에 세션이 여럿일 때 정확히 귀속된다.
+func TestLoadSnapshotsSessionIDKey(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "sid-old.json"),
+		`{"cwd":"/w","project_dir":"/w","model":"Opus 5","used":3,"ts":100}`)
+	writeFile(t, filepath.Join(dir, "sid-new.json"),
+		`{"cwd":"/w","project_dir":"/w","model":"Fable 5","used":20,"ts":200}`)
+	m := LoadSnapshots(dir)
+	if m["sid-old"].Model != "Opus 5" || m["sid-new"].Model != "Fable 5" {
+		t.Errorf("session_id 키: %+v", m)
+	}
+	if m["/w"].Model != "Fable 5" {
+		t.Errorf("폴더 키는 최신 승자 유지: %+v", m["/w"])
+	}
+}
+
+// 같은 폴더의 claude 두 세션은 각자 자기 session_id 스냅샷을 가진다
+// (폴더 키만 쓰면 최신 세션 정보가 옛 세션 행에 오귀속 — restore-lab 실사례).
+func TestAgentCtxSessionIDBeatsFolder(t *testing.T) {
+	agents := []*state.Agent{
+		{ID: "claude-1", Kind: "claude", CWD: "/w", SessionID: "sid-old"},
+		{ID: "claude-2", Kind: "claude", CWD: "/w", SessionID: "sid-new"},
+		{ID: "claude-3", Kind: "claude", CWD: "/w", SessionID: "sid-unknown"},
+	}
+	snaps := map[string]CtxInfo{
+		"/w":      {Model: "Fable 5"},
+		"sid-old": {Model: "Opus 5"},
+		"sid-new": {Model: "Fable 5"},
+	}
+	out := AgentCtx(agents, snaps, t.TempDir(), t.TempDir())
+	if out["claude-1"].Model != "Opus 5" {
+		t.Errorf("옛 세션은 자기 스냅샷: %+v", out["claude-1"])
+	}
+	if out["claude-2"].Model != "Fable 5" {
+		t.Errorf("새 세션도 자기 스냅샷: %+v", out["claude-2"])
+	}
+	if out["claude-3"].Model != "Fable 5" {
+		t.Errorf("스냅샷 없는 세션은 폴더 키 폴백: %+v", out["claude-3"])
+	}
+}
+
 func TestCodexSessionID(t *testing.T) {
 	root := t.TempDir()
 	head := `{"timestamp":"2026-08-26T00:00:00Z","type":"session_meta","payload":{"session_id":"01a03b74-0823-7450","id":"01a03b74-0823-7450","cwd":"/Users/x/codexproj"}}

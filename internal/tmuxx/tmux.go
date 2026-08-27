@@ -171,6 +171,32 @@ func (t Tmux) NewWindow(name, dir, command string) error {
 	return err
 }
 
+// HasSession은 정확히 그 이름의 세션이 있는지 ("="접두 = 완전 일치 매칭).
+func (t Tmux) HasSession(name string) bool {
+	_, err := t.run("has-session", "-t", "="+name)
+	return err == nil
+}
+
+// NewSession은 detached 세션을 만들고 첫 pane의 ID를 돌려준다.
+// 명령은 넣지 않는다 — 셸을 띄운 뒤 SendText로 입력해야 명령 종료 후에도
+// window가 살아남고, 사용자 셸 환경(PATH 등)도 그대로 탄다.
+func (t Tmux) NewSession(name, dir string) (string, error) {
+	out, err := t.run("new-session", "-d", "-s", name, "-c", dir, "-P", "-F", "#{pane_id}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// NewWindowIn은 지정 세션에 window를 만들고 pane ID를 돌려준다.
+func (t Tmux) NewWindowIn(session, name, dir string) (string, error) {
+	out, err := t.run("new-window", "-t", session+":", "-n", name, "-c", dir, "-P", "-F", "#{pane_id}")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // SendText는 pane에 텍스트를 입력하고 Enter를 보낸다.
 // 에이전트 입력창에 지시를 넣는 용도 — 임의 키 시퀀스는 보내지 않는다.
 func (t Tmux) SendText(paneID, text string) error {
