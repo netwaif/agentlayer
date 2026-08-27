@@ -9,6 +9,12 @@ builds:
     env: [CGO_ENABLED=0]
     goos: [darwin]
     goarch: [amd64, arm64]
+    # `agentlayer version`이 읽는 값 — 기본값에 기대지 않고 명시한다
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.FullCommit}}
+      - -X main.date={{.Date}}
 
 archives:
   - id: default
@@ -25,6 +31,7 @@ brews:
     description: "iTerm2+tmux 멀티 에이전트 관제탑 — 상태·알림·worktree"
     license: MIT
     test: |
+      system "#{bin}/agentlayer", "version"
       system "#{bin}/agentlayer", "status", "--json"
 
 checksum:

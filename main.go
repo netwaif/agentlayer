@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -26,6 +27,15 @@ import (
 	"github.com/netwaif/agentlayer/internal/usage"
 	"github.com/netwaif/agentlayer/internal/wiring"
 	"github.com/netwaif/agentlayer/internal/wt"
+)
+
+// 빌드 시 주입되는 버전 정보. goreleaser 기본 ldflags가
+// -X main.version / main.commit / main.date 로 채운다.
+// 로컬 go build에서는 비어 있고 debug.ReadBuildInfo로 폴백한다.
+var (
+	version string
+	commit  string
+	date    string
 )
 
 func main() {
@@ -56,6 +66,9 @@ func run(args []string) error {
 		return runInfo(args[1:])
 	case "wake-all", "close-all", "broadcast":
 		return runAll(args[0], args[1:])
+	case "version", "--version", "-v":
+		fmt.Println(cli.FormatVersion(buildVersion()))
+		return nil
 	case "wt":
 		st, err := state.NewStore(state.DefaultDir())
 		if err != nil {
@@ -66,8 +79,42 @@ func run(args []string) error {
 		}
 		return cli.RunWT(os.Stdout, state.DefaultDir(), st, tmuxx.Tmux{}, args[1:])
 	default:
-		return fmt.Errorf("알 수 없는 명령: %s", args[0])
+		return fmt.Errorf("알 수 없는 명령: %s\n사용 가능: status, info, card, init, resume, restore, wake-all, close-all, broadcast, wt, version (인자 없이 실행하면 TUI)", args[0])
 	}
+}
+
+// buildVersion은 ldflags 주입값을 우선 쓰고, 비어 있으면
+// 모듈 빌드 정보(go install·로컬 go build의 vcs 스탬프)로 채운다.
+func buildVersion() cli.VersionInfo {
+	v := cli.VersionInfo{Version: version, Commit: commit, Date: date}
+	bi, ok := debug.ReadBuildInfo()
+	if !ok {
+		return v
+	}
+	// 커밋이 ldflags로 왔으면 build info의 dirty 표시를 덧붙이지 않는다.
+	commitFromBuildInfo := v.Commit == ""
+	dirty := false
+	for _, set := range bi.Settings {
+		switch set.Key {
+		case "vcs.revision":
+			if v.Commit == "" {
+				v.Commit = set.Value
+			}
+		case "vcs.time":
+			if v.Date == "" {
+				v.Date = set.Value
+			}
+		case "vcs.modified":
+			dirty = set.Value == "true"
+		}
+	}
+	if v.Version == "" && cli.IsReleaseVersion(bi.Main.Version) {
+		v.Version = bi.Main.Version // go install <tag> 경로
+	}
+	if dirty && commitFromBuildInfo && v.Commit != "" {
+		v.Commit += "+dirty"
+	}
+	return v
 }
 
 // runTUI는 기본 명령: 관제 TUI를 연다.
