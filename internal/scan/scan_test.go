@@ -139,6 +139,52 @@ func TestSyncPurgesOldDead(t *testing.T) {
 	}
 }
 
+func TestSyncPurgesDeadSupersededByRevivedSession(t *testing.T) {
+	// 재부팅 후 브리지 LaunchAgent가 restore를 거치지 않고 같은 세션명·cwd로
+	// 새 pane을 띄우면(코덱스 브리지 실사례), 옛 DEAD 레코드는 이중 행으로
+	// 남는다 — 같은 kind·세션·cwd의 살아있는 pane이 있으면 즉시 정리해야 함.
+	st := newStore(t)
+	dead := &state.Agent{ID: "codex-4", Kind: "codex", State: state.StateDead,
+		Tmux: state.TmuxRef{Session: "codex-live", Window: 0, PaneID: "%4"},
+		CWD:  "/Users/soonho/ai-folder/codex-discord-workspace",
+		UpdatedAt: t0, StateSince: t0}
+	if err := st.Save(dead); err != nil {
+		t.Fatal(err)
+	}
+	revived := tmuxx.Pane{Session: "codex-live", Window: 0, PaneID: "%9",
+		Command: "codex", Path: "/Users/soonho/ai-folder/codex-discord-workspace"}
+	if err := Sync(st, []tmuxx.Pane{revived}, t0.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.List()
+	if len(got) != 1 {
+		t.Fatalf("살아있는 레코드 1개만 남아야 함: %d개 %+v", len(got), got)
+	}
+	if got[0].ID != "codex-9" || got[0].State == state.StateDead {
+		t.Errorf("옛 DEAD는 정리되고 새 레코드만: %+v", got[0])
+	}
+}
+
+func TestSyncKeepsDeadWithoutLiveReplacement(t *testing.T) {
+	// 대체 pane이 없는 DEAD는 기존대로 24h 보존 (restore 대상)
+	st := newStore(t)
+	dead := &state.Agent{ID: "codex-4", Kind: "codex", State: state.StateDead,
+		Tmux: state.TmuxRef{Session: "codex-live", Window: 0, PaneID: "%4"},
+		CWD:  "/Users/soonho/ai-folder/codex-discord-workspace",
+		UpdatedAt: t0, StateSince: t0}
+	if err := st.Save(dead); err != nil {
+		t.Fatal(err)
+	}
+	// 다른 세션의 다른 kind pane만 존재
+	if err := Sync(st, []tmuxx.Pane{claudePane()}, t0.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.List()
+	if len(got) != 2 {
+		t.Fatalf("무관한 pane으로 DEAD가 지워지면 안 됨: %d개 %+v", len(got), got)
+	}
+}
+
 func TestSyncMatchesHookCreatedRecordBySessionCoords(t *testing.T) {
 	// hook이 tmux 좌표 기반 ID로 먼저 레코드를 만든 경우 스캐너가 중복 생성하면 안 됨
 	st := newStore(t)

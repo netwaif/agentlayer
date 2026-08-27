@@ -65,7 +65,13 @@ func Sync(st *state.Store, panes []tmuxx.Pane, now time.Time) error {
 		byID[a.ID] = a
 	}
 
+	// kind|세션|cwd 키 — restore 없이 밖에서(예: 브리지 LaunchAgent) 같은 자리에
+	// 되살린 세션을 식별해, 옛 DEAD 레코드의 이중 행을 정리하는 데 쓴다.
+	liveSlot := func(kind, session, cwd string) string {
+		return kind + "|" + session + "|" + cwd
+	}
 	alive := make(map[string]bool)
+	occupied := make(map[string]bool)
 	for _, p := range panes {
 		kind := DetectKind(p)
 		if kind == "" {
@@ -73,6 +79,7 @@ func Sync(st *state.Store, panes []tmuxx.Pane, now time.Time) error {
 		}
 		id := AgentID(kind, p)
 		alive[id] = true
+		occupied[liveSlot(kind, p.Session, p.Path)] = true
 		a, ok := byID[id]
 		if !ok {
 			a = &state.Agent{ID: id, Kind: kind, State: state.StateIdle,
@@ -96,6 +103,11 @@ func Sync(st *state.Store, panes []tmuxx.Pane, now time.Time) error {
 			continue
 		}
 		switch {
+		case a.State == state.StateDead && occupied[liveSlot(a.Kind, a.Tmux.Session, a.CWD)]:
+			// 같은 자리에 산 pane이 있다 — 세션이 밖에서 부활함. 이중 행 즉시 정리
+			if err := st.Delete(a.ID); err != nil {
+				return err
+			}
 		case a.State == state.StateDead && now.Sub(a.StateSince) > deadRetention:
 			if err := st.Delete(a.ID); err != nil {
 				return err
