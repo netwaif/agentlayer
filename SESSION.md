@@ -15,21 +15,23 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.0.0 배포 완료** (08-26): https://github.com/netwaif/agentlayer 공개 + 릴리즈(darwin amd64/arm64)
-+ brew tap 반영(`brew install netwaif/tap/agentlayer`). 3사(claude·codex·gemini/agy) 완전 편입 상태.
-전체 조망은 `agentlayer-handoff-2026-08-26.md` 참조. 영상 세션에 핸드오프 문서
-+ 킬러 데모 5종 + 촬영 가이드(더미 세션 구성·W 안전 절차) 전달 완료 — 후속 질문 응대만 남음.
-**brew 설치 실검증 통과** (08-26, 이 Mac CLT 16.2 갱신 후 install→status 실행까지 확인, 검증 후 uninstall).
-로컬은 계속 make install 사용. TUI 리사이즈 잘림 수정(가로 클램프+세로 스크롤) 완료·커밋됨.
-Discord 대시보드 카드는 새 서버로 이전 완료(웹훅 교체). 미커밋 변경 없음.
+v1.0.0 위에 기능 3종 추가·커밋 완료(340e7fd, **미push·미릴리즈**): ① Discord 카드 이벤트
+구동 갱신(hook 전이 → 2~3초 내 게시) ② 카드 표시 TUI 동등화 ③ `restore` 서브커맨드
+(재부팅 후 tmux 배치 재구성, `--resume`이면 대화까지 부활). ctx 오귀속 버그 수정 포함.
+make install 반영됨. restore-lab 실험으로 죽이기→부활 전 사이클 검증 완료.
+사용자가 workspace=세션 개념으로 폴더별 tmux 세션 분리 정리함(agentlayer dev·agentlayer youtube 등).
+사용자 실재부팅 테스트 예정. brew 배포본은 아직 v1.0.0.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. 영상 세션 후속 질문 응대 — 촬영 중 기술 확인, Orca 실측 요청 오면 사용자 승인 먼저
-2. 실사용 피드백 수렴 — Discord 카드 안정성(새 서버 웹훅), Codex 재시작 후 turn-complete(DONE) 감지 재확인
-3. `version` 서브커맨드 추가 검토 — brew 사용자가 `agentlayer version` 시도하면 "알 수 없는 명령" (실검증 중 발견)
-4. 보류 아이디어: MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용)
+1. 사용자 재부팅 실테스트 지원 — 절차: `restore --dry-run` 확인 → 마감했으면 `restore`+`wake-all`,
+   못 했으면 `restore --resume`. 피드백 수렴(예: restore 개별 선택 `restore <id>` 필요성)
+2. push + v1.1.0 릴리즈 검토 — 새 기능 3종을 brew 사용자에게 배포 (goreleaser, 사용자 승인 먼저)
+3. 영상 세션 후속 질문 응대 — 촬영 중 기술 확인, Orca 실측 요청 오면 사용자 승인 먼저
+4. `version` 서브커맨드 추가 검토 — brew 사용자가 `agentlayer version` 시도하면 "알 수 없는 명령"
+5. 보류 아이디어: MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용),
+   provider 게이지 막대도 거슬리면 텍스트화
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -67,6 +69,13 @@ Discord 대시보드 카드는 새 서버로 이전 완료(웹훅 교체). 미�
 - 2026-08-26 Discord 대시보드 채널 새 서버 이전: 웹훅은 채널 종속이라 이전 불가 → 새 채널(1542162018596036660) 웹훅으로 `~/.config/agentlayer/config.json` 교체 + `discord-card.json` message_id 리셋(옛 채널 메시지 무효) → `agentlayer card` 게시·채널 확인. LaunchAgent는 같은 설정을 읽어 그대로 동작
 - 2026-08-26 TUI 리사이즈 잘림 수정: bubbletea(altscreen)는 폭 초과 줄을 안 잘라줘 터미널 래핑→화면 깨짐. View()=viewBody()+clampLines(x/ansi.Truncate, ANSI 폭 계산·리셋 후행)로 가로 클램프, 목록은 listWindow(커서 추적 스크롤, capacity=height-10, "↑/↓ N줄 더" 표시)로 세로 해결. previewHeight와 상수 공유
 - 2026-08-26 미리보기 가로 잘림은 agentlayer 문제 아님 — headless 생성 tmux 세션이 기본 80x24라 원본 pane이 80칸(claude-discord 실사례). resize-window -x 212 -y 51 즉시 적용 + `~/.tmux.conf`에 `set -g default-size 212x50` 영구 설정으로 해결
+- 2026-08-27 카드 갱신 이벤트 구동으로 전환("5분 지연·색 불명·실황 불일치" 피드백): hook 전이(prev≠to) 시 detached `card --event` 발사, dirty(card.dirty)+flock(card.lock) single-flight 코얼레싱, 게시 중 온 트리거는 루프 재게시로 수습. --event는 usage 캐시 24h 허용(콜드 coach 금지) — usage 최신화·하트비트는 기존 5분 LaunchAgent가 계속 담당
+- 2026-08-27 카드=TUI 동등 정보 원칙(BuildComponents→CardData/BuildCard): 상태 집계·기본모델 3사(Fable ⚠)·MultiAgent·세션 이름·TASK·⎇브랜치·ctx 나이·종류 구분선·WORK 정체 "작업중?". 에이전트 행 게이지 막대 금지 — Discord 폰트에서 격자로 깨짐, ctx N% 텍스트로 (provider 창 게이지는 유지)
+- 2026-08-27 workspace=tmux 세션 개념 확정(window 아님) — 사용자가 폴더별 세션으로 재정리(agentlayer dev·agentlayer youtube). 재부팅 시 tmux 서버가 메모리라 전멸하는 문제는 restore로 해결
+- 2026-08-27 restore 절충 확정(8-25 "resume 비상 축소" 결정과 정합): 기본=죽은 레코드로 배치 재구성+새 CLI 기동+wake-all 재정박(컨텍스트 깨끗), `--resume`=마감 못 한 죽음(강제 재부팅·정전) 구조용으로 대화째 부활(claude --resume/codex resume/agy --conversation). 기동 명령은 pane 셸에 SendText — 명령 종료 후에도 window 생존+사용자 셸 환경 승계
+- 2026-08-27 restore 세부: 대상=Sync 후 DEAD만, 같은 window 분할 pane은 대표 1개, 폴더·세션명 없으면 사유와 건너뜀, 성공 시 원본 dead 레코드 즉시 삭제(status 이중 행 방지). DEAD는 재부팅/의도적 닫기 구분 불가 → 평상시엔 dry-run 먼저 권장
+- 2026-08-27 ctx 스냅샷 파일명=Claude session_id 발견 → LoadSnapshots가 sid 키도 등록, AgentCtx claude는 sid 우선·폴더 키 폴백 — 같은 폴더 두 claude 세션(restore-lab Opus vs 본세션 Fable)의 모델·ctx 오귀속 수정
+- 2026-08-27 agentlayer는 tmux만 필수(iTerm2 무관) — 코드에 iTerm2 의존 없음, osascript는 macOS 내장, coach·lazygit은 선택
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -100,3 +109,10 @@ Discord 대시보드 카드는 새 서버로 이전 완료(웹훅 교체). 미�
 - `go.mod` charmbracelet/x/ansi 직접 의존성 승격
 - 시스템 상태 추가: `~/.tmux.conf` 끝에 default-size 212x50, `~/.config/agentlayer/config.json` 새 서버 웹훅
 - 외부: 테스트 체크리스트 Artifact https://claude.ai/code/artifact/3cd3ee37-9863-462e-8ca4-603cae896ba4
+- `internal/discord/coalesce.go` RunCoalesced(card.dirty 선기록→card.lock flock NB→dirty 소진 루프), coalesce_test.go 3종
+- `internal/discord/card.go` CardData·BuildCard·agentsContainer 재작성, summaryLine·defaultModelsLine·tasksLine·truncateRunes
+- `internal/cli/restorecmd.go` PlanRestore·RestorePlan/RestoreItem·RunRestore(--resume·--dry-run)·freshCommand·ResumeCommand(main.go에서 이동)
+- `internal/tmuxx/tmux.go` HasSession("=" 완전일치)·NewSession·NewWindowIn(-P -F pane_id 반환)
+- `internal/usage/ctx.go` LoadSnapshots에 파일명(sid) 키 추가, AgentCtx claude sid 우선 매칭
+- `main.go` runCard --event/publishCard 분리(usageMaxAge 인자), runHook 전이 시 detached 발사(defer), runRestore 배선, cli.ResumeCommand 호출로 교체
+- 테스트: `internal/cli/restorecmd_test.go`(계획 7종+RunRestore 통합), `internal/tmuxx/tmux_test.go` TestRestorePrimitivesIntegration, `internal/usage/ctx_test.go` sid 키 2종, `internal/discord/card_test.go` TUI 동등 항목 검증
