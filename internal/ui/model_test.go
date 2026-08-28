@@ -35,6 +35,7 @@ func fixtureModel(t *testing.T) Model {
 	m := New(st, tmuxx.Tmux{})
 	m.agents = agents
 	m.now = t0
+	m.insideTmux = true // 기존 테스트는 tmux 안 동작(점프) 기준. 밖 동작은 개별 테스트가 끈다
 	return m
 }
 
@@ -226,3 +227,39 @@ func TestNoticeClearsOnNextKey(t *testing.T) {
 	}
 }
 
+// tmux 밖에서 enter는 TUI를 끝내지 않고(점프 금지) attach 경로로 가야 한다.
+// 남의 tmux 클라이언트(iMac iTerm2)를 전환시키는 부작용이 없어야 한다.
+func TestEnterOutsideTmuxAttachesInsteadOfJump(t *testing.T) {
+	m := fixtureModel(t)
+	m.insideTmux = false
+	m.cursor = 1 // DONE_UNREAD 행
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("enter가 아무 cmd도 안 냈다")
+	}
+	// 읽음 처리는 tmux 안팎 공통
+	a, err := m.store.Load("claude-3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.State != state.StateIdle {
+		t.Errorf("enter 후에도 읽음 처리가 안 됐다: %s", a.State)
+	}
+}
+
+// attach에서 돌아오면(detach) TUI는 종료가 아니라 새로고침으로 살아 있어야 한다.
+func TestAttachDoneRefreshesInsteadOfQuit(t *testing.T) {
+	m := fixtureModel(t)
+	next, cmd := m.Update(attachDoneMsg{})
+	m = next.(Model)
+	if cmd == nil {
+		t.Fatal("attach 복귀 후 cmd가 없다")
+	}
+	if msg := cmd(); msg != nil {
+		if _, quit := msg.(tea.QuitMsg); quit {
+			t.Error("attach 복귀가 TUI를 종료시킨다")
+		}
+	}
+}

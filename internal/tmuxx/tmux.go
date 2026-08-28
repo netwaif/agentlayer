@@ -132,6 +132,18 @@ func (t Tmux) JumpTo(r Ref) error {
 	return err
 }
 
+// AttachArgv는 "이 터미널로 세션에 들어가기" 인자 — 창·pane 포커스까지
+// 한 tmux 호출로 체이닝한다(";"는 tmux 명령 구분자). 세션명은 완전일치("=").
+// TUI가 tmux 밖(ssh 직접 실행 등)에서 enter를 받았을 때 쓴다:
+// switch-client는 남의 클라이언트를 전환시키므로 밖에서는 attach가 맞다.
+func AttachArgv(r Ref) []string {
+	return []string{
+		"select-window", "-t", fmt.Sprintf("%s:%d", r.Session, r.Window), ";",
+		"select-pane", "-t", r.PaneID, ";",
+		"attach-session", "-t", "=" + r.Session,
+	}
+}
+
 // activeClient는 가장 최근 활동한 클라이언트 이름. 없으면 빈 문자열.
 func (t Tmux) activeClient() string {
 	out, err := t.run("list-clients", "-F", "#{client_activity}\t#{client_name}")

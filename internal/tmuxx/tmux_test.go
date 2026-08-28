@@ -117,3 +117,22 @@ func TestPickLatestClient(t *testing.T) {
 		t.Errorf("불량 줄 무시: %q", got)
 	}
 }
+
+// attach argv는 포커스(select-window·select-pane)까지 한 tmux 호출로 체이닝하고,
+// 세션명은 완전일치("=")로 붙어야 한다 — 접두 일치 오폭 방지.
+func TestAttachArgvExactMatch(t *testing.T) {
+	got := AttachArgv(Ref{Session: "agentlayer dev", Window: 1, PaneID: "%7"})
+	want := []string{
+		"select-window", "-t", "agentlayer dev:1", ";",
+		"select-pane", "-t", "%7", ";",
+		"attach-session", "-t", "=agentlayer dev",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("argv 길이: got %v want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("argv[%d]: got %q want %q", i, got[i], want[i])
+		}
+	}
+}

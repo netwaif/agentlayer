@@ -57,6 +57,9 @@ type jumpDoneMsg struct{ err error }
 // gitDoneMsg는 lazygit에서 돌아온 뒤 새로고침 신호.
 type gitDoneMsg struct{ err error }
 
+// attachDoneMsg는 tmux attach(밖에서 enter)에서 detach로 돌아온 신호.
+type attachDoneMsg struct{ err error }
+
 // previewMsg는 선택 pane 화면 미리보기.
 type previewMsg struct {
 	paneID  string
@@ -78,6 +81,7 @@ type Model struct {
 	infoText     string // 상세 카드 렌더 결과
 	pendingCmd   string // "wake"|"close": y 확인 대기 중
 	notice       string // 하단 안내줄 (에러 아님)
+	insideTmux   bool   // false면 enter가 점프 대신 attach (tmux 밖 ssh 실행 등)
 	preview      string // 선택 pane 화면 미리보기
 	previewPane  string
 	usagePay     *usage.Payload
@@ -102,6 +106,7 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 	}
 	home, _ := os.UserHomeDir()
 	return Model{store: st, tm: tm, now: time.Now(),
+		insideTmux:  os.Getenv("TMUX") != "",
 		coachRunner: usage.CoachRunner,
 		snapshotDir: usage.SnapshotsDir(),
 		codexRoot:   usage.CodexSessionsRoot(),
@@ -218,6 +223,15 @@ func (m Model) jumpCmd(a *state.Agent) tea.Cmd {
 	}
 }
 
+// attachCmd는 tmux 밖 실행용 enter — 이 터미널을 대상 세션에 attach한다.
+// detach(C-b d)로 돌아오면 TUI가 이어진다. switch-client 기반 jumpCmd를
+// 밖에서 쓰면 남의 클라이언트(책상 화면)가 전환되므로 반드시 이 경로로.
+func (m Model) attachCmd(a *state.Agent) tea.Cmd {
+	ref := tmuxx.Ref{Session: a.Tmux.Session, Window: a.Tmux.Window, PaneID: a.Tmux.PaneID}
+	c := exec.Command(tmuxx.Bin(), tmuxx.AttachArgv(ref)...)
+	return tea.ExecProcess(c, func(err error) tea.Msg { return attachDoneMsg{err: err} })
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -269,6 +283,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// lazygit에서 커밋 등이 일어났을 수 있으니 즉시 새로고침
 		if msg.err != nil {
 			m.err = fmt.Errorf("lazygit 종료: %v", msg.err)
+		}
+		return m, m.refreshCmd()
+
+	case attachDoneMsg:
+		// detach로 복귀 — TUI는 계속, 상태만 새로고침
+		if msg.err != nil {
+			m.err = fmt.Errorf("attach 종료: %v", msg.err)
 		}
 		return m, m.refreshCmd()
 
@@ -369,6 +390,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				_ = m.store.MarkRead(a.ID, time.Now())
+				if !m.insideTmux {
+					return m, m.attachCmd(a)
+				}
 				return m, m.jumpCmd(a)
 			}
 		}
