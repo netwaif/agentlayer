@@ -298,6 +298,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.notice = "취소했습니다"
 			return m, nil
 		}
+		// notice는 일회성 안내 — 다음 키 입력에서 지운다 (필요한 분기가 다시 설정)
+		m.notice = ""
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
 			return m, tea.Quit
@@ -319,11 +321,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "W": // 모든 세션 이어서하기
 			m.pendingCmd = "wake"
-			m.notice = ""
 			return m, nil
 		case "C": // 모든 세션 마감
 			m.pendingCmd = "close"
-			m.notice = ""
 			return m, nil
 		case "g": // 선택 에이전트 폴더를 lazygit으로 (조작은 lazygit이 정본)
 			if a := m.selected(); a != nil && a.CWD != "" {

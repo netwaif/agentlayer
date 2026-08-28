@@ -203,3 +203,26 @@ func TestViewContainsCoreTokens(t *testing.T) {
 		}
 	}
 }
+
+// 죽은 세션 enter로 뜬 notice는 다음 키 입력(커서 이동 등)에서 사라져야 한다.
+func TestNoticeClearsOnNextKey(t *testing.T) {
+	m := Model{agents: []*state.Agent{
+		{ID: "claude-6", Kind: "claude", State: state.StateDead, SessionID: "sid-6",
+			UpdatedAt: t0, StateSince: t0},
+		{ID: "claude-9", Kind: "claude", State: state.StateWaiting,
+			UpdatedAt: t0, StateSince: t0},
+	}}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if !strings.Contains(m.notice, "resume claude-6") {
+		t.Fatalf("죽은 세션 enter의 notice가 없다: %q", m.notice)
+	}
+
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	m = next.(Model)
+	if m.notice != "" {
+		t.Errorf("커서 이동 후에도 notice 잔류: %q", m.notice)
+	}
+}
+
