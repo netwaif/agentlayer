@@ -79,8 +79,11 @@ type Model struct {
 	showUsage     bool         // u 키: 사용량 전용 뷰
 	showInfo      bool         // i 키: 선택 에이전트 상세 카드
 	infoText      string       // 상세 카드 렌더 결과
-	pendingCmd    string       // "wake"|"close"|"resume": y 확인 대기 중
+	pendingCmd    string       // "wake"|"close"|"resume"|"broadcast": y 확인 대기 중
 	pendingResume *state.Agent // pendingCmd=="resume"일 때 대상
+	broadcastText string       // pendingCmd=="broadcast"일 때 보낼 메시지
+	inputMode     bool         // B 키: 전체지시 메시지 입력 중
+	inputText     string       // 입력 중인 메시지
 	notice        string       // 하단 안내줄 (에러 아님)
 	insideTmux    bool         // false면 enter가 점프 대신 attach (tmux 밖 ssh 실행 등)
 	preview       string       // 선택 pane 화면 미리보기
@@ -96,6 +99,7 @@ type Model struct {
 	activeSession func() string                                            // 활성 클라이언트의 세션
 	hasSession    func(name string) bool                                   // 세션 생존 (완전일치)
 	jumpPane      func(session, pane string) error                         // 세션 전환+창 선택
+	sendAll       func(message string, handoffOnly bool) (int, int, error) // 일괄 전송
 	coachRunner   func() ([]byte, error)
 	snapshotDir   string
 	codexRoot     string
@@ -116,7 +120,10 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 		activeSession: tm.ActiveSession,
 		hasSession:    tm.HasSession,
 		jumpPane:      tm.JumpToSessionPane,
-		coachRunner:   usage.CoachRunner,
+		sendAll: func(message string, handoffOnly bool) (int, int, error) {
+			return cli.SendAll(st, tm, message, handoffOnly)
+		},
+		coachRunner: usage.CoachRunner,
 		snapshotDir:   usage.SnapshotsDir(),
 		codexRoot:     usage.CodexSessionsRoot(),
 		geminiDir:     usage.GeminiDir(),
@@ -352,6 +359,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.refreshCmd()
 
 	case tea.KeyMsg:
+		// 전체지시 입력 중이면 모든 키는 입력 편집으로 (esc 취소·enter 확인 단계)
+		if m.inputMode {
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.inputMode, m.inputText = false, ""
+			case tea.KeyEnter:
+				m.inputMode = false
+				if text := strings.TrimSpace(m.inputText); text != "" {
+					m.broadcastText = text
+					m.pendingCmd = "broadcast"
+				}
+				m.inputText = ""
+			case tea.KeyBackspace:
+				if r := []rune(m.inputText); len(r) > 0 {
+					m.inputText = string(r[:len(r)-1])
+				}
+			case tea.KeySpace:
+				m.inputText += " "
+			case tea.KeyRunes:
+				m.inputText += string(msg.Runes)
+			}
+			return m, nil
+		}
 		// 상세 카드가 떠 있으면 esc는 카드만 닫는다 (TUI 종료 아님)
 		if m.showInfo && msg.String() == "esc" {
 			m.showInfo = false
@@ -369,12 +399,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.notice = "취소했습니다"
 				return m, nil
 			}
+			if cmd == "broadcast" {
+				text := m.broadcastText
+				m.broadcastText = ""
+				if msg.String() == "y" {
+					sent, total, err := m.sendAll(text, false) // broadcast는 전체 대상
+					if err != nil {
+						m.err = err
+					} else {
+						m.notice = fmt.Sprintf("%d/%d 세션에 %q 전송", sent, total, text)
+					}
+					return m, m.refreshCmd()
+				}
+				m.notice = "취소했습니다"
+				return m, nil
+			}
 			if msg.String() == "y" {
 				message := cli.WakeMessage
 				if cmd == "close" {
 					message = cli.CloseMessage
 				}
-				sent, total, err := cli.SendAll(m.store, m.tm, message, true)
+				sent, total, err := m.sendAll(message, true)
 				if err != nil {
 					m.err = err
 				} else {
@@ -411,6 +456,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "C": // 모든 세션 마감
 			m.pendingCmd = "close"
+			return m, nil
+		case "B": // 전체지시 — 임의 메시지 브로드캐스트
+			m.inputMode, m.inputText = true, ""
 			return m, nil
 		case "g": // 선택 에이전트 폴더를 lazygit으로 (조작은 lazygit이 정본)
 			if a := m.selected(); a != nil && a.CWD != "" {

@@ -421,3 +421,75 @@ func TestResumePrefersOriginalSession(t *testing.T) {
 	}
 	_ = next
 }
+
+// B 키는 전체지시 입력 모드를 연다.
+func TestBroadcastKeyOpensInput(t *testing.T) {
+	m := fixtureModel(t)
+	next, _ := m.Update(key("B"))
+	m = next.(Model)
+	if !m.inputMode {
+		t.Fatal("B 키로 입력 모드가 열려야 함")
+	}
+	if v := m.View(); !strings.Contains(v, "메시지") {
+		t.Errorf("입력 프롬프트가 보여야 함:\n%s", v)
+	}
+}
+
+// 입력 모드: 타이핑·공백·백스페이스 반영, esc는 취소.
+func TestBroadcastInputEditingAndCancel(t *testing.T) {
+	m := fixtureModel(t)
+	next, _ := m.Update(key("B"))
+	next, _ = next.(Model).Update(key("헬로"))
+	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeySpace})
+	next, _ = next.(Model).Update(key("고"))
+	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m = next.(Model)
+	if m.inputText != "헬로 " {
+		t.Errorf("입력 편집 결과: %q", m.inputText)
+	}
+	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = next.(Model)
+	if m.inputMode || m.inputText != "" {
+		t.Error("esc는 입력을 취소해야 함")
+	}
+}
+
+// enter → y/n 확인 → y면 전 세션(handoffOnly=false) 전송.
+func TestBroadcastConfirmAndSend(t *testing.T) {
+	m := fixtureModel(t)
+	var gotMsg string
+	var gotHandoff bool
+	m.sendAll = func(message string, handoffOnly bool) (int, int, error) {
+		gotMsg, gotHandoff = message, handoffOnly
+		return 2, 2, nil
+	}
+	next, _ := m.Update(key("B"))
+	next, _ = next.(Model).Update(key("점검"))
+	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if m.pendingCmd != "broadcast" || m.inputMode {
+		t.Fatalf("enter는 확인 대기로 가야 함: %q", m.pendingCmd)
+	}
+	if v := m.View(); !strings.Contains(v, "점검") {
+		t.Errorf("확인 프롬프트에 메시지가 보여야 함:\n%s", v)
+	}
+	next, _ = m.Update(key("y"))
+	m = next.(Model)
+	if gotMsg != "점검" || gotHandoff {
+		t.Errorf("전 세션 전송 인자: %q handoffOnly=%v", gotMsg, gotHandoff)
+	}
+	if !strings.Contains(m.notice, "2/2") {
+		t.Errorf("전송 결과 notice: %q", m.notice)
+	}
+}
+
+// 빈 입력의 enter는 그냥 취소.
+func TestBroadcastEmptyEnterCancels(t *testing.T) {
+	m := fixtureModel(t)
+	next, _ := m.Update(key("B"))
+	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if m.inputMode || m.pendingCmd != "" {
+		t.Error("빈 입력 enter는 취소돼야 함")
+	}
+}

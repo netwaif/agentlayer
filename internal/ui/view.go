@@ -571,7 +571,13 @@ func (m Model) viewBody() string {
 		}
 	}
 
-	if m.pendingCmd == "resume" {
+	if m.inputMode {
+		b.WriteString("\n" + styleTitle.Render("⌨ 전체 전송 메시지: "+m.inputText+"▏") +
+			styleHelp.Render("  enter 확인 · esc 취소"))
+	} else if m.pendingCmd == "broadcast" {
+		b.WriteString("\n" + stateStyles[state.StateWaiting].Render(
+			fmt.Sprintf("⚠ 전 세션에 %q 전송합니다. y 확인 / 다른 키 취소", m.broadcastText)))
+	} else if m.pendingCmd == "resume" {
 		who := ""
 		if m.pendingResume != nil {
 			if who = m.pendingResume.Tmux.Session; who == "" {
@@ -604,7 +610,7 @@ func helpLine(items ...[2]string) string {
 		items = [][2]string{
 			{"j/k", "이동"}, {"enter", "점프+읽음"}, {"o", "읽음"}, {"i", "상세"},
 			{"g", "git"}, {"u", "사용량"}, {"W", "전체기상"}, {"C", "전체마감"},
-			{"r", "새로고침"}, {"q", "종료"},
+			{"B", "전체지시"}, {"r", "새로고침"}, {"q", "종료"},
 		}
 	}
 	parts := make([]string, 0, len(items))
