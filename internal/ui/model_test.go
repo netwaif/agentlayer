@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -335,5 +336,47 @@ func TestResumeConfirmCancel(t *testing.T) {
 	m = next.(Model)
 	if m.pendingCmd != "" || m.pendingResume != nil {
 		t.Error("취소 시 확인 상태가 남으면 안 됨")
+	}
+}
+
+// resume 성공 시 원본 dead 레코드는 즉시 삭제 — status 이중 행 방지
+// (restore와 같은 기준, 2026-08-27 결정).
+func TestResumeDeletesDeadRecord(t *testing.T) {
+	m := fixtureModel(t)
+	dead := &state.Agent{ID: "claude-20", Kind: "claude", State: state.StateDead,
+		SessionID: "sid-20", CWD: "/tmp/w", Tmux: state.TmuxRef{Session: "work"},
+		UpdatedAt: t0, StateSince: t0}
+	if err := m.store.Save(dead); err != nil {
+		t.Fatal(err)
+	}
+	m.agents = []*state.Agent{dead}
+	m.activeSession = func() string { return "cur-sess" }
+	m.spawnWindow = func(session, name, dir, cmd string) (string, error) { return "%99", nil }
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, _ = next.(Model).Update(key("y"))
+	if _, err := next.(Model).store.Load("claude-20"); err == nil {
+		t.Error("resume 성공 후 dead 레코드가 남아 있다")
+	}
+}
+
+// 창 생성 실패 시에는 레코드를 보존해야 다시 시도할 수 있다.
+func TestResumeKeepsRecordOnSpawnFailure(t *testing.T) {
+	m := fixtureModel(t)
+	dead := &state.Agent{ID: "claude-20", Kind: "claude", State: state.StateDead,
+		SessionID: "sid-20", CWD: "/tmp/w", UpdatedAt: t0, StateSince: t0}
+	if err := m.store.Save(dead); err != nil {
+		t.Fatal(err)
+	}
+	m.agents = []*state.Agent{dead}
+	m.activeSession = func() string { return "cur-sess" }
+	m.spawnWindow = func(session, name, dir, cmd string) (string, error) {
+		return "", fmt.Errorf("boom")
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, _ = next.(Model).Update(key("y"))
+	if _, err := next.(Model).store.Load("claude-20"); err != nil {
+		t.Error("창 생성 실패면 레코드를 보존해야 함")
 	}
 }

@@ -497,6 +497,8 @@ func runResume(args []string) error {
 	if err := tm.NewWindow(name, a.CWD, cmd); err != nil {
 		return err
 	}
+	// 이중 행 방지 — 부활 성공한 원본 dead 레코드는 즉시 삭제 (restore·TUI와 동일)
+	_ = st.Delete(id)
 	fmt.Printf("새 window %q에서 대화를 이어갑니다 (%s)\n", name, cli.ShortenHome(a.CWD))
 	return nil
 }

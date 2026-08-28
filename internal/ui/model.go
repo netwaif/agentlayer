@@ -263,6 +263,8 @@ func (m Model) startResume() (tea.Model, tea.Cmd) {
 			m.err = err
 			return m, nil
 		}
+		// 이중 행 방지 — 부활 성공한 원본 dead 레코드는 즉시 삭제 (restore와 동일)
+		_ = m.store.Delete(a.ID)
 		return m, tea.Quit // 새 창이 그 세션에서 활성 — 팝업이 닫히면 그 화면
 	}
 	if a.Tmux.Session != "" && m.tm.HasSession(a.Tmux.Session) {
@@ -270,6 +272,7 @@ func (m Model) startResume() (tea.Model, tea.Cmd) {
 			m.err = err
 			return m, nil
 		}
+		_ = m.store.Delete(a.ID)
 		c := exec.Command(tmuxx.Bin(), "attach-session", "-t", "="+a.Tmux.Session)
 		return m, tea.ExecProcess(c, func(err error) tea.Msg { return attachDoneMsg{err: err} })
 	}
