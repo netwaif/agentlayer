@@ -98,6 +98,17 @@ func GeminiDir() string {
 	return filepath.Join(home, ".gemini")
 }
 
+// GeminiCommand는 gemini kind의 기동 명령. agy(Antigravity CLI) 흔적이 있으면
+// agy — stock gemini CLI의 무료 티어(Gemini Code Assist for individuals) 인증
+// 경로가 닫혀 IneligibleTierError로 거부된다(2026-08 실측). 흔적이 없으면
+// stock CLI 폴백(API 키·Vertex 인증 사용자는 여전히 유효).
+func GeminiCommand() string {
+	if _, err := os.Stat(filepath.Join(GeminiDir(), "antigravity-cli")); err == nil {
+		return "agy"
+	}
+	return "gemini"
+}
+
 var geminiModelRe = regexp.MustCompile(`"model":"([^"]+)"`)
 var geminiTokensRe = regexp.MustCompile(`"tokens":\{[^}]*"total":(\d+)`)
 

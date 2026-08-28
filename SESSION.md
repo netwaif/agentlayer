@@ -18,18 +18,16 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 **v1.2.0 릴리즈 상태 유지.** 오늘(8-29)은 재부팅 후 "어젯밤 상태로 부활 안 됨" 문제를
 추적 — 원인은 tmux-resurrect/continuum(autosave 8/26 14:24부터 고장, 3일 묵은 스냅샷
 부활)이라 ~/.tmux.conf에서 제거하고 재부팅 절차를 agentlayer restore 중심으로 확정.
-**미커밋 1건**: `internal/wt/lifecycle.go` agentCommand gemini→agy
-(stock gemini CLI 무료 티어 인증 UNSUPPORTED_CLIENT 거부) — 검증·커밋 필요.
+촬영 중 Opus의 gemini→agy 핫픽스는 검증(IneligibleTierError 실측) 후
+usage.GeminiCommand 공용화로 재정리·커밋 완료.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. `internal/wt/lifecycle.go` gemini→agy 미커밋 변경 검증(wt new gemini 실기동 확인)
-   후 커밋 — 어느 세션이 왜 고쳤는지 기록 없음, 커밋 메시지에 사유 명시
-2. 촬영 백업 정리: `~/.local/state/agentlayer/agents-backup-filming/` 레코드 3건
+1. 촬영 백업 정리: `~/.local/state/agentlayer/agents-backup-filming/` 레코드 3건
    (claude-1·claude-6·claude-26) 아직 남아 있음 — 복원 불필요 확인되면 폴더째 삭제
-3. `restore <id>` 개별 선택 추가 검토 — restore-lab 무승인 부활 사고로 필요성 실증됨
-4. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드(60칸 미만 컬럼 축소), MultiAgent 패널
+2. `restore <id>` 개별 선택 추가 검토 — restore-lab 무승인 부활 사고로 필요성 실증됨
+3. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드(60칸 미만 컬럼 축소), MultiAgent 패널
    날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용), provider
    게이지 막대 텍스트화
 
@@ -95,6 +93,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-08-28 B 전체지시 TUI 편입(a9ee6bb→87ac4eb): 입력줄→y 확인→SendAll(handoffOnly=false 전체). 입력은 bubbles/textinput(커서 이동·중간 편집·붙여넣기 — 자작 최소 버퍼는 끝 backspace만 돼 교체). W/C·B 전송은 주입점 sendAll 경유(테스트 실전송 차단)
 - 2026-08-28 v1.2.0 릴리즈 완료: 13커밋 push→태그→goreleaser(cask 첫 게시)→tap Formula 삭제(gh api DELETE). deprecated 경고 소멸
 - 2026-08-29 tmux-resurrect/continuum 제거(~/.tmux.conf 주석 처리, .bak-20260829 백업) — continuum autosave가 8/26 14:24부터 고장나 재부팅 시 3일 묵은 스냅샷을 부활시킴 + 8-27 오염 사고 원인. 재부팅 절차 확정: LaunchAgent 봇 자동 기동 → agentlayer restore(--dry-run 먼저) → 전체 기상(wake-all 재정박). 봇 세션은 LaunchAgent 관할이라 restore 대상 아님
+- 2026-08-29 stock gemini CLI 무료 티어 사망 실측(IneligibleTierError: "no longer supported for Gemini Code Assist for individuals" → Antigravity 이관 안내) — 촬영 중 Opus의 lifecycle.go gemini→agy 하드코딩 핫픽스를 usage.GeminiCommand()(antigravity-cli 폴더 흔적→agy, 없으면 stock 폴백 — API 키·Vertex 사용자 유효)로 재정리, wt commandFor·restore freshCommand가 공유. 참고: 이 셸에서 gemini CLI는 PATH에 /usr/sbin 없으면 spawnSync sysctl ENOENT로 오사
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->

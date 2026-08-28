@@ -88,7 +88,8 @@ func PlanRestore(agents []*state.Agent, sessionExists func(string) bool, resume 
 	return plan
 }
 
-// freshCommand는 종류별 새 기동 명령. gemini는 agy 흔적이 있으면 agy.
+// freshCommand는 종류별 새 기동 명령. gemini는 agy 흔적이 있으면 agy
+// (usage.GeminiCommand — wt new와 같은 규칙).
 func freshCommand(a *state.Agent) string {
 	switch a.Kind {
 	case "claude":
@@ -96,10 +97,7 @@ func freshCommand(a *state.Agent) string {
 	case "codex":
 		return "codex"
 	case "gemini":
-		if _, err := os.Stat(filepath.Join(usage.GeminiDir(), "antigravity-cli")); err == nil {
-			return "agy"
-		}
-		return "gemini"
+		return usage.GeminiCommand()
 	}
 	return ""
 }

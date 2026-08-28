@@ -152,3 +152,17 @@ func TestCodexLatestNoMatch(t *testing.T) {
 		t.Errorf("cwd 불일치는 빈 값: %+v", info)
 	}
 }
+
+func TestGeminiCommand(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	if got := GeminiCommand(); got != "gemini" {
+		t.Fatalf("agy 흔적 없음 = stock 폴백이어야: got %q", got)
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".gemini", "antigravity-cli"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := GeminiCommand(); got != "agy" {
+		t.Fatalf("antigravity-cli 흔적 있으면 agy여야: got %q", got)
+	}
+}

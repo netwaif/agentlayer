@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/tmuxx"
+	"github.com/netwaif/agentlayer/internal/usage"
 )
 
 // 에이전트 종류 → 실행 명령. 실행은 pane 안에서 사용자의 셸 환경으로 한다.
@@ -15,6 +16,15 @@ var agentCommand = map[string]string{
 	"claude": "claude",
 	"codex":  "codex",
 	"gemini": "gemini",
+}
+
+// commandFor는 실제 기동 명령을 결정한다. gemini는 환경에 따라 agy/gemini가
+// 갈린다 (restore의 freshCommand와 같은 규칙 — usage.GeminiCommand 공유).
+func commandFor(agent string) string {
+	if agent == "gemini" {
+		return usage.GeminiCommand()
+	}
+	return agentCommand[agent]
 }
 
 // NewOptions는 wt new의 입력.
@@ -71,7 +81,7 @@ func New(stateDir string, o NewOptions) (*Meta, error) {
 		return nil, err
 	}
 	if !o.NoWindow {
-		if err := openWindow(o.Tmux, o.Task, path, agentCommand[o.Agent]); err != nil {
+		if err := openWindow(o.Tmux, o.Task, path, commandFor(o.Agent)); err != nil {
 			// worktree는 남긴다 — 사용자가 수동으로 쓸 수 있고, 잔해는 wt list에 보인다
 			return m, fmt.Errorf("worktree는 만들었지만 tmux window 생성 실패: %w", err)
 		}
