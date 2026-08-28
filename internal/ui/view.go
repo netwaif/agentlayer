@@ -572,8 +572,7 @@ func (m Model) viewBody() string {
 	}
 
 	if m.inputMode {
-		b.WriteString("\n" + styleTitle.Render("⌨ 전체 전송 메시지: "+m.inputText+"▏") +
-			styleHelp.Render("  enter 확인 · esc 취소"))
+		b.WriteString("\n" + m.input.View() + styleHelp.Render("  enter 확인 · esc 취소"))
 	} else if m.pendingCmd == "broadcast" {
 		b.WriteString("\n" + stateStyles[state.StateWaiting].Render(
 			fmt.Sprintf("⚠ 전 세션에 %q 전송합니다. y 확인 / 다른 키 취소", m.broadcastText)))

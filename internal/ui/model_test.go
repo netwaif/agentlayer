@@ -440,17 +440,30 @@ func TestBroadcastInputEditingAndCancel(t *testing.T) {
 	m := fixtureModel(t)
 	next, _ := m.Update(key("B"))
 	next, _ = next.(Model).Update(key("헬로"))
-	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeySpace})
+	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune(" ")})
 	next, _ = next.(Model).Update(key("고"))
 	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyBackspace})
 	m = next.(Model)
-	if m.inputText != "헬로 " {
-		t.Errorf("입력 편집 결과: %q", m.inputText)
+	if m.input.Value() != "헬로 " {
+		t.Errorf("입력 편집 결과: %q", m.input.Value())
 	}
 	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = next.(Model)
-	if m.inputMode || m.inputText != "" {
+	if m.inputMode || m.input.Value() != "" {
 		t.Error("esc는 입력을 취소해야 함")
+	}
+}
+
+// 커서 이동으로 중간 편집이 돼야 한다 — 화살표 왼쪽 후 삽입.
+func TestBroadcastInputCursorEditing(t *testing.T) {
+	m := fixtureModel(t)
+	next, _ := m.Update(key("B"))
+	next, _ = next.(Model).Update(key("헬로"))
+	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyLeft})
+	next, _ = next.(Model).Update(key("고"))
+	m = next.(Model)
+	if m.input.Value() != "헬고로" {
+		t.Errorf("커서 위치 삽입 결과: %q", m.input.Value())
 	}
 }
 

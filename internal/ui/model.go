@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/config"
@@ -76,17 +77,17 @@ type Model struct {
 	width         int
 	height        int
 	err           error
-	showUsage     bool         // u 키: 사용량 전용 뷰
-	showInfo      bool         // i 키: 선택 에이전트 상세 카드
-	infoText      string       // 상세 카드 렌더 결과
-	pendingCmd    string       // "wake"|"close"|"resume"|"broadcast": y 확인 대기 중
-	pendingResume *state.Agent // pendingCmd=="resume"일 때 대상
-	broadcastText string       // pendingCmd=="broadcast"일 때 보낼 메시지
-	inputMode     bool         // B 키: 전체지시 메시지 입력 중
-	inputText     string       // 입력 중인 메시지
-	notice        string       // 하단 안내줄 (에러 아님)
-	insideTmux    bool         // false면 enter가 점프 대신 attach (tmux 밖 ssh 실행 등)
-	preview       string       // 선택 pane 화면 미리보기
+	showUsage     bool            // u 키: 사용량 전용 뷰
+	showInfo      bool            // i 키: 선택 에이전트 상세 카드
+	infoText      string          // 상세 카드 렌더 결과
+	pendingCmd    string          // "wake"|"close"|"resume"|"broadcast": y 확인 대기 중
+	pendingResume *state.Agent    // pendingCmd=="resume"일 때 대상
+	broadcastText string          // pendingCmd=="broadcast"일 때 보낼 메시지
+	inputMode     bool            // B 키: 전체지시 메시지 입력 중
+	input         textinput.Model // 입력 위젯 (커서 이동·중간 편집·붙여넣기)
+	notice        string          // 하단 안내줄 (에러 아님)
+	insideTmux    bool            // false면 enter가 점프 대신 attach (tmux 밖 ssh 실행 등)
+	preview       string          // 선택 pane 화면 미리보기
 	previewPane   string
 	usagePay      *usage.Payload
 	ctx           map[string]usage.CtxInfo // 에이전트 ID → 모델·ctx%
@@ -114,7 +115,11 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 		root = starter.DefaultRoot()
 	}
 	home, _ := os.UserHomeDir()
+	ti := textinput.New()
+	ti.Prompt = "⌨ 전체 전송 메시지: "
+	ti.CharLimit = 500
 	return Model{store: st, tm: tm, now: time.Now(),
+		input:         ti,
 		insideTmux:    os.Getenv("TMUX") != "",
 		spawnWindow:   tm.SpawnShellWindow,
 		activeSession: tm.ActiveSession,
@@ -124,11 +129,11 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 			return cli.SendAll(st, tm, message, handoffOnly)
 		},
 		coachRunner: usage.CoachRunner,
-		snapshotDir:   usage.SnapshotsDir(),
-		codexRoot:     usage.CodexSessionsRoot(),
-		geminiDir:     usage.GeminiDir(),
-		starterRoot:   root,
-		homeDir:       home}
+		snapshotDir: usage.SnapshotsDir(),
+		codexRoot:   usage.CodexSessionsRoot(),
+		geminiDir:   usage.GeminiDir(),
+		starterRoot: root,
+		homeDir:     home}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -359,28 +364,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.refreshCmd()
 
 	case tea.KeyMsg:
-		// 전체지시 입력 중이면 모든 키는 입력 편집으로 (esc 취소·enter 확인 단계)
+		// 전체지시 입력 중이면 esc·enter만 직접 처리, 나머지는 입력 위젯에 위임
 		if m.inputMode {
 			switch msg.Type {
 			case tea.KeyEsc:
-				m.inputMode, m.inputText = false, ""
+				m.inputMode = false
+				m.input.SetValue("")
+				m.input.Blur()
+				return m, nil
 			case tea.KeyEnter:
 				m.inputMode = false
-				if text := strings.TrimSpace(m.inputText); text != "" {
+				if text := strings.TrimSpace(m.input.Value()); text != "" {
 					m.broadcastText = text
 					m.pendingCmd = "broadcast"
 				}
-				m.inputText = ""
-			case tea.KeyBackspace:
-				if r := []rune(m.inputText); len(r) > 0 {
-					m.inputText = string(r[:len(r)-1])
-				}
-			case tea.KeySpace:
-				m.inputText += " "
-			case tea.KeyRunes:
-				m.inputText += string(msg.Runes)
+				m.input.SetValue("")
+				m.input.Blur()
+				return m, nil
 			}
-			return m, nil
+			var cmd tea.Cmd
+			m.input, cmd = m.input.Update(msg)
+			return m, cmd
 		}
 		// 상세 카드가 떠 있으면 esc는 카드만 닫는다 (TUI 종료 아님)
 		if m.showInfo && msg.String() == "esc" {
@@ -458,8 +462,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.pendingCmd = "close"
 			return m, nil
 		case "B": // 전체지시 — 임의 메시지 브로드캐스트
-			m.inputMode, m.inputText = true, ""
-			return m, nil
+			m.inputMode = true
+			m.input.SetValue("")
+			m.input.Focus()
+			return m, textinput.Blink
 		case "g": // 선택 에이전트 폴더를 lazygit으로 (조작은 lazygit이 정본)
 			if a := m.selected(); a != nil && a.CWD != "" {
 				bin := usage.LookupTool("lazygit")
