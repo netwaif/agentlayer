@@ -15,11 +15,11 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.2.0 릴리즈 상태 유지.** 오늘(8-29)은 재부팅 후 "어젯밤 상태로 부활 안 됨" 문제를
-추적 — 원인은 tmux-resurrect/continuum(autosave 8/26 14:24부터 고장, 3일 묵은 스냅샷
-부활)이라 ~/.tmux.conf에서 제거하고 재부팅 절차를 agentlayer restore 중심으로 확정.
-촬영 중 Opus의 gemini→agy 핫픽스는 검증(IneligibleTierError 실측) 후
-usage.GeminiCommand 공용화로 재정리·커밋 완료.
+**v1.2.1 릴리즈 완료**(push+태그+goreleaser, tap Casks/agentlayer.rb 1.2.1 확인).
+내용: gemini 워커 기동 agy 우선(usage.GeminiCommand 공용화 — stock 무료 티어
+IneligibleTierError 실측 대응). 그 외 오늘(8-29): tmux-resurrect/continuum 제거
+(autosave 8/26부터 고장·낡은 스냅샷 부활 원인), 재부팅 절차를 agentlayer restore
+중심으로 확정. 로컬 make install = b384a91. 워킹트리 클린.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
@@ -94,6 +94,7 @@ usage.GeminiCommand 공용화로 재정리·커밋 완료.
 - 2026-08-28 v1.2.0 릴리즈 완료: 13커밋 push→태그→goreleaser(cask 첫 게시)→tap Formula 삭제(gh api DELETE). deprecated 경고 소멸
 - 2026-08-29 tmux-resurrect/continuum 제거(~/.tmux.conf 주석 처리, .bak-20260829 백업) — continuum autosave가 8/26 14:24부터 고장나 재부팅 시 3일 묵은 스냅샷을 부활시킴 + 8-27 오염 사고 원인. 재부팅 절차 확정: LaunchAgent 봇 자동 기동 → agentlayer restore(--dry-run 먼저) → 전체 기상(wake-all 재정박). 봇 세션은 LaunchAgent 관할이라 restore 대상 아님
 - 2026-08-29 stock gemini CLI 무료 티어 사망 실측(IneligibleTierError: "no longer supported for Gemini Code Assist for individuals" → Antigravity 이관 안내) — 촬영 중 Opus의 lifecycle.go gemini→agy 하드코딩 핫픽스를 usage.GeminiCommand()(antigravity-cli 폴더 흔적→agy, 없으면 stock 폴백 — API 키·Vertex 사용자 유효)로 재정리, wt commandFor·restore freshCommand가 공유. 참고: 이 셸에서 gemini CLI는 PATH에 /usr/sbin 없으면 spawnSync sysctl ENOENT로 오사
+- 2026-08-29 v1.2.1 릴리즈: push(0a5af8a·b384a91)→태그→goreleaser(GITHUB_TOKEN=$(gh auth token))→릴리즈 자산 2종+checksums·tap Casks 1.2.1 확인. 패치 릴리즈도 동일 절차로 무리 없음
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -149,4 +150,7 @@ usage.GeminiCommand 공용화로 재정리·커밋 완료.
 - `.goreleaser.yaml` homebrew_casks(quarantine postflight), `README.md` notify_webhook_url 문서화, `go.mod` bubbles v1.0.0
 - 시스템 상태 추가: `~/.config/agentlayer/config.json` notify_webhook_url+새 대시보드 웹훅, `~/.local/state/agentlayer/agents-backup-filming/`(claude-1·6·26 촬영용 백업), GitHub 릴리즈 v1.2.0, tap Casks/agentlayer.rb 1.2.0(Formula 삭제됨)
 - `~/.tmux.conf` resurrect/continuum 블록 주석 처리(@plugin 2줄+@continuum-restore·save-interval·@resurrect-* 5줄), 원본 백업 `~/.tmux.conf.bak-20260829`, 실행 중 서버 source-file 반영
+- `internal/usage/ctx.go` GeminiCommand(agy 흔적→agy, 폴백 gemini)·ctx_test.go TestGeminiCommand
+- `internal/wt/lifecycle.go` commandFor(usage.GeminiCommand 공유)·lifecycle_test.go TestCommandFor, `internal/cli/restorecmd.go` freshCommand gemini 분기를 GeminiCommand로 교체
+- 시스템 상태 추가: GitHub 릴리즈 v1.2.1, tap Casks/agentlayer.rb 1.2.1
 - `internal/wt/lifecycle.go` agentCommand["gemini"]="agy" (미커밋 — 검증 후 커밋 대상)
