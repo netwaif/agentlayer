@@ -68,29 +68,31 @@ type previewMsg struct {
 
 // Model은 TUI 상태.
 type Model struct {
-	store        *state.Store
-	tm           tmuxx.Tmux
-	agents       []*state.Agent
-	cursor       int
-	now          time.Time
-	width        int
-	height       int
-	err          error
-	showUsage    bool   // u 키: 사용량 전용 뷰
-	showInfo     bool   // i 키: 선택 에이전트 상세 카드
-	infoText     string // 상세 카드 렌더 결과
-	pendingCmd   string // "wake"|"close": y 확인 대기 중
-	notice       string // 하단 안내줄 (에러 아님)
-	insideTmux   bool   // false면 enter가 점프 대신 attach (tmux 밖 ssh 실행 등)
-	preview      string // 선택 pane 화면 미리보기
-	previewPane  string
-	usagePay     *usage.Payload
-	ctx          map[string]usage.CtxInfo // 에이전트 ID → 모델·ctx%
-	wtBranch     map[string]string        // worktree 경로 → 브랜치
-	discordWired map[string]bool          // CWD → Discord 연결 (⌁)
-	starterTasks []starter.Task           // MultiAgent 활성 작업
-	defModels    map[string]string        // CLI별 기본 모델 설정
+	store         *state.Store
+	tm            tmuxx.Tmux
+	agents        []*state.Agent
+	cursor        int
+	now           time.Time
+	width         int
+	height        int
+	err           error
+	showUsage     bool         // u 키: 사용량 전용 뷰
+	showInfo      bool         // i 키: 선택 에이전트 상세 카드
+	infoText      string       // 상세 카드 렌더 결과
+	pendingCmd    string       // "wake"|"close"|"resume": y 확인 대기 중
+	pendingResume *state.Agent // pendingCmd=="resume"일 때 대상
+	notice        string       // 하단 안내줄 (에러 아님)
+	insideTmux    bool         // false면 enter가 점프 대신 attach (tmux 밖 ssh 실행 등)
+	preview       string       // 선택 pane 화면 미리보기
+	previewPane   string
+	usagePay      *usage.Payload
+	ctx           map[string]usage.CtxInfo // 에이전트 ID → 모델·ctx%
+	wtBranch      map[string]string        // worktree 경로 → 브랜치
+	discordWired  map[string]bool          // CWD → Discord 연결 (⌁)
+	starterTasks  []starter.Task           // MultiAgent 활성 작업
+	defModels     map[string]string        // CLI별 기본 모델 설정
 	// 주입점 (테스트용)
+	newWindow   func(name, dir, command string) error // resume 창 생성
 	coachRunner func() ([]byte, error)
 	snapshotDir string
 	codexRoot   string
@@ -107,6 +109,7 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 	home, _ := os.UserHomeDir()
 	return Model{store: st, tm: tm, now: time.Now(),
 		insideTmux:  os.Getenv("TMUX") != "",
+		newWindow:   tm.NewWindow,
 		coachRunner: usage.CoachRunner,
 		snapshotDir: usage.SnapshotsDir(),
 		codexRoot:   usage.CodexSessionsRoot(),
@@ -232,6 +235,42 @@ func (m Model) attachCmd(a *state.Agent) tea.Cmd {
 	return tea.ExecProcess(c, func(err error) tea.Msg { return attachDoneMsg{err: err} })
 }
 
+// startResume은 y 확인된 죽은 세션의 대화를 새 창에서 되살리고 그리로 이동한다.
+// tmux 안: 현재 세션에 창 생성(자동 활성) 후 TUI 종료. 밖: 원 세션이 살아
+// 있으면 거기 만들어 attach, 없으면 CLI 안내로 폴백.
+func (m Model) startResume() (tea.Model, tea.Cmd) {
+	a := m.pendingResume
+	m.pendingResume = nil
+	if a == nil {
+		return m, nil
+	}
+	cmdStr, err := cli.ResumeCommand(a)
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
+	name := "resume-" + a.ID
+	if m.insideTmux {
+		if err := m.newWindow(name, a.CWD, cmdStr); err != nil {
+			m.err = err
+			return m, nil
+		}
+		return m, tea.Quit // 새 창이 현재 세션에서 활성 — 팝업이 닫히면 그 화면
+	}
+	if a.Tmux.Session != "" && m.tm.HasSession(a.Tmux.Session) {
+		pane, err := m.tm.NewWindowIn(a.Tmux.Session, name, a.CWD)
+		if err != nil {
+			m.err = err
+			return m, nil
+		}
+		_ = m.tm.SendText(pane, cmdStr)
+		c := exec.Command(tmuxx.Bin(), "attach-session", "-t", "="+a.Tmux.Session)
+		return m, tea.ExecProcess(c, func(err error) tea.Msg { return attachDoneMsg{err: err} })
+	}
+	m.notice = fmt.Sprintf("원 세션이 없어 여기서는 복구 불가 — 터미널에서 'agentlayer resume %s' 실행", a.ID)
+	return m, nil
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -299,10 +338,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showInfo = false
 			return m, nil
 		}
-		// 일괄 명령 확인 대기 중이면 y만 실행, 나머지는 취소
+		// 확인 대기 중이면 y만 실행, 나머지는 취소
 		if m.pendingCmd != "" {
 			cmd := m.pendingCmd
 			m.pendingCmd = ""
+			if cmd == "resume" {
+				if msg.String() == "y" {
+					return m.startResume()
+				}
+				m.pendingResume = nil
+				m.notice = "취소했습니다"
+				return m, nil
+			}
 			if msg.String() == "y" {
 				message := cli.WakeMessage
 				if cmd == "close" {
@@ -381,12 +428,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter": // 점프 + 읽음 처리
 			if a := m.selected(); a != nil {
 				if a.State == state.StateDead {
-					// 죽은 pane의 좌표는 무효 — 점프 대신 복구 경로 안내
-					if a.SessionID != "" {
-						m.notice = fmt.Sprintf("죽은 세션입니다 — 대화 복구: agentlayer resume %s", a.ID)
-					} else {
-						m.notice = "죽은 세션입니다 (세션 ID 미기록 — 24시간 뒤 자동 정리)"
+					// 죽은 pane의 좌표는 무효 — 점프 대신 복구(y/n 확인)로 진입
+					if _, rerr := cli.ResumeCommand(a); rerr != nil {
+						m.notice = fmt.Sprintf("죽은 세션입니다 — 복구 불가: %v (24시간 뒤 자동 정리)", rerr)
+						return m, nil
 					}
+					m.pendingCmd = "resume"
+					m.pendingResume = a
 					return m, nil
 				}
 				_ = m.store.MarkRead(a.ID, time.Now())

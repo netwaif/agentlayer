@@ -205,10 +205,11 @@ func TestViewContainsCoreTokens(t *testing.T) {
 	}
 }
 
-// 죽은 세션 enter로 뜬 notice는 다음 키 입력(커서 이동 등)에서 사라져야 한다.
+// notice는 일회성 — 다음 키 입력(커서 이동 등)에서 사라져야 한다.
+// 복구 불가(sid 없음) 죽은 세션의 안내로 검증한다.
 func TestNoticeClearsOnNextKey(t *testing.T) {
 	m := Model{agents: []*state.Agent{
-		{ID: "claude-6", Kind: "claude", State: state.StateDead, SessionID: "sid-6",
+		{ID: "claude-6", Kind: "claude", State: state.StateDead,
 			UpdatedAt: t0, StateSince: t0},
 		{ID: "claude-9", Kind: "claude", State: state.StateWaiting,
 			UpdatedAt: t0, StateSince: t0},
@@ -216,7 +217,7 @@ func TestNoticeClearsOnNextKey(t *testing.T) {
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(Model)
-	if !strings.Contains(m.notice, "resume claude-6") {
+	if !strings.Contains(m.notice, "복구 불가") {
 		t.Fatalf("죽은 세션 enter의 notice가 없다: %q", m.notice)
 	}
 
@@ -261,5 +262,77 @@ func TestAttachDoneRefreshesInsteadOfQuit(t *testing.T) {
 		if _, quit := msg.(tea.QuitMsg); quit {
 			t.Error("attach 복귀가 TUI를 종료시킨다")
 		}
+	}
+}
+
+// 죽은 세션 enter는 안내문 대신 y/n 복구 확인으로 진입해야 한다.
+func TestDeadEnterAsksResumeConfirm(t *testing.T) {
+	m := fixtureModel(t)
+	m.agents = []*state.Agent{{ID: "claude-20", Kind: "claude", State: state.StateDead,
+		SessionID: "sid-20", CWD: "/tmp/w", Tmux: state.TmuxRef{Session: "work"},
+		UpdatedAt: t0, StateSince: t0}}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if m.pendingCmd != "resume" {
+		t.Fatalf("resume 확인 대기 상태여야 함: %q", m.pendingCmd)
+	}
+	if v := m.View(); !strings.Contains(v, "y 확인") || !strings.Contains(v, "복구") {
+		t.Errorf("복구 확인 프롬프트가 보여야 함:\n%s", v)
+	}
+}
+
+// 세션 ID가 없어 복구 불가면 기존 안내 유지 (확인 진입 금지).
+func TestDeadEnterWithoutSidKeepsNotice(t *testing.T) {
+	m := fixtureModel(t)
+	m.agents = []*state.Agent{{ID: "claude-21", Kind: "claude", State: state.StateDead,
+		UpdatedAt: t0, StateSince: t0}}
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(Model)
+	if m.pendingCmd != "" {
+		t.Error("복구 불가 세션은 확인 대기로 가면 안 됨")
+	}
+	if m.notice == "" {
+		t.Error("복구 불가 사유 안내가 있어야 함")
+	}
+}
+
+// y 확인 시 resume 창을 만들고(tmux 안) TUI를 닫아 그 화면으로 이동한다.
+func TestResumeConfirmYCreatesWindowAndQuits(t *testing.T) {
+	m := fixtureModel(t)
+	m.agents = []*state.Agent{{ID: "claude-20", Kind: "claude", State: state.StateDead,
+		SessionID: "sid-20", CWD: "/tmp/w", Tmux: state.TmuxRef{Session: "work"},
+		UpdatedAt: t0, StateSince: t0}}
+	var gotName, gotDir, gotCmd string
+	m.newWindow = func(name, dir, cmd string) error {
+		gotName, gotDir, gotCmd = name, dir, cmd
+		return nil
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := next.(Model).Update(key("y"))
+	if gotName != "resume-claude-20" || gotDir != "/tmp/w" ||
+		!strings.Contains(gotCmd, "claude --resume sid-20") {
+		t.Errorf("창 생성 인자: %q %q %q", gotName, gotDir, gotCmd)
+	}
+	if cmd == nil {
+		t.Fatal("y 후 cmd가 없다")
+	}
+	if _, quit := cmd().(tea.QuitMsg); !quit {
+		t.Error("tmux 안에서는 새 창으로 이동(TUI 종료)해야 함")
+	}
+	_ = next
+}
+
+// y 아닌 키는 취소 — pendingResume도 비워야 한다.
+func TestResumeConfirmCancel(t *testing.T) {
+	m := fixtureModel(t)
+	m.agents = []*state.Agent{{ID: "claude-20", Kind: "claude", State: state.StateDead,
+		SessionID: "sid-20", CWD: "/tmp/w", UpdatedAt: t0, StateSince: t0}}
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, _ = next.(Model).Update(key("n"))
+	m = next.(Model)
+	if m.pendingCmd != "" || m.pendingResume != nil {
+		t.Error("취소 시 확인 상태가 남으면 안 됨")
 	}
 }

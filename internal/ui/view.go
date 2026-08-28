@@ -571,7 +571,16 @@ func (m Model) viewBody() string {
 		}
 	}
 
-	if m.pendingCmd != "" {
+	if m.pendingCmd == "resume" {
+		who := ""
+		if m.pendingResume != nil {
+			if who = m.pendingResume.Tmux.Session; who == "" {
+				who = m.pendingResume.ID
+			}
+		}
+		b.WriteString("\n" + stateStyles[state.StateWaiting].Render(
+			fmt.Sprintf("⚠ 죽은 세션 %s — 대화를 복구할까요? y 확인 / 다른 키 취소", who)))
+	} else if m.pendingCmd != "" {
 		what := "이어서하기(기상)"
 		if m.pendingCmd == "close" {
 			what = "마감"
