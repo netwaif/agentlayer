@@ -15,20 +15,24 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.1.0 릴리즈 완료**(push+태그+goreleaser, brew formula 1.1.0 반영 확인). 포함: 카드 이벤트
-갱신·TUI 동등화·restore(기존 미릴리즈분) + version 서브커맨드 + hook 가드 + DEAD 이중 행
-정리 + **/orchestration 스킬**(go:embed 동봉, init이 ~/.claude/skills에 설치, claude+codex
-A/B 실검증 통과). 재부팅 실테스트 통과. agentlayer youtube 세션에 릴리즈·데모 소재 전달됨.
-로컬 make install = f623fbf 이후 빌드.
+**v1.2.0 릴리즈 완료**(push+태그+goreleaser, brew는 cask로 이관 — tap Casks/agentlayer.rb
+1.2.0, 옛 Formula/agentlayer.rb 삭제). 포함: help 서브커맨드, notify 웹훅 분리
+(notify_webhook_url), TUI enter 3종 개편(notice 일회성·tmux 밖 attach·dead y/n resume
+확인+원세션 복귀+레코드 삭제), B 전체지시(broadcast, bubbles/textinput), 하단 키 안내
+가독성. **촬영 준비 상태**: Discord 대시보드 채널 새로 교체(카드 전용), DEAD 0,
+work 세션 정리(레코드 3건 agents-backup-filming에 백업). 로컬 make install = 87ac4eb.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. 영상 세션 지원 — orchestration 데모 각본·기술 확인 요청 오면 응대 (소재는 이미 전달됨)
-2. goreleaser `brews` → `homebrew_casks` 이관 검토 — deprecated 경고 중(비차단이나 언젠가 제거됨)
+1. 촬영 지원 대기 — 사용자가 촬영 중. 요청 오면 응대, 선제 수정 금지
+2. 촬영 후 정리: `~/.local/state/agentlayer/agents-backup-filming/`의 레코드 3건
+   (claude-1·claude-6·claude-26) 복원 여부 확인 — claude-26(출석부 대화)은
+   attendance 폴더에서 resume 가능, 나머지는 24h 경과라 자연 소멸 대상
 3. `restore <id>` 개별 선택 추가 검토 — restore-lab 무승인 부활 사고로 필요성 실증됨
-4. 보류 아이디어: MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용),
-   provider 게이지 막대도 거슬리면 텍스트화
+4. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드(60칸 미만 컬럼 축소), MultiAgent 패널
+   날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용), provider
+   게이지 막대 텍스트화
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -82,6 +86,15 @@ A/B 실검증 통과). 재부팅 실테스트 통과. agentlayer youtube 세션�
 - 2026-08-28 스킬 배포 방식 확정: 플러그인 아닌 go:embed 동봉 + `agentlayer init` 설치(멱등, 갱신 시 .bak) — 스킬이 바이너리 명령 종속이라 버전 잠금이 핵심. 플러그인은 마켓플레이스 수요 생기면 후속
 - 2026-08-28 v1.1.0 릴리즈 완료: push(340a~6a24d06) → 태그 → goreleaser → GitHub 릴리즈+brew formula 1.1.0 확인. goreleaser brews deprecated 경고 지속(→homebrew_casks 이관 필요, 비차단)
 - 2026-08-28 MultiAgent(하네스)와 통합 안 함 확정 — 접점 규약만: REPORT.md≈worker-result.md 양식 공유, MultiAgent 코드 단계에 wt 선택 사용. 사용 기준: 승인·비평·재진입=MultiAgent, 병렬·A/B·worktree 격리=orchestration, 일상 작업=단일 세션
+- 2026-08-28 goreleaser brews→homebrew_casks 이관(69c1a6f): brews는 v2.16 완전 deprecated. cask는 tap Casks/에 생성, 미서명 바이너리라 quarantine 해제 postflight(xattr) 포함, conflicts.formula는 Homebrew서 제거된 no-op이라 미사용. v1.2.0 릴리즈 때 tap Formula/agentlayer.rb 삭제 완료(공존 시 brew가 formula 우선). 설치 명령은 `brew install netwaif/tap/agentlayer` 그대로
+- 2026-08-28 help 서브커맨드(0af2663): help/-h/--help, 미지 명령 에러는 'agentlayer help' 안내로. helpcmd_test가 라우팅 목록과 어긋남 감시 — main.go switch에 명령 추가 시 테스트 목록도 갱신
+- 2026-08-28 notify 웹훅 분리(7abfb3e): config notify_webhook_url 신설, 비면 카드 웹훅 폴백. 대시보드 채널은 카드 1장 전용이 됨. 실배선: 알림 채널 웹훅 등록 + 대시보드 채널 새로 생성(웹훅 교체·discord-card.json 리셋), 옛 채널(1542162018596036660)은 사용자가 삭제
+- 2026-08-28 TUI notice는 일회성(a74b921) — 키 입력 진입부에서 일괄 소거, 필요한 분기가 재설정
+- 2026-08-28 tmux 밖 enter=attach(62c482a): switch-client 기반 jumpCmd를 밖에서 쓰면 최근 활동 클라이언트(책상 화면)가 전환됨 → AttachArgv(포커스+attach "=" 완전일치 체이닝)로 이 터미널이 진입, detach 시 TUI 복귀. 폰 Termius는 ssh 후 tmux 밖 실행이 권장(뷰포트·팝업 잔상 회피)
+- 2026-08-28 dead enter=y/n resume 확인(10012fc→0fc580c): 안내문 대신 확인→창 생성→이동. 팝업 안에서는 tmux가 current session 특정 불가(JumpTo activeClient와 같은 함정) → ActiveSession() 명시 타겟. 창은 명령 인자 대신 SpawnShellWindow(셸+SendText, 명령 즉사해도 창 생존). 원 세션 생존 시 제 집에 생성+JumpToSessionPane 점프, 죽었으면 활성 세션 폴백. 성공 시 dead 레코드 즉시 삭제(TUI·CLI, restore 8-27 기준 통일)
+- 2026-08-28 TUI 목록은 에이전트 pane 목록(세션 목록 아님) — zsh만 남은 세션은 안 나옴(C-b s와 다른 이유). work 세션 실물은 move-window로 정리 후 촬영용 kill
+- 2026-08-28 B 전체지시 TUI 편입(a9ee6bb→87ac4eb): 입력줄→y 확인→SendAll(handoffOnly=false 전체). 입력은 bubbles/textinput(커서 이동·중간 편집·붙여넣기 — 자작 최소 버퍼는 끝 backspace만 돼 교체). W/C·B 전송은 주입점 sendAll 경유(테스트 실전송 차단)
+- 2026-08-28 v1.2.0 릴리즈 완료: 13커밋 push→태그→goreleaser(cask 첫 게시)→tap Formula 삭제(gh api DELETE). deprecated 경고 소멸
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -128,3 +141,11 @@ A/B 실검증 통과). 재부팅 실테스트 통과. agentlayer youtube 세션�
 - `internal/cli/versioncmd.go`·`versioncmd_test.go` FormatVersion/VersionInfo/IsReleaseVersion (원작 restore-lab Opus, 839f157→f623fbf 재구성), `main.go` version 라우팅+buildVersion, `.goreleaser.yaml` ldflags 명시
 - `internal/cli/orchskill.go` InstallOrchestrationSkill(go:embed·멱등·.bak 보존), `orchestration_skill.md`(스킬 본문 정본 — 여길 고치고 make install+init 재실행하면 갱신), orchskill_test.go 4종, `main.go` runInit 배선
 - 시스템 상태 추가: `~/.claude/skills/orchestration/SKILL.md`(init 설치본), GitHub 릴리즈 v1.1.0, brew tap Formula/agentlayer.rb 1.1.0
+- `internal/cli/helpcmd.go` HelpText(명령 목록 정본), helpcmd_test.go(목록 어긋남 감시), `main_help_test.go`, `main.go` help 라우팅+미지 명령 에러 문구
+- `internal/tmuxx/tmux.go` AttachArgv(포커스+attach 체이닝)·ActiveSession(최근 활동 클라이언트의 세션)·SpawnShellWindow(셸 창+SendText)·JumpToSessionPane(pane 기준 전환), tmux_test.go TestAttachArgvExactMatch·TestSpawnShellWindowIntegration
+- `internal/ui/model.go` insideTmux·attachCmd·startResume(원세션 우선+레코드 삭제)·inputMode/input(textinput)·주입점(spawnWindow·activeSession·hasSession·jumpPane·sendAll), attachDoneMsg
+- `internal/ui/view.go` helpLine(키 밝게·설명 회색, 전 화면 공용)·resume/broadcast 확인 프롬프트·입력줄 렌더
+- `internal/ui/model_test.go` notice 일회성·attach·resume 확인/삭제/보존/원세션·broadcast 4종 테스트
+- `internal/notify/notify.go` NotifyWebhookURL 우선+폴백, notify_test.go 2종, `internal/config/config.go` NotifyWebhookURL 필드
+- `.goreleaser.yaml` homebrew_casks(quarantine postflight), `README.md` notify_webhook_url 문서화, `go.mod` bubbles v1.0.0
+- 시스템 상태 추가: `~/.config/agentlayer/config.json` notify_webhook_url+새 대시보드 웹훅, `~/.local/state/agentlayer/agents-backup-filming/`(claude-1·6·26 촬영용 백업), GitHub 릴리즈 v1.2.0, tap Casks/agentlayer.rb 1.2.0(Formula 삭제됨)
