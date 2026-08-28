@@ -69,6 +69,9 @@ func run(args []string) error {
 	case "version", "--version", "-v":
 		fmt.Println(cli.FormatVersion(buildVersion()))
 		return nil
+	case "help", "--help", "-h":
+		fmt.Print(cli.HelpText())
+		return nil
 	case "wt":
 		st, err := state.NewStore(state.DefaultDir())
 		if err != nil {
@@ -79,7 +82,7 @@ func run(args []string) error {
 		}
 		return cli.RunWT(os.Stdout, state.DefaultDir(), st, tmuxx.Tmux{}, args[1:])
 	default:
-		return fmt.Errorf("알 수 없는 명령: %s\n사용 가능: status, info, card, init, resume, restore, wake-all, close-all, broadcast, wt, version (인자 없이 실행하면 TUI)", args[0])
+		return fmt.Errorf("알 수 없는 명령: %s\n'agentlayer help'로 전체 명령을 볼 수 있다", args[0])
 	}
 }
 
