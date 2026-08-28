@@ -94,6 +94,8 @@ type Model struct {
 	// 주입점 (테스트용)
 	spawnWindow   func(session, name, dir, command string) (string, error) // resume 창 생성
 	activeSession func() string                                            // 활성 클라이언트의 세션
+	hasSession    func(name string) bool                                   // 세션 생존 (완전일치)
+	jumpPane      func(session, pane string) error                         // 세션 전환+창 선택
 	coachRunner   func() ([]byte, error)
 	snapshotDir   string
 	codexRoot     string
@@ -112,6 +114,8 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 		insideTmux:    os.Getenv("TMUX") != "",
 		spawnWindow:   tm.SpawnShellWindow,
 		activeSession: tm.ActiveSession,
+		hasSession:    tm.HasSession,
+		jumpPane:      tm.JumpToSessionPane,
 		coachRunner:   usage.CoachRunner,
 		snapshotDir:   usage.SnapshotsDir(),
 		codexRoot:     usage.CodexSessionsRoot(),
@@ -253,21 +257,27 @@ func (m Model) startResume() (tea.Model, tea.Cmd) {
 	}
 	name := "resume-" + a.ID
 	if m.insideTmux {
-		// 팝업 안에서는 tmux가 현재 세션을 특정 못 하므로 활성 세션을 명시
-		target := m.activeSession()
-		if target == "" {
+		// 원 세션이 살아 있으면 대화는 제 집으로 — 세션 이름·목록 표시가 맞아떨어진다.
+		// 죽었으면 활성 세션 폴백 (팝업 안에서는 tmux가 현재 세션을 특정 못 하므로 명시)
+		target := ""
+		if a.Tmux.Session != "" && m.hasSession(a.Tmux.Session) {
+			target = a.Tmux.Session
+		} else if target = m.activeSession(); target == "" {
 			m.err = fmt.Errorf("활성 tmux 세션을 못 찾았습니다")
 			return m, nil
 		}
-		if _, err := m.spawnWindow(target, name, a.CWD, cmdStr); err != nil {
+		pane, err := m.spawnWindow(target, name, a.CWD, cmdStr)
+		if err != nil {
 			m.err = err
 			return m, nil
 		}
 		// 이중 행 방지 — 부활 성공한 원본 dead 레코드는 즉시 삭제 (restore와 동일)
 		_ = m.store.Delete(a.ID)
-		return m, tea.Quit // 새 창이 그 세션에서 활성 — 팝업이 닫히면 그 화면
+		// 다른 세션에 만들었어도 그리로 이동 (활성 세션이면 무해한 재선택)
+		_ = m.jumpPane(target, pane)
+		return m, tea.Quit
 	}
-	if a.Tmux.Session != "" && m.tm.HasSession(a.Tmux.Session) {
+	if a.Tmux.Session != "" && m.hasSession(a.Tmux.Session) {
 		if _, err := m.spawnWindow(a.Tmux.Session, name, a.CWD, cmdStr); err != nil {
 			m.err = err
 			return m, nil

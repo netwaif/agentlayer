@@ -144,6 +144,23 @@ func AttachArgv(r Ref) []string {
 	}
 }
 
+// JumpToSessionPane은 활성 클라이언트를 세션으로 전환하고 pane의 창을 고른다.
+// JumpTo와 달리 창 인덱스 없이 pane ID로 창을 특정한다 (새로 만든 창용).
+func (t Tmux) JumpToSessionPane(session, paneID string) error {
+	args := []string{"switch-client", "-t", "=" + session}
+	if client := t.activeClient(); client != "" {
+		args = append(args, "-c", client)
+	}
+	if _, err := t.run(args...); err != nil {
+		return err
+	}
+	if _, err := t.run("select-window", "-t", paneID); err != nil {
+		return err
+	}
+	_, err := t.run("select-pane", "-t", paneID)
+	return err
+}
+
 // ActiveSession은 가장 최근 활동한 클라이언트가 보고 있는 세션 이름.
 // display-popup 안에서는 tmux가 "현재 세션"을 특정하지 못하므로(JumpTo 참조)
 // 창 생성 등은 이 세션을 명시 타겟으로 써야 한다.

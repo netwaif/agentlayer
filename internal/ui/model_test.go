@@ -305,7 +305,9 @@ func TestResumeConfirmYCreatesWindowAndQuits(t *testing.T) {
 		SessionID: "sid-20", CWD: "/tmp/w", Tmux: state.TmuxRef{Session: "work"},
 		UpdatedAt: t0, StateSince: t0}}
 	var gotSess, gotName, gotDir, gotCmd string
+	m.hasSession = func(string) bool { return false } // 원 세션 죽음 → 활성 세션 폴백
 	m.activeSession = func() string { return "cur-sess" }
+	m.jumpPane = func(string, string) error { return nil }
 	m.spawnWindow = func(session, name, dir, cmd string) (string, error) {
 		gotSess, gotName, gotDir, gotCmd = session, name, dir, cmd
 		return "%99", nil
@@ -350,7 +352,9 @@ func TestResumeDeletesDeadRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.agents = []*state.Agent{dead}
+	m.hasSession = func(string) bool { return false }
 	m.activeSession = func() string { return "cur-sess" }
+	m.jumpPane = func(string, string) error { return nil }
 	m.spawnWindow = func(session, name, dir, cmd string) (string, error) { return "%99", nil }
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -369,7 +373,9 @@ func TestResumeKeepsRecordOnSpawnFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	m.agents = []*state.Agent{dead}
+	m.hasSession = func(string) bool { return false }
 	m.activeSession = func() string { return "cur-sess" }
+	m.jumpPane = func(string, string) error { return nil }
 	m.spawnWindow = func(session, name, dir, cmd string) (string, error) {
 		return "", fmt.Errorf("boom")
 	}
@@ -379,4 +385,39 @@ func TestResumeKeepsRecordOnSpawnFailure(t *testing.T) {
 	if _, err := next.(Model).store.Load("claude-20"); err != nil {
 		t.Error("창 생성 실패면 레코드를 보존해야 함")
 	}
+}
+
+// 원 세션이 살아 있으면 resume 창은 제 집(원 세션)에 생기고 그리로 점프한다.
+func TestResumePrefersOriginalSession(t *testing.T) {
+	m := fixtureModel(t)
+	m.agents = []*state.Agent{{ID: "claude-20", Kind: "claude", State: state.StateDead,
+		SessionID: "sid-20", CWD: "/tmp/w", Tmux: state.TmuxRef{Session: "work"},
+		UpdatedAt: t0, StateSince: t0}}
+	var gotSpawnSess, gotJumpSess, gotJumpPane string
+	m.hasSession = func(s string) bool { return s == "work" }
+	m.activeSession = func() string { return "cur-sess" }
+	m.spawnWindow = func(session, name, dir, cmd string) (string, error) {
+		gotSpawnSess = session
+		return "%99", nil
+	}
+	m.jumpPane = func(session, pane string) error {
+		gotJumpSess, gotJumpPane = session, pane
+		return nil
+	}
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := next.(Model).Update(key("y"))
+	if gotSpawnSess != "work" {
+		t.Errorf("원 세션에 생성돼야 함: %q", gotSpawnSess)
+	}
+	if gotJumpSess != "work" || gotJumpPane != "%99" {
+		t.Errorf("원 세션·새 pane으로 점프해야 함: %q %q", gotJumpSess, gotJumpPane)
+	}
+	if cmd == nil {
+		t.Fatal("y 후 cmd가 없다")
+	}
+	if _, quit := cmd().(tea.QuitMsg); !quit {
+		t.Error("점프 후 TUI 종료로 이동을 마무리해야 함")
+	}
+	_ = next
 }
