@@ -15,20 +15,19 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.2.0 릴리즈 완료**(push+태그+goreleaser, brew는 cask로 이관 — tap Casks/agentlayer.rb
-1.2.0, 옛 Formula/agentlayer.rb 삭제). 포함: help 서브커맨드, notify 웹훅 분리
-(notify_webhook_url), TUI enter 3종 개편(notice 일회성·tmux 밖 attach·dead y/n resume
-확인+원세션 복귀+레코드 삭제), B 전체지시(broadcast, bubbles/textinput), 하단 키 안내
-가독성. **촬영 준비 상태**: Discord 대시보드 채널 새로 교체(카드 전용), DEAD 0,
-work 세션 정리(레코드 3건 agents-backup-filming에 백업). 로컬 make install = 87ac4eb.
+**v1.2.0 릴리즈 상태 유지.** 오늘(8-29)은 재부팅 후 "어젯밤 상태로 부활 안 됨" 문제를
+추적 — 원인은 tmux-resurrect/continuum(autosave 8/26 14:24부터 고장, 3일 묵은 스냅샷
+부활)이라 ~/.tmux.conf에서 제거하고 재부팅 절차를 agentlayer restore 중심으로 확정.
+**미커밋 1건**: `internal/wt/lifecycle.go` agentCommand gemini→agy
+(stock gemini CLI 무료 티어 인증 UNSUPPORTED_CLIENT 거부) — 검증·커밋 필요.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. 촬영 지원 대기 — 사용자가 촬영 중. 요청 오면 응대, 선제 수정 금지
-2. 촬영 후 정리: `~/.local/state/agentlayer/agents-backup-filming/`의 레코드 3건
-   (claude-1·claude-6·claude-26) 복원 여부 확인 — claude-26(출석부 대화)은
-   attendance 폴더에서 resume 가능, 나머지는 24h 경과라 자연 소멸 대상
+1. `internal/wt/lifecycle.go` gemini→agy 미커밋 변경 검증(wt new gemini 실기동 확인)
+   후 커밋 — 어느 세션이 왜 고쳤는지 기록 없음, 커밋 메시지에 사유 명시
+2. 촬영 백업 정리: `~/.local/state/agentlayer/agents-backup-filming/` 레코드 3건
+   (claude-1·claude-6·claude-26) 아직 남아 있음 — 복원 불필요 확인되면 폴더째 삭제
 3. `restore <id>` 개별 선택 추가 검토 — restore-lab 무승인 부활 사고로 필요성 실증됨
 4. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드(60칸 미만 컬럼 축소), MultiAgent 패널
    날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용), provider
@@ -95,6 +94,7 @@ work 세션 정리(레코드 3건 agents-backup-filming에 백업). 로컬 make 
 - 2026-08-28 TUI 목록은 에이전트 pane 목록(세션 목록 아님) — zsh만 남은 세션은 안 나옴(C-b s와 다른 이유). work 세션 실물은 move-window로 정리 후 촬영용 kill
 - 2026-08-28 B 전체지시 TUI 편입(a9ee6bb→87ac4eb): 입력줄→y 확인→SendAll(handoffOnly=false 전체). 입력은 bubbles/textinput(커서 이동·중간 편집·붙여넣기 — 자작 최소 버퍼는 끝 backspace만 돼 교체). W/C·B 전송은 주입점 sendAll 경유(테스트 실전송 차단)
 - 2026-08-28 v1.2.0 릴리즈 완료: 13커밋 push→태그→goreleaser(cask 첫 게시)→tap Formula 삭제(gh api DELETE). deprecated 경고 소멸
+- 2026-08-29 tmux-resurrect/continuum 제거(~/.tmux.conf 주석 처리, .bak-20260829 백업) — continuum autosave가 8/26 14:24부터 고장나 재부팅 시 3일 묵은 스냅샷을 부활시킴 + 8-27 오염 사고 원인. 재부팅 절차 확정: LaunchAgent 봇 자동 기동 → agentlayer restore(--dry-run 먼저) → 전체 기상(wake-all 재정박). 봇 세션은 LaunchAgent 관할이라 restore 대상 아님
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -149,3 +149,5 @@ work 세션 정리(레코드 3건 agents-backup-filming에 백업). 로컬 make 
 - `internal/notify/notify.go` NotifyWebhookURL 우선+폴백, notify_test.go 2종, `internal/config/config.go` NotifyWebhookURL 필드
 - `.goreleaser.yaml` homebrew_casks(quarantine postflight), `README.md` notify_webhook_url 문서화, `go.mod` bubbles v1.0.0
 - 시스템 상태 추가: `~/.config/agentlayer/config.json` notify_webhook_url+새 대시보드 웹훅, `~/.local/state/agentlayer/agents-backup-filming/`(claude-1·6·26 촬영용 백업), GitHub 릴리즈 v1.2.0, tap Casks/agentlayer.rb 1.2.0(Formula 삭제됨)
+- `~/.tmux.conf` resurrect/continuum 블록 주석 처리(@plugin 2줄+@continuum-restore·save-interval·@resurrect-* 5줄), 원본 백업 `~/.tmux.conf.bak-20260829`, 실행 중 서버 source-file 반영
+- `internal/wt/lifecycle.go` agentCommand["gemini"]="agy" (미커밋 — 검증 후 커밋 대상)
