@@ -74,13 +74,17 @@ func Notify(cfg *config.Config, s Sender, a *state.Agent, prev, to state.AgentSt
 		script := fmt.Sprintf("display notification %q with title %q", body, t)
 		_ = s.RunOSA(script)
 	}
-	if cfg.NotifyDiscord && cfg.DiscordWebhookURL != "" && s.PostJSON != nil {
+	url := cfg.NotifyWebhookURL
+	if url == "" {
+		url = cfg.DiscordWebhookURL // 알림 채널 미분리 시 카드 채널로 폴백
+	}
+	if cfg.NotifyDiscord && url != "" && s.PostJSON != nil {
 		payload, err := json.Marshal(map[string]any{
 			"username": "agentlayer",
 			"content":  fmt.Sprintf("%s — %s", t, body),
 		})
 		if err == nil {
-			_ = s.PostJSON(cfg.DiscordWebhookURL, payload)
+			_ = s.PostJSON(url, payload)
 		}
 	}
 }

@@ -86,6 +86,7 @@ agentlayer wt ...     # worktree 병렬 모드 (아래 참고)
 ```json
 {
   "discord_webhook_url": "https://discord.com/api/webhooks/...",
+  "notify_webhook_url": "https://discord.com/api/webhooks/...",
   "notify_macos": true,
   "notify_discord": false
 }
@@ -93,6 +94,8 @@ agentlayer wt ...     # worktree 병렬 모드 (아래 참고)
 
 - 에이전트가 **완료(DONE)** 되거나 **입력 대기(WAIT)** 로 바뀐 순간에만 알림 1회
   (heartbeat는 무음) — macOS 알림 + (켜면) Discord 단문
+- `notify_webhook_url`(선택): 단문 알림을 별도 알림 채널로 분리. 비우면 카드
+  웹훅으로 감. 분리하면 대시보드 채널이 카드 한 장짜리로 유지돼 스크롤이 없다
 - `agentlayer card`는 사용량 + 에이전트 상태를 Discord 메시지 하나로 계속
   업서트하고, provider level이 악화되면 새 메시지로 핑한다.
   LaunchAgent 등으로 5분 주기 실행을 권장

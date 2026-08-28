@@ -80,3 +80,26 @@ func TestDiscordOnlyWhenEnabled(t *testing.T) {
 		t.Error("본문에 웹훅 URL 노출 금지")
 	}
 }
+
+// notify_webhook_url이 있으면 단문 알림은 그쪽(알림 채널)으로 간다 —
+// 대시보드 채널(discord_webhook_url)은 카드 전용으로 유지.
+func TestNotifyUsesDedicatedWebhook(t *testing.T) {
+	c := &capture{}
+	cfg := &config.Config{NotifyDiscord: true,
+		DiscordWebhookURL: "https://card.example",
+		NotifyWebhookURL:  "https://alerts.example"}
+	Notify(cfg, sender(c), agent(), state.StateWorking, state.StateDoneUnread)
+	if len(c.postURL) != 1 || c.postURL[0] != "https://alerts.example" {
+		t.Errorf("알림 전용 웹훅으로 가야 함: %v", c.postURL)
+	}
+}
+
+// notify_webhook_url 미설정이면 기존처럼 카드 웹훅으로 폴백 — 하위 호환.
+func TestNotifyFallsBackToCardWebhook(t *testing.T) {
+	c := &capture{}
+	cfg := &config.Config{NotifyDiscord: true, DiscordWebhookURL: "https://card.example"}
+	Notify(cfg, sender(c), agent(), state.StateWorking, state.StateDoneUnread)
+	if len(c.postURL) != 1 || c.postURL[0] != "https://card.example" {
+		t.Errorf("미설정 시 카드 웹훅 폴백: %v", c.postURL)
+	}
+}

@@ -9,8 +9,11 @@ import (
 )
 
 type Config struct {
-	// Discord 웹훅 URL. 알림·상태 카드에 사용. 값은 로그에 노출하지 않는다.
+	// Discord 웹훅 URL. 상태 카드(대시보드 채널)에 사용. 값은 로그에 노출하지 않는다.
 	DiscordWebhookURL string `json:"discord_webhook_url,omitempty"`
+	// 단문 알림 전용 웹훅(알림 채널). 비면 카드 웹훅으로 폴백 —
+	// 분리하면 대시보드 채널이 카드 한 장짜리로 유지된다.
+	NotifyWebhookURL string `json:"notify_webhook_url,omitempty"`
 	// macOS 알림 (osascript). 기본 켜짐.
 	NotifyMacOS *bool `json:"notify_macos,omitempty"`
 	// Discord 단문 알림. 기본 꺼짐 (웹훅이 있어도 명시적으로 켜야 함).
