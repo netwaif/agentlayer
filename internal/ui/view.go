@@ -22,6 +22,8 @@ var (
 	selBg         = lipgloss.Color("#3a3a3a") // 은은한 선택 배경 (tmux 테마 톤)
 	styleSelected = lipgloss.NewStyle().Background(selBg).Foreground(lipgloss.Color("#e4e4e4")).Bold(true)
 	styleHelp     = lipgloss.NewStyle().Foreground(lipgloss.Color("#6a6a6a"))
+	styleHelpKey  = lipgloss.NewStyle().Foreground(lipgloss.Color("#d0d0d0")).Bold(true)
+	styleHelpTxt  = lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a"))
 	styleModel    = lipgloss.NewStyle().Foreground(lipgloss.Color("#d0d0d0"))
 	styleDiscord  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7C8AFF")).Bold(true)
 
@@ -579,9 +581,23 @@ func (m Model) viewBody() string {
 	} else if m.notice != "" {
 		b.WriteString("\n" + styleTitle.Render(m.notice))
 	}
-	b.WriteString("\n" + styleHelp.Render("j/k 이동 · enter 점프+읽음 · o 읽음 · i 상세 · g git · u 사용량 · W 전체기상 · C 전체마감 · r 새로고침 · q 종료"))
+	b.WriteString("\n" + helpLine())
 	if m.err != nil {
 		b.WriteString("\n" + stateStyles[state.StateError].Render("⚠ "+m.err.Error()))
 	}
 	return b.String()
+}
+
+// helpLine은 하단 키 안내 — 키는 밝게, 설명은 중간 회색으로 대비를 준다.
+func helpLine() string {
+	items := [][2]string{
+		{"j/k", "이동"}, {"enter", "점프+읽음"}, {"o", "읽음"}, {"i", "상세"},
+		{"g", "git"}, {"u", "사용량"}, {"W", "전체기상"}, {"C", "전체마감"},
+		{"r", "새로고침"}, {"q", "종료"},
+	}
+	parts := make([]string, 0, len(items))
+	for _, it := range items {
+		parts = append(parts, styleHelpKey.Render(it[0])+" "+styleHelpTxt.Render(it[1]))
+	}
+	return strings.Join(parts, styleHelp.Render(" · "))
 }
