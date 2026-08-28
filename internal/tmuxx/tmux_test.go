@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestParsePanes(t *testing.T) {
@@ -134,5 +136,42 @@ func TestAttachArgvExactMatch(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("argv[%d]: got %q want %q", i, got[i], want[i])
 		}
+	}
+}
+
+// SpawnShellWindow: 세션에 창을 만들고 셸에 명령을 입력 — 명령이 죽어도
+// 창이 남아 에러를 볼 수 있어야 한다 (resume·restore 공용 패턴).
+func TestSpawnShellWindowIntegration(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux 없음")
+	}
+	sock := fmt.Sprintf("agentlayer-spawn-%d", os.Getpid())
+	run := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("tmux", append([]string{"-f", "/dev/null", "-L", sock}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("tmux %v: %v\n%s", args, err, out)
+		}
+	}
+	t.Cleanup(func() { exec.Command("tmux", "-f", "/dev/null", "-L", sock, "kill-server").Run() })
+	run("new-session", "-d", "-s", "spawnlab", "-x", "80", "-y", "24")
+
+	tm := Tmux{Args: []string{"-f", "/dev/null", "-L", sock}}
+	pane, err := tm.SpawnShellWindow("spawnlab", "resume-x", t.TempDir(), "echo hello-resume")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pane == "" {
+		t.Fatal("pane id가 비었다")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		out, _ := tm.CapturePane(pane, 24)
+		if strings.Contains(out, "hello-resume") {
+			break // 명령이 죽은 뒤에도 셸·창이 살아 출력이 보인다
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("셸 창에서 명령 출력을 못 봄:\n%s", out)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 }

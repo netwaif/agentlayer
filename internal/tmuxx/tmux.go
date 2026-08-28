@@ -144,6 +144,33 @@ func AttachArgv(r Ref) []string {
 	}
 }
 
+// ActiveSession은 가장 최근 활동한 클라이언트가 보고 있는 세션 이름.
+// display-popup 안에서는 tmux가 "현재 세션"을 특정하지 못하므로(JumpTo 참조)
+// 창 생성 등은 이 세션을 명시 타겟으로 써야 한다.
+func (t Tmux) ActiveSession() string {
+	out, err := t.run("list-clients", "-F", "#{client_activity}\t#{client_session}")
+	if err != nil {
+		return ""
+	}
+	return pickLatestClient(out)
+}
+
+// SpawnShellWindow는 세션에 창을 만들고 셸에 명령을 입력한다.
+// 명령 인자로 창을 만들면 명령이 즉시 죽을 때 창째 사라져 에러를 볼 수
+// 없다 — 셸 위에 SendText하면 창이 남는다 (restore와 같은 패턴).
+func (t Tmux) SpawnShellWindow(session, name, dir, command string) (string, error) {
+	pane, err := t.NewWindowIn(session, name, dir)
+	if err != nil {
+		return "", err
+	}
+	if command != "" {
+		if err := t.SendText(pane, command); err != nil {
+			return pane, err
+		}
+	}
+	return pane, nil
+}
+
 // activeClient는 가장 최근 활동한 클라이언트 이름. 없으면 빈 문자열.
 func (t Tmux) activeClient() string {
 	out, err := t.run("list-clients", "-F", "#{client_activity}\t#{client_name}")

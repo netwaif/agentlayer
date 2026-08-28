@@ -303,17 +303,18 @@ func TestResumeConfirmYCreatesWindowAndQuits(t *testing.T) {
 	m.agents = []*state.Agent{{ID: "claude-20", Kind: "claude", State: state.StateDead,
 		SessionID: "sid-20", CWD: "/tmp/w", Tmux: state.TmuxRef{Session: "work"},
 		UpdatedAt: t0, StateSince: t0}}
-	var gotName, gotDir, gotCmd string
-	m.newWindow = func(name, dir, cmd string) error {
-		gotName, gotDir, gotCmd = name, dir, cmd
-		return nil
+	var gotSess, gotName, gotDir, gotCmd string
+	m.activeSession = func() string { return "cur-sess" }
+	m.spawnWindow = func(session, name, dir, cmd string) (string, error) {
+		gotSess, gotName, gotDir, gotCmd = session, name, dir, cmd
+		return "%99", nil
 	}
 
 	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	next, cmd := next.(Model).Update(key("y"))
-	if gotName != "resume-claude-20" || gotDir != "/tmp/w" ||
+	if gotSess != "cur-sess" || gotName != "resume-claude-20" || gotDir != "/tmp/w" ||
 		!strings.Contains(gotCmd, "claude --resume sid-20") {
-		t.Errorf("창 생성 인자: %q %q %q", gotName, gotDir, gotCmd)
+		t.Errorf("창 생성 인자: %q %q %q %q", gotSess, gotName, gotDir, gotCmd)
 	}
 	if cmd == nil {
 		t.Fatal("y 후 cmd가 없다")

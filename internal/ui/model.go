@@ -92,13 +92,14 @@ type Model struct {
 	starterTasks  []starter.Task           // MultiAgent 활성 작업
 	defModels     map[string]string        // CLI별 기본 모델 설정
 	// 주입점 (테스트용)
-	newWindow   func(name, dir, command string) error // resume 창 생성
-	coachRunner func() ([]byte, error)
-	snapshotDir string
-	codexRoot   string
-	geminiDir   string
-	starterRoot string
-	homeDir     string
+	spawnWindow   func(session, name, dir, command string) (string, error) // resume 창 생성
+	activeSession func() string                                            // 활성 클라이언트의 세션
+	coachRunner   func() ([]byte, error)
+	snapshotDir   string
+	codexRoot     string
+	geminiDir     string
+	starterRoot   string
+	homeDir       string
 }
 
 func New(st *state.Store, tm tmuxx.Tmux) Model {
@@ -108,14 +109,15 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 	}
 	home, _ := os.UserHomeDir()
 	return Model{store: st, tm: tm, now: time.Now(),
-		insideTmux:  os.Getenv("TMUX") != "",
-		newWindow:   tm.NewWindow,
-		coachRunner: usage.CoachRunner,
-		snapshotDir: usage.SnapshotsDir(),
-		codexRoot:   usage.CodexSessionsRoot(),
-		geminiDir:   usage.GeminiDir(),
-		starterRoot: root,
-		homeDir:     home}
+		insideTmux:    os.Getenv("TMUX") != "",
+		spawnWindow:   tm.SpawnShellWindow,
+		activeSession: tm.ActiveSession,
+		coachRunner:   usage.CoachRunner,
+		snapshotDir:   usage.SnapshotsDir(),
+		codexRoot:     usage.CodexSessionsRoot(),
+		geminiDir:     usage.GeminiDir(),
+		starterRoot:   root,
+		homeDir:       home}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -236,8 +238,8 @@ func (m Model) attachCmd(a *state.Agent) tea.Cmd {
 }
 
 // startResume은 y 확인된 죽은 세션의 대화를 새 창에서 되살리고 그리로 이동한다.
-// tmux 안: 현재 세션에 창 생성(자동 활성) 후 TUI 종료. 밖: 원 세션이 살아
-// 있으면 거기 만들어 attach, 없으면 CLI 안내로 폴백.
+// tmux 안(팝업): 활성 클라이언트의 세션에 명시 타겟으로 창 생성(자동 활성) 후
+// TUI 종료. 밖: 원 세션이 살아 있으면 거기 만들어 attach, 없으면 CLI 안내 폴백.
 func (m Model) startResume() (tea.Model, tea.Cmd) {
 	a := m.pendingResume
 	m.pendingResume = nil
@@ -251,19 +253,23 @@ func (m Model) startResume() (tea.Model, tea.Cmd) {
 	}
 	name := "resume-" + a.ID
 	if m.insideTmux {
-		if err := m.newWindow(name, a.CWD, cmdStr); err != nil {
+		// 팝업 안에서는 tmux가 현재 세션을 특정 못 하므로 활성 세션을 명시
+		target := m.activeSession()
+		if target == "" {
+			m.err = fmt.Errorf("활성 tmux 세션을 못 찾았습니다")
+			return m, nil
+		}
+		if _, err := m.spawnWindow(target, name, a.CWD, cmdStr); err != nil {
 			m.err = err
 			return m, nil
 		}
-		return m, tea.Quit // 새 창이 현재 세션에서 활성 — 팝업이 닫히면 그 화면
+		return m, tea.Quit // 새 창이 그 세션에서 활성 — 팝업이 닫히면 그 화면
 	}
 	if a.Tmux.Session != "" && m.tm.HasSession(a.Tmux.Session) {
-		pane, err := m.tm.NewWindowIn(a.Tmux.Session, name, a.CWD)
-		if err != nil {
+		if _, err := m.spawnWindow(a.Tmux.Session, name, a.CWD, cmdStr); err != nil {
 			m.err = err
 			return m, nil
 		}
-		_ = m.tm.SendText(pane, cmdStr)
 		c := exec.Command(tmuxx.Bin(), "attach-session", "-t", "="+a.Tmux.Session)
 		return m, tea.ExecProcess(c, func(err error) tea.Msg { return attachDoneMsg{err: err} })
 	}
