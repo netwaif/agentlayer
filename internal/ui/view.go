@@ -387,7 +387,7 @@ func (m Model) usageView() string {
 			b.WriteString("  " + p.Reason + "\n\n")
 		}
 	}
-	b.WriteString(styleHelp.Render("u 관제 화면으로 · r 새로고침 · q 종료"))
+	b.WriteString(helpLine([2]string{"u", "관제 화면으로"}, [2]string{"r", "새로고침"}, [2]string{"q", "종료"}))
 	return b.String()
 }
 
@@ -466,7 +466,7 @@ func (m Model) listWindow(rows []string, cursorRow int) []string {
 func (m Model) viewBody() string {
 	if m.showInfo {
 		return styleTitle.Render("AgentLayer — 상세") + "\n\n" + m.infoText +
-			"\n" + styleHelp.Render("i/esc 닫기 · enter 점프 · q 종료")
+			"\n" + helpLine([2]string{"i/esc", "닫기"}, [2]string{"enter", "점프"}, [2]string{"q", "종료"})
 	}
 	if m.showUsage {
 		return m.usageView()
@@ -588,12 +588,15 @@ func (m Model) viewBody() string {
 	return b.String()
 }
 
-// helpLine은 하단 키 안내 — 키는 밝게, 설명은 중간 회색으로 대비를 준다.
-func helpLine() string {
-	items := [][2]string{
-		{"j/k", "이동"}, {"enter", "점프+읽음"}, {"o", "읽음"}, {"i", "상세"},
-		{"g", "git"}, {"u", "사용량"}, {"W", "전체기상"}, {"C", "전체마감"},
-		{"r", "새로고침"}, {"q", "종료"},
+// helpLine은 키 안내 줄 — 키는 밝게, 설명은 중간 회색으로 대비를 준다.
+// 관제·사용량·상세 등 모든 화면의 키 안내가 이 하나를 쓴다.
+func helpLine(items ...[2]string) string {
+	if len(items) == 0 {
+		items = [][2]string{
+			{"j/k", "이동"}, {"enter", "점프+읽음"}, {"o", "읽음"}, {"i", "상세"},
+			{"g", "git"}, {"u", "사용량"}, {"W", "전체기상"}, {"C", "전체마감"},
+			{"r", "새로고침"}, {"q", "종료"},
+		}
 	}
 	parts := make([]string, 0, len(items))
 	for _, it := range items {
