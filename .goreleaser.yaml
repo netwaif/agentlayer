@@ -21,18 +21,24 @@ archives:
     formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
-brews:
+# brews는 v2.16부로 완전 deprecated(다음 메이저에서 제거) → cask로 이관.
+# cask는 tap의 Casks/에 생성된다. 첫 cask 릴리즈 때 tap의 Formula/agentlayer.rb는 수동 삭제할 것.
+homebrew_casks:
   - name: agentlayer
-    directory: Formula # tap에 Formula/가 있으면 brew는 거기만 본다
     repository:
       owner: netwaif
       name: homebrew-tap
     homepage: https://github.com/netwaif/agentlayer
     description: "iTerm2+tmux 멀티 에이전트 관제탑 — 상태·알림·worktree"
     license: MIT
-    test: |
-      system "#{bin}/agentlayer", "version"
-      system "#{bin}/agentlayer", "status", "--json"
+    # conflicts.formula는 Homebrew에서 제거된 no-op(goreleaser v2.12 deprecated) — 옛 formula 설치자는 수동 uninstall 안내
+    # 미서명 바이너리라 Gatekeeper quarantine 해제 훅 필요 (서명·공증은 유료 개발자 계정 필요)
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/agentlayer"]
+          end
 
 checksum:
   name_template: "checksums.txt"
