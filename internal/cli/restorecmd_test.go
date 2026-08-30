@@ -119,6 +119,56 @@ func TestRunRestoreRemovesDeadRecord(t *testing.T) {
 	}
 }
 
+// restore <id> 선택: 지정한 죽은 레코드만 통과하고, 없는 ID·살아 있는 ID는
+// 사유를 남긴다 — 명시 지정을 조용히 거르면 사용자가 원인을 모른다.
+func TestFilterByIDs(t *testing.T) {
+	dir := t.TempDir()
+	dead := deadAgent("claude-1", "claude", "ai", 0, dir)
+	alive := deadAgent("claude-2", "claude", "ai", 1, dir)
+	alive.State = state.StateWorking
+	agents := []*state.Agent{dead, alive}
+
+	picked, skipped := FilterByIDs(agents, []string{"claude-1", "claude-2", "claude-9"})
+	if len(picked) != 1 || picked[0].ID != "claude-1" {
+		t.Fatalf("죽은 claude-1만 통과해야 함: %+v", picked)
+	}
+	if len(skipped) != 2 {
+		t.Fatalf("사유 2건 기대: %v", skipped)
+	}
+	if !strings.Contains(skipped[0], "claude-2") || !strings.Contains(skipped[0], "살아") {
+		t.Errorf("살아 있는 ID 사유: %v", skipped[0])
+	}
+	if !strings.Contains(skipped[1], "claude-9") {
+		t.Errorf("없는 ID 사유: %v", skipped[1])
+	}
+}
+
+// restore <id>는 지정한 레코드만 계획에 올린다 (dry-run으로 검증).
+func TestRunRestoreSelectsIDs(t *testing.T) {
+	st, err := state.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	for _, a := range []*state.Agent{
+		deadAgent("claude-1", "claude", "one", 0, dir),
+		deadAgent("claude-2", "claude", "two", 0, dir),
+	} {
+		if err := st.Save(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var buf bytes.Buffer
+	tm := tmuxx.Tmux{Args: []string{"-f", "/dev/null", "-L", fmt.Sprintf("al-sel-%d", os.Getpid())}}
+	if err := RunRestore(&buf, st, tm, []string{"--dry-run", "claude-2"}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "two") || strings.Contains(out, "one") {
+		t.Fatalf("claude-2(two)만 계획돼야 함:\n%s", out)
+	}
+}
+
 // --resume이면 대화 부활 명령(claude --resume <sid>)을 쓴다.
 func TestPlanRestoreResume(t *testing.T) {
 	dir := t.TempDir()

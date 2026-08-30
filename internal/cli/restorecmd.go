@@ -88,6 +88,30 @@ func PlanRestore(agents []*state.Agent, sessionExists func(string) bool, resume 
 	return plan
 }
 
+// FilterByIDs는 restore <id> 선택: 지정한 ID 순서대로 죽은 레코드만 골라낸다.
+// 명시 지정된 ID가 없거나 살아 있으면 조용히 거르지 않고 사유를 남긴다.
+func FilterByIDs(agents []*state.Agent, ids []string) ([]*state.Agent, []string) {
+	byID := map[string]*state.Agent{}
+	for _, a := range agents {
+		byID[a.ID] = a
+	}
+	var picked []*state.Agent
+	var skipped []string
+	for _, id := range ids {
+		a, ok := byID[id]
+		if !ok {
+			skipped = append(skipped, id+": 레코드 없음")
+			continue
+		}
+		if a.State != state.StateDead {
+			skipped = append(skipped, id+": 살아 있음("+string(a.State)+") — 복원 대상 아님")
+			continue
+		}
+		picked = append(picked, a)
+	}
+	return picked, skipped
+}
+
 // freshCommand는 종류별 새 기동 명령. gemini는 agy 흔적이 있으면 agy
 // (usage.GeminiCommand — wt new와 같은 규칙).
 func freshCommand(a *state.Agent) string {
@@ -116,7 +140,14 @@ func RunRestore(w io.Writer, st *state.Store, tm tmuxx.Tmux, args []string) erro
 	if err != nil {
 		return err
 	}
+	var idSkipped []string
+	if ids := fs.Args(); len(ids) > 0 {
+		agents, idSkipped = FilterByIDs(agents, ids)
+	}
 	plan := PlanRestore(agents, tm.HasSession, *resume)
+	for _, s := range idSkipped {
+		fmt.Fprintln(w, "  건너뜀:", s)
+	}
 	for _, s := range plan.Skipped {
 		fmt.Fprintln(w, "  건너뜀:", s)
 	}

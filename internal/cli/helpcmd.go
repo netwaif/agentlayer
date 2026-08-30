@@ -14,7 +14,7 @@ func HelpText() string {
   card           Discord 대시보드 카드 게시  [--out 출력만] [--event 전이 트리거 모드]
   init           hook·tmux 바인딩·스킬 설치 (멱등)  [--dry-run]
   resume [id]    죽은 세션의 대화를 새 window에서 재개 (비상 복구용)
-  restore        죽은 세션 배치 부활 — 새 CLI 기동 후 wake-all 권장  [--resume 대화째] [--dry-run]
+  restore        죽은 세션 배치 부활 — 새 CLI 기동 후 wake-all 권장  [--resume 대화째] [--dry-run] [id ...]
   wake-all       전 세션에 "이어서하자" 전달  [--yes] [--except 이름,..] [--watch] [--timeout 10m]
   close-all      전 세션에 "세션 마감" 전달  (플래그는 wake-all과 동일)
   broadcast <메시지>  전 세션에 임의 메시지 전달
