@@ -245,8 +245,10 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 	cs.MessageID = mid
 	pings, lv := discord.WorsenedPings(pay, cs.LastLevels)
 	cs.LastLevels = lv
+	// 한도 핑은 알림 채널로 — 대시보드 채널은 카드 한 장 전용
+	pingClient := discord.NewClient(cfg.NotifyURL())
 	for _, p := range pings {
-		_ = client.Ping(p)
+		_ = pingClient.Ping(p)
 	}
 	return discord.SaveCardState(statePath, cs)
 }

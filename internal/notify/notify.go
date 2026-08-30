@@ -74,10 +74,7 @@ func Notify(cfg *config.Config, s Sender, a *state.Agent, prev, to state.AgentSt
 		script := fmt.Sprintf("display notification %q with title %q", body, t)
 		_ = s.RunOSA(script)
 	}
-	url := cfg.NotifyWebhookURL
-	if url == "" {
-		url = cfg.DiscordWebhookURL // 알림 채널 미분리 시 카드 채널로 폴백
-	}
+	url := cfg.NotifyURL()
 	if cfg.NotifyDiscord && url != "" && s.PostJSON != nil {
 		payload, err := json.Marshal(map[string]any{
 			"username": "agentlayer",

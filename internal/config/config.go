@@ -32,6 +32,16 @@ func (c *Config) MacOSEnabled() bool {
 	return *c.NotifyMacOS
 }
 
+// NotifyURL은 단문 알림(상태 전이·한도 핑)이 갈 웹훅 — 알림 채널 우선,
+// 미분리 시 카드 채널 폴백. 대시보드 채널을 카드 한 장으로 유지하는
+// 규칙의 단일 지점이다.
+func (c *Config) NotifyURL() string {
+	if c.NotifyWebhookURL != "" {
+		return c.NotifyWebhookURL
+	}
+	return c.DiscordWebhookURL
+}
+
 // Path는 설정 파일 경로. AGENTLAYER_CONFIG로 오버라이드 가능.
 func Path() string {
 	if p := os.Getenv("AGENTLAYER_CONFIG"); p != "" {

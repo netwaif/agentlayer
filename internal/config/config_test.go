@@ -30,6 +30,19 @@ func TestLoadFile(t *testing.T) {
 	}
 }
 
+// NotifyURL: 알림 채널 우선, 미분리 시 카드 채널 폴백 — 한도 핑이
+// 대시보드 채널에 쌓이던 문제의 단일 규칙 지점.
+func TestNotifyURL(t *testing.T) {
+	c := &Config{DiscordWebhookURL: "card", NotifyWebhookURL: "notify"}
+	if c.NotifyURL() != "notify" {
+		t.Errorf("알림 채널 우선: %q", c.NotifyURL())
+	}
+	c.NotifyWebhookURL = ""
+	if c.NotifyURL() != "card" {
+		t.Errorf("미분리 시 카드 폴백: %q", c.NotifyURL())
+	}
+}
+
 func TestLoadCorruptFallsBack(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.json")
 	os.WriteFile(p, []byte(`{깨짐`), 0o600)
