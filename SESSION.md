@@ -15,19 +15,22 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.2.1 릴리즈 완료**(push+태그+goreleaser, tap Casks/agentlayer.rb 1.2.1 확인).
-내용: gemini 워커 기동 agy 우선(usage.GeminiCommand 공용화 — stock 무료 티어
-IneligibleTierError 실측 대응). 그 외 오늘(8-29): tmux-resurrect/continuum 제거
-(autosave 8/26부터 고장·낡은 스냅샷 부활 원인), 재부팅 절차를 agentlayer restore
-중심으로 확정. 로컬 make install = b384a91. 워킹트리 클린.
+**v1.2.3 릴리즈 완료**(tap Casks 1.2.3 확인). 오늘(8-30) 두 건: `restore <id>`
+개별 선택(02a5fba, v1.2.2)·한도 악화 핑 알림 채널 이관(567c2c9, v1.2.3 —
+대시보드 채널 핑 쌓임 수정). **agentlayer 영상 게시됨, 매뉴얼 미배포**(받은
+사람 없음 — 시청자는 v1.2.3부터 받게 됨). 로컬 make install = 567c2c9.
+워킹트리 클린(SESSION.md 제외).
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. 촬영 백업 정리: `~/.local/state/agentlayer/agents-backup-filming/` 레코드 3건
-   (claude-1·claude-6·claude-26) 아직 남아 있음 — 복원 불필요 확인되면 폴더째 삭제
-2. `restore <id>` 개별 선택 추가 검토 — restore-lab 무승인 부활 사고로 필요성 실증됨
-3. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드(60칸 미만 컬럼 축소), MultiAgent 패널
+1. 촬영 백업 폴더 삭제: 복원 불필요 **판정 완료**(pane ID들 이미 재사용 중·academy
+   재생성됨) — rm이 auto 모드 분류기에 차단돼 사용자가 직접 실행 필요:
+   `rm -rf ~/.local/state/agentlayer/agents-backup-filming/`
+2. 대시보드 채널에 이미 쌓인 옛 핑 메시지는 Discord에서 수동 삭제(웹훅 메시지라
+   카드 upsert가 안 건드림) — 앞으로는 안 쌓임(567c2c9)
+3. 매뉴얼 배포 여부 확인(영상은 게시됨) — 배포는 send-manual 스킬 관할
+4. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드(60칸 미만 컬럼 축소), MultiAgent 패널
    날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용), provider
    게이지 막대 텍스트화
 
@@ -95,6 +98,10 @@ IneligibleTierError 실측 대응). 그 외 오늘(8-29): tmux-resurrect/continu
 - 2026-08-29 tmux-resurrect/continuum 제거(~/.tmux.conf 주석 처리, .bak-20260829 백업) — continuum autosave가 8/26 14:24부터 고장나 재부팅 시 3일 묵은 스냅샷을 부활시킴 + 8-27 오염 사고 원인. 재부팅 절차 확정: LaunchAgent 봇 자동 기동 → agentlayer restore(--dry-run 먼저) → 전체 기상(wake-all 재정박). 봇 세션은 LaunchAgent 관할이라 restore 대상 아님
 - 2026-08-29 stock gemini CLI 무료 티어 사망 실측(IneligibleTierError: "no longer supported for Gemini Code Assist for individuals" → Antigravity 이관 안내) — 촬영 중 Opus의 lifecycle.go gemini→agy 하드코딩 핫픽스를 usage.GeminiCommand()(antigravity-cli 폴더 흔적→agy, 없으면 stock 폴백 — API 키·Vertex 사용자 유효)로 재정리, wt commandFor·restore freshCommand가 공유. 참고: 이 셸에서 gemini CLI는 PATH에 /usr/sbin 없으면 spawnSync sysctl ENOENT로 오사
 - 2026-08-29 v1.2.1 릴리즈: push(0a5af8a·b384a91)→태그→goreleaser(GITHUB_TOKEN=$(gh auth token))→릴리즈 자산 2종+checksums·tap Casks 1.2.1 확인. 패치 릴리즈도 동일 절차로 무리 없음
+- 2026-08-30 restore <id> 개별 선택 추가(02a5fba) — 위치 인자로 지정한 죽은 레코드만 부활(FilterByIDs), 없는 ID·살아 있는 ID는 사유 출력(명시 지정을 조용히 거르지 않음). 인자 없으면 기존 전체 동작. flag 패키지 특성상 플래그가 ID보다 앞: `restore [--resume] [--dry-run] [id ...]`
+- 2026-08-30 촬영 백업(agents-backup-filming) 복원 불필요 판정 — 백업 3건의 pane ID(%1·%6)는 오늘자 다른 라이브 세션(orchestrator·agentlayer-make)이 재사용 중, academy 세션은 재생성됨, zzukumi-bot은 LaunchAgent 관할. 삭제만 rm 차단(auto 모드 분류기)으로 보류 → 다음 단계 1
+- 2026-08-30 한도 악화 핑 알림 채널 이관(567c2c9) — notify 웹훅 분리(7abfb3e) 때 WorsenedPings 발사 경로가 누락돼 카드 웹훅(대시보드 채널)으로 계속 쌓임(실사용 피드백). "알림 채널 우선, 미분리 시 카드 폴백"을 config.NotifyURL()로 승격, notify.Notify와 main.go publishCard 핑이 공용
+- 2026-08-30 v1.2.2(restore <id>)·v1.2.3(핑 채널 수정) 릴리즈 — agentlayer 영상 게시됨, 매뉴얼 미배포 시점이라 시청자 설치본은 v1.2.3부터
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -154,3 +161,6 @@ IneligibleTierError 실측 대응). 그 외 오늘(8-29): tmux-resurrect/continu
 - `internal/wt/lifecycle.go` commandFor(usage.GeminiCommand 공유)·lifecycle_test.go TestCommandFor, `internal/cli/restorecmd.go` freshCommand gemini 분기를 GeminiCommand로 교체
 - 시스템 상태 추가: GitHub 릴리즈 v1.2.1, tap Casks/agentlayer.rb 1.2.1
 - `internal/wt/lifecycle.go` agentCommand["gemini"]="agy" (미커밋 — 검증 후 커밋 대상)
+- `internal/cli/restorecmd.go` FilterByIDs(ID 선택·사유), RunRestore에 fs.Args() 선택 배선, `restorecmd_test.go` TestFilterByIDs·TestRunRestoreSelectsIDs, `internal/cli/helpcmd.go` restore 행에 [id ...]
+- `internal/config/config.go` NotifyURL()(알림 우선·카드 폴백 단일 지점), `config_test.go` TestNotifyURL, `internal/notify/notify.go` NotifyURL() 사용으로 교체, `main.go` publishCard 핑을 pingClient(discord.NewClient(cfg.NotifyURL()))로
+- 시스템 상태 추가: GitHub 릴리즈 v1.2.2·v1.2.3, tap Casks/agentlayer.rb 1.2.3
