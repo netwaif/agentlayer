@@ -15,18 +15,31 @@ func TestTargetsSelection(t *testing.T) {
 	agents := []*state.Agent{
 		mkAgent("claude", "collab-bot", "%1", state.StateIdle),
 		mkAgent("codex", "codex-live", "%2", state.StateIdle),
-		mkAgent("gemini", "gem", "%3", state.StateIdle),      // 제외: 미지원
+		mkAgent("gemini", "gem", "%3", state.StateIdle),      // 3사 공통 — 포함
 		mkAgent("claude", "dead-bot", "%4", state.StateDead), // 제외: 죽음
 		mkAgent("claude", "ai", "%5", state.StateWorking),    // 자기 자신
 		mkAgent("claude", "zzukumi-bot", "%6", state.StateIdle),
 	}
 	got := Targets(agents, "%5", []string{"zzukumi-bot"})
-	if len(got) != 2 {
-		t.Fatalf("대상 2개(collab-bot, codex-live): %d", len(got))
+	if len(got) != 3 {
+		t.Fatalf("대상 3개(collab-bot, codex-live, gem): %d", len(got))
 	}
-	names := got[0].Tmux.Session + "," + got[1].Tmux.Session
-	if names != "collab-bot,codex-live" && names != "codex-live,collab-bot" {
-		t.Errorf("대상: %s", names)
+	names := map[string]bool{}
+	for _, a := range got {
+		names[a.Tmux.Session] = true
+	}
+	for _, want := range []string{"collab-bot", "codex-live", "gem"} {
+		if !names[want] {
+			t.Errorf("%s 누락", want)
+		}
+	}
+}
+
+// 8-26 "관제탑 기능은 3사 공통" 원칙 — gemini만 빠져 있던 초기 필터의 회귀 방지.
+func TestTargetsIncludesGemini(t *testing.T) {
+	agents := []*state.Agent{mkAgent("gemini", "gem", "%3", state.StateIdle)}
+	if got := Targets(agents, "", nil); len(got) != 1 {
+		t.Error("gemini도 일괄 지시 대상")
 	}
 }
 

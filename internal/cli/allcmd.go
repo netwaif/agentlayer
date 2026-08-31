@@ -52,7 +52,8 @@ func Targets(agents []*state.Agent, selfPane string, except []string) []*state.A
 	}
 	var out []*state.Agent
 	for _, a := range agents {
-		if a.Kind != "claude" && a.Kind != "codex" {
+		// 3사 공통 원칙(8-26): 관제 대상 kind면 일괄 지시도 받는다
+		if a.Kind != "claude" && a.Kind != "codex" && a.Kind != "gemini" {
 			continue
 		}
 		if a.State == state.StateDead {
