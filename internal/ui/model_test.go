@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -504,5 +505,35 @@ func TestBroadcastEmptyEnterCancels(t *testing.T) {
 	m = next.(Model)
 	if m.inputMode || m.pendingCmd != "" {
 		t.Error("빈 입력 enter는 취소돼야 함")
+	}
+}
+
+// 미리보기 주기: config.json preview_interval을 New가 읽고,
+// previewTickMsg가 자체 틱을 재예약한다 (목록 폴링과 분리).
+func TestPreviewIntervalFromConfig(t *testing.T) {
+	p := t.TempDir() + "/config.json"
+	if err := os.WriteFile(p, []byte(`{"preview_interval":"700ms"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENTLAYER_CONFIG", p)
+	m := fixtureModel(t)
+	if m.previewInterval != 700*time.Millisecond {
+		t.Errorf("previewInterval = %v, want 700ms", m.previewInterval)
+	}
+}
+
+func TestPreviewIntervalDefault(t *testing.T) {
+	t.Setenv("AGENTLAYER_CONFIG", t.TempDir()+"/없음.json")
+	m := fixtureModel(t)
+	if m.previewInterval != time.Second {
+		t.Errorf("previewInterval 기본값 = %v, want 1s", m.previewInterval)
+	}
+}
+
+func TestPreviewTickReschedules(t *testing.T) {
+	m := fixtureModel(t)
+	_, cmd := m.Update(previewTickMsg(t0))
+	if cmd == nil {
+		t.Fatal("previewTickMsg는 미리보기 갱신+다음 틱을 예약해야 한다")
 	}
 }

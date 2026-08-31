@@ -36,6 +36,10 @@ type refreshMsg struct {
 
 type tickMsg time.Time
 
+// previewTickMsg는 미리보기 전용 틱 — 목록 폴링(tickMsg)과 주기를 분리해
+// config preview_interval로 따로 조절한다.
+type previewTickMsg time.Time
+
 type usageTickMsg time.Time
 
 // usageMsg는 coach 사용량 수집 결과 (느림 — 콜드 실행은 분 단위).
@@ -87,8 +91,9 @@ type Model struct {
 	input         textinput.Model // 입력 위젯 (커서 이동·중간 편집·붙여넣기)
 	notice        string          // 하단 안내줄 (에러 아님)
 	insideTmux    bool            // false면 enter가 점프 대신 attach (tmux 밖 ssh 실행 등)
-	preview       string          // 선택 pane 화면 미리보기
-	previewPane   string
+	preview         string        // 선택 pane 화면 미리보기
+	previewPane     string
+	previewInterval time.Duration // config preview_interval (기본 1s)
 	usagePay      *usage.Payload
 	ctx           map[string]usage.CtxInfo // 에이전트 ID → 모델·ctx%
 	wtBranch      map[string]string        // worktree 경로 → 브랜치
@@ -110,7 +115,8 @@ type Model struct {
 }
 
 func New(st *state.Store, tm tmuxx.Tmux) Model {
-	root := config.Load().StarterRoot
+	cfg := config.Load()
+	root := cfg.StarterRoot
 	if root == "" {
 		root = starter.DefaultRoot()
 	}
@@ -119,7 +125,8 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 	ti.Prompt = "⌨ 전체 전송 메시지: "
 	ti.CharLimit = 500
 	return Model{store: st, tm: tm, now: time.Now(),
-		input:         ti,
+		input:           ti,
+		previewInterval: cfg.PreviewTick(),
 		insideTmux:    os.Getenv("TMUX") != "",
 		spawnWindow:   tm.SpawnShellWindow,
 		activeSession: tm.ActiveSession,
@@ -137,7 +144,11 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.refreshCmd(), tickCmd(), m.ctxCmd(), m.usageCmd(), usageTickCmd())
+	return tea.Batch(m.refreshCmd(), tickCmd(), m.previewTickCmd(), m.ctxCmd(), m.usageCmd(), usageTickCmd())
+}
+
+func (m Model) previewTickCmd() tea.Cmd {
+	return tea.Tick(m.previewInterval, func(t time.Time) tea.Msg { return previewTickMsg(t) })
 }
 
 func tickCmd() tea.Cmd {
@@ -311,6 +322,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m, tea.Batch(m.refreshCmd(), tickCmd())
 
+	case previewTickMsg:
+		return m, tea.Batch(m.previewCmd(), m.previewTickCmd())
+
 	case usageTickMsg:
 		return m, tea.Batch(m.usageCmd(), m.ctxCmd(), usageTickCmd())
 
@@ -338,7 +352,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.cursor >= len(m.agents) {
 			m.cursor = max(0, len(m.agents)-1)
 		}
-		return m, m.previewCmd() // 미리보기도 폴링 주기에 맞춰 라이브 갱신
+		return m, nil // 미리보기는 자체 틱(previewTickMsg)이 갱신
 
 	case previewMsg:
 		m.preview = msg.content

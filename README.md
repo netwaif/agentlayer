@@ -99,6 +99,9 @@ agentlayer wt ...     # worktree 병렬 모드 (아래 참고)
 - `agentlayer card`는 사용량 + 에이전트 상태를 Discord 메시지 하나로 계속
   업서트하고, provider level이 악화되면 새 메시지로 핑한다.
   LaunchAgent 등으로 5분 주기 실행을 권장
+- `preview_interval`(선택): TUI 미리보기 갱신 주기. Go duration 문자열
+  (`"500ms"`, `"2s"`). 기본 `1s`, 하한 200ms(그 아래는 200ms로 보정).
+  목록 폴링(2초)과는 별개로 미리보기만 조절된다. TUI 재시작 시 적용
 
 ## Worktree 병렬 모드
 

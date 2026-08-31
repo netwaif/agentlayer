@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type Config struct {
@@ -22,6 +23,27 @@ type Config struct {
 	StarterRoot string `json:"starter_root,omitempty"`
 	// Discord 채널 ID → 사람이 읽을 라벨 (상세 카드 표시용, 선택)
 	ChannelLabels map[string]string `json:"channel_labels,omitempty"`
+	// TUI 미리보기 갱신 주기 (Go duration 문자열, 예 "500ms"·"2s"). 비면 1s.
+	PreviewInterval string `json:"preview_interval,omitempty"`
+}
+
+const (
+	defaultPreviewTick = time.Second
+	// capture-pane 서브프로세스 폭주 방지 하한
+	minPreviewTick = 200 * time.Millisecond
+)
+
+// PreviewTick은 preview_interval을 반영한 미리보기 주기.
+// 파싱 불가·0 이하는 기본값, 하한 미만은 하한으로 — 설정 실수로 TUI가 멈추거나 폭주하지 않게.
+func (c *Config) PreviewTick() time.Duration {
+	d, err := time.ParseDuration(c.PreviewInterval)
+	if err != nil || d <= 0 {
+		return defaultPreviewTick
+	}
+	if d < minPreviewTick {
+		return minPreviewTick
+	}
+	return d
 }
 
 // MacOSEnabled는 기본값(true)을 반영한 접근자.
