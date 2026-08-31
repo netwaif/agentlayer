@@ -15,11 +15,11 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.2.3 릴리즈 완료**(tap Casks 1.2.3 확인). 오늘(8-30) 두 건: `restore <id>`
-개별 선택(02a5fba, v1.2.2)·한도 악화 핑 알림 채널 이관(567c2c9, v1.2.3 —
-대시보드 채널 핑 쌓임 수정). **agentlayer 영상 게시됨, 매뉴얼 미배포**(받은
-사람 없음 — 시청자는 v1.2.3부터 받게 됨). 로컬 make install = 567c2c9.
-워킹트리 클린(SESSION.md 제외).
+**v1.2.4 릴리즈 완료**(tap Casks 1.2.4 확인). 오늘(8-31) 두 건: 미리보기 주기
+config화 `preview_interval`(355af28)·wake-all/close-all/broadcast gemini
+포함(a196e9a). **매뉴얼 기술 검증·v1.2.4 정렬 완료**(35p PDF, agentlayer-c6
+세션 관할 — youtube/AgentLoops/agentlayer). 영상 게시됨, 매뉴얼 미배포.
+로컬 make install = a196e9a. 워킹트리 클린(SESSION.md 제외).
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
@@ -29,7 +29,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
    `rm -rf ~/.local/state/agentlayer/agents-backup-filming/`
 2. 대시보드 채널에 이미 쌓인 옛 핑 메시지는 Discord에서 수동 삭제(웹훅 메시지라
    카드 upsert가 안 건드림) — 앞으로는 안 쌓임(567c2c9)
-3. 매뉴얼 배포 여부 확인(영상은 게시됨) — 배포는 send-manual 스킬 관할
+3. 매뉴얼 배포 여부 확인(영상은 게시됨) — deploy-manual/send-manual 스킬이
+   agentlayer 매뉴얼 지원함(스킬 목록 확인됨)
 4. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드(60칸 미만 컬럼 축소), MultiAgent 패널
    날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용), provider
    게이지 막대 텍스트화
@@ -102,6 +103,11 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-08-30 촬영 백업(agents-backup-filming) 복원 불필요 판정 — 백업 3건의 pane ID(%1·%6)는 오늘자 다른 라이브 세션(orchestrator·agentlayer-make)이 재사용 중, academy 세션은 재생성됨, zzukumi-bot은 LaunchAgent 관할. 삭제만 rm 차단(auto 모드 분류기)으로 보류 → 다음 단계 1
 - 2026-08-30 한도 악화 핑 알림 채널 이관(567c2c9) — notify 웹훅 분리(7abfb3e) 때 WorsenedPings 발사 경로가 누락돼 카드 웹훅(대시보드 채널)으로 계속 쌓임(실사용 피드백). "알림 채널 우선, 미분리 시 카드 폴백"을 config.NotifyURL()로 승격, notify.Notify와 main.go publishCard 핑이 공용
 - 2026-08-30 v1.2.2(restore <id>)·v1.2.3(핑 채널 수정) 릴리즈 — agentlayer 영상 게시됨, 매뉴얼 미배포 시점이라 시청자 설치본은 v1.2.3부터
+- 2026-08-31 매뉴얼(agentlayer-manual.txt) 기술 검증 — 확정 오류 4건(전송 대상 서술·"Go 1.22"→go.mod 1.25.7·restore [id ...] 누락·§1 비문)+권고 4건을 agentlayer-c6 세션에 지시, 전건 반영 확인. 나머지 서술(크기·경로·hook·키·상태·wt)은 코드와 일치
+- 2026-08-31 미리보기 주기 config화(355af28): config.json `preview_interval`(Go duration 문자열, 기본 1s로 단축, 200ms 하한 클램프, 파싱 불가→기본). 미리보기 틱(previewTickMsg)을 목록 폴링 2s와 분리. TUI 내 조절 UI는 안 넣음 — 설정은 파일, 화면은 관제 원칙
+- 2026-08-31 wake-all/close-all/broadcast에 gemini 포함(a196e9a) — Targets 필터(claude·codex만)는 gemini 편입(8-26) 전날 작성된 잔재로 판정, 3사 공통 원칙 위반이라 수정. TUI W·C·B도 같은 경로라 함께 적용
+- 2026-08-31 매뉴얼 선반영 금지 원칙(agentlayer-c6 지적 수용) — 미릴리즈 코드 변경은 매뉴얼에 먼저 반영하지 않는다. 시청자 설치본 기준 유지, 릴리즈 후 반영
+- 2026-08-31 v1.2.4 릴리즈(preview_interval+gemini 포함): push→태그→goreleaser→릴리즈 자산 3종·tap Casks 1.2.4 확인. 매뉴얼도 v1.2.4 기준으로 정렬 완료
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -164,3 +170,9 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - `internal/cli/restorecmd.go` FilterByIDs(ID 선택·사유), RunRestore에 fs.Args() 선택 배선, `restorecmd_test.go` TestFilterByIDs·TestRunRestoreSelectsIDs, `internal/cli/helpcmd.go` restore 행에 [id ...]
 - `internal/config/config.go` NotifyURL()(알림 우선·카드 폴백 단일 지점), `config_test.go` TestNotifyURL, `internal/notify/notify.go` NotifyURL() 사용으로 교체, `main.go` publishCard 핑을 pingClient(discord.NewClient(cfg.NotifyURL()))로
 - 시스템 상태 추가: GitHub 릴리즈 v1.2.2·v1.2.3, tap Casks/agentlayer.rb 1.2.3
+- `internal/config/config.go` PreviewTick(preview_interval 파싱·기본 1s·200ms 하한), `config_test.go` TestPreviewTick
+- `internal/ui/model.go` previewTickMsg·previewTickCmd·Model.previewInterval(refreshMsg의 미리보기 발사 제거), `model_test.go` TestPreviewIntervalFromConfig 외 2
+- `internal/cli/allcmd.go` Targets에 gemini 통과, `allcmd_test.go` TestTargetsIncludesGemini·TestTargetsSelection 3사 기대로 갱신
+- `README.md` preview_interval 문서화
+- 시스템 상태 추가: GitHub 릴리즈 v1.2.4, tap Casks/agentlayer.rb 1.2.4
+- 외부: 매뉴얼 정본 `~/ai-folder/youtube/AgentLoops/agentlayer/tasks/agentlayer-video-prep/artifacts/manual/agentlayer-manual.txt` (agentlayer-c6 세션 관할, v1.2.4 정렬됨)
