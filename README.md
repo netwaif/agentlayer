@@ -58,6 +58,7 @@ agentlayer close-all  # "세션 마감하자" 전송 → 전원 완료(DONE)까�
 agentlayer broadcast "<메시지>"   # 임의 메시지 일괄 전송 (--except로 제외, --yes로 무확인)
 agentlayer info <세션>            # 배선 상세 카드: 폴더·엔진·Discord 채널·구동 주체·resume 경로
 agentlayer wt ...     # worktree 병렬 모드 (아래 참고)
+agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참고)
 ```
 
 ## 에이전트별 상태 신호
@@ -124,6 +125,27 @@ agentlayer wt clean auth-api                    # 보존 우선 정리
 - **자동 merge 없음** — merge는 항상 안내 + 명시적 확인
 - **보존 우선 정리** — 미커밋·untracked·미병합 커밋이 하나라도 있으면 clean 거부
 - worktree는 `<repo>/.agentlayer/worktrees/<task>`에, 메타는 상태 디렉터리에 기록
+
+## 에이전트 전용 브라우저
+
+에이전트가 만든 웹 화면을 사람이 직접 보고, 본 것(요소 지목·스크린샷·콘솔
+에러)을 다시 담당 에이전트 pane으로 돌려주는 전용 Chrome 관제.
+
+```bash
+agentlayer browser                 # 전용 브라우저 기동 (떠 있으면 기존 인스턴스에 attach)
+agentlayer browser pick            # 활성 탭에서 요소 클릭 → 오버레이에 지시 입력 → 담당 에이전트 pane으로 한 줄 전송 (연속 지목, Ctrl-C 종료)
+agentlayer browser shot [url] [--send]   # 전체 페이지 스크린샷 — 경로 출력, --send면 담당 에이전트 pane으로 전송
+agentlayer browser errors [--send]       # 콘솔 에러·JS 예외를 Enter까지 수집해 덤프(stdout+파일), --send면 pane 전송
+agentlayer browser preview [포트...]     # worktree dev 서버(또는 지정 포트)를 브랜치 라벨(⎇) 창으로 열기
+```
+
+- 전용 프로필 `~/.local/state/agentlayer/browser-profile`로 뜬다 —
+  로그인 세션은 이 프로필에 보존되고, 실사용 Chrome과 격리된다
+- pick 산출물(요소 컨텍스트 `.md` + 스크린샷 `.png`)과 shot·errors 덤프는
+  `~/.local/state/agentlayer/picks/`에 저장된다
+- 전송 대상 라우팅: 페이지가 localhost면 포트를 `lsof`로 역추적해
+  dev 서버의 작업 폴더와 에이전트 폴더를 최장일치로 대조한다.
+  좁혀지지 않으면 산 에이전트 전원이 후보가 된다
 
 ## 안전 원칙
 
