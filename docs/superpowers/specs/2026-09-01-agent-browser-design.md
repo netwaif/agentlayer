@@ -36,7 +36,7 @@ Chrome을 쓴다 — 단일 바이너리 goreleaser·brew 배포 유지. 생 CDP
 
 - `internal/browser/` — launch(기동·attach)·pick(검사 모드·오버레이)·route(라우팅)·
   캡처. CLI 로직은 `internal/cli/browsercmd.go`, 명령 라우팅은 main.go.
-- 인스턴스 상태: `~/.local/state/agentlayer/browser.json`(pid·CDP 포트).
+- 인스턴스 상태: `~/.local/state/agentlayer/browser.json`(CDP ws_url).
   모든 서브커맨드는 이 파일로 기존 인스턴스에 attach, 없으면 기동. 멱등.
   죽은 인스턴스의 상태 파일은 attach 실패 시 자동 정리 후 재기동.
 - Chrome 탐색: 시스템 Chrome→Chromium 순 자체 탐색(LookupTool 원칙).

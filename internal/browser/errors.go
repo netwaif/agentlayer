@@ -11,7 +11,8 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
-// CollectErrors는 until까지 페이지의 콘솔 error/warning과 JS 예외를 모은다.
+// CollectErrors는 until까지 페이지의 콘솔 error/warning·JS 예외·브라우저 생성
+// 로그(Log.entryAdded — 네트워크 404·CORS·mixed content 등)를 모은다.
 // 온디맨드 — 상주 감시가 아니다.
 func CollectErrors(page *rod.Page, until <-chan struct{}) []string {
 	// EachEvent는 호출 시점에 동기로 구독한다 — cancel로 이벤트 채널을 닫아
@@ -45,6 +46,15 @@ func CollectErrors(page *rod.Page, until <-chan struct{}) []string {
 				}
 			}
 			add(s)
+		},
+		// 네트워크 404·CORS·mixed content는 콘솔 API가 아니라 Log 도메인으로만
+		// 온다. rod의 eachEvent가 구독 시 Log.enable을 자동 호출하므로(browser.go
+		// eachEvent — 이벤트 도메인의 <domain>.enable 자동 실행) 명시 enable 불요.
+		func(e *proto.LogEntryAdded) {
+			if e.Entry.Level != proto.LogLogEntryLevelError && e.Entry.Level != proto.LogLogEntryLevelWarning {
+				return
+			}
+			add("[log." + string(e.Entry.Level) + "] " + e.Entry.Text)
 		},
 	)
 	// wait()가 이벤트를 소비한다 — until 신호 후 cancel로 종료시키고,

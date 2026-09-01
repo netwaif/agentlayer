@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/netwaif/agentlayer/internal/state"
 )
 
 // 플래그는 인자 위치와 무관하게 인식돼야 한다 — Go flag는 첫 비플래그
@@ -112,6 +114,56 @@ func TestParsePreviewArgs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func chooseCands() []*state.Agent {
+	return []*state.Agent{
+		{ID: "claude-1", Kind: "claude", Tmux: state.TmuxRef{Session: "dev", PaneID: "%1"}},
+		{ID: "codex-2", Kind: "codex", Tmux: state.TmuxRef{Session: "fix", PaneID: "%2"}},
+	}
+}
+
+// 후보 1명이면 입력을 묻지 않고 즉시 그 후보를 돌려준다.
+func TestChooseAgentSingle(t *testing.T) {
+	var out bytes.Buffer
+	got, err := chooseAgent(chooseCands()[:1], strings.NewReader(""), &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "claude-1" {
+		t.Errorf("단일 후보 즉시 반환이어야: %v", got.ID)
+	}
+	if out.Len() != 0 {
+		t.Errorf("단일 후보에 목록 출력 금지: %q", out.String())
+	}
+}
+
+// 후보 복수면 번호 목록(kind·세션명)을 띄우고 stdin 번호로 선택한다 —
+// 무통보 cands[0] 전송 금지 (스펙 라우팅 규칙: 후보 복수면 선택).
+func TestChooseAgentMultiple(t *testing.T) {
+	var out bytes.Buffer
+	got, err := chooseAgent(chooseCands(), strings.NewReader("2\n"), &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != "codex-2" {
+		t.Errorf("2번 선택은 codex-2여야: %v", got.ID)
+	}
+	for _, want := range []string{"1)", "2)", "claude", "dev", "codex", "fix"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("목록에 %q 없음: %q", want, out.String())
+		}
+	}
+}
+
+// 비정수·범위 밖·빈 입력은 에러.
+func TestChooseAgentInvalidInput(t *testing.T) {
+	for _, in := range []string{"abc\n", "0\n", "3\n", ""} {
+		var out bytes.Buffer
+		if _, err := chooseAgent(chooseCands(), strings.NewReader(in), &out); err == nil {
+			t.Errorf("입력 %q는 에러여야 함", in)
+		}
 	}
 }
 

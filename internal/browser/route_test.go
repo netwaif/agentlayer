@@ -1,7 +1,6 @@
 package browser
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/netwaif/agentlayer/internal/state"
@@ -62,5 +61,3 @@ func ids(as []*state.Agent) (r []string) {
 	}
 	return
 }
-
-var _ = fmt.Sprintf

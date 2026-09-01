@@ -1,6 +1,8 @@
 package browser
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,6 +46,35 @@ func TestCollectErrorsObjectArgFallsBackToDescription(t *testing.T) {
 	}
 	if strings.Contains(joined, "<nil>") {
 		t.Errorf("<nil> 무정보 덤프 금지: %s", joined)
+	}
+}
+
+// 네트워크 404 같은 브라우저 생성 로그는 Log.entryAdded로만 온다 —
+// 구독이 빠지면 콘솔 API 수집만으로는 잡히지 않는다.
+func TestCollectErrorsCapturesLogEntry(t *testing.T) {
+	// 페이지 자체를 같은 서버에서 서빙 — data: 오리진에서 loopback 접근 시
+	// CORS/PNA 차단으로 문구가 흔들리는 환경 의존을 피하고 순수 404를 만든다.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			_, _ = w.Write([]byte(`<body></body>`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	p := headlessPage(t, `<body></body>`)
+	p.MustNavigate(srv.URL).MustWaitLoad()
+	until := make(chan struct{})
+	got := make(chan []string, 1)
+	go func() { got <- CollectErrors(p, until) }()
+	time.Sleep(300 * time.Millisecond) // 구독 안착
+	// 같은 오리진의 404 리소스 로드 실패 → Log.entryAdded(level=error) 발화
+	p.MustEval(`() => { const i = document.createElement('img'); i.src = '/missing.png'; document.body.appendChild(i) }`)
+	time.Sleep(500 * time.Millisecond)
+	close(until)
+	joined := strings.Join(<-got, "\n")
+	if !strings.Contains(joined, "[log.error]") || !strings.Contains(joined, "404") {
+		t.Errorf("404 리소스 실패가 [log.error]로 수집돼야: %s", joined)
 	}
 }
 

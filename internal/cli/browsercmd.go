@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -124,6 +125,61 @@ func parseErrorsArgs(args []string) (send bool, err error) {
 	return *sendFlag, nil
 }
 
+// chooseAgent는 전송 대상을 확정한다 — 후보 1명이면 즉시, 복수면 번호
+// 목록(kind·세션명)을 출력하고 in에서 번호를 읽어 선택한다(스펙 라우팅
+// 규칙: 후보 복수면 선택). 잘못된 입력은 에러.
+func chooseAgent(cands []*state.Agent, in io.Reader, out io.Writer) (*state.Agent, error) {
+	if len(cands) == 1 {
+		return cands[0], nil
+	}
+	fmt.Fprintln(out, "전송 대상 후보가 여럿입니다 — 번호를 선택하세요:")
+	for i, a := range cands {
+		fmt.Fprintf(out, "  %d) %s (%s · %s)\n", i+1, a.ID, a.Kind, a.Tmux.Session)
+	}
+	fmt.Fprint(out, "번호: ")
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && line == "" {
+		return nil, fmt.Errorf("선택 입력을 읽지 못했습니다: %w", err)
+	}
+	line = strings.TrimSpace(line)
+	n, err := strconv.Atoi(line)
+	if err != nil || n < 1 || n > len(cands) {
+		return nil, fmt.Errorf("잘못된 선택 %q — 1~%d 범위의 번호를 입력하세요", line, len(cands))
+	}
+	return cands[n-1], nil
+}
+
+// sendToAgent는 shot/errors 공통의 --send 꼬리 — 레지스트리에서 페이지 URL로
+// 후보를 좁히고(복수면 chooseAgent 선택) 한 줄을 pane으로 보낸다.
+// makeLine은 페이지 URL을 받아 전송할 한 줄을 만든다.
+func sendToAgent(out io.Writer, in io.Reader, page *rod.Page, makeLine func(pageURL string) string) error {
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	agents, err := st.List()
+	if err != nil {
+		return err
+	}
+	info, err := page.Info()
+	if err != nil {
+		return err
+	}
+	cands := browser.Candidates(agents, info.URL, browser.ExecLsof)
+	if len(cands) == 0 {
+		return fmt.Errorf("전송할 에이전트가 없습니다 (agentlayer status 확인)")
+	}
+	target, err := chooseAgent(cands, in, out)
+	if err != nil {
+		return err
+	}
+	if err := (tmuxx.Tmux{}).SendText(target.Tmux.PaneID, makeLine(info.URL)); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "→ %s에게 전송\n", target.ID)
+	return nil
+}
+
 // browserErrors는 활성 탭의 콘솔 에러·JS 예외를 Enter까지 온디맨드 수집해
 // 덤프(stdout+파일)하고, --send면 shot과 같은 라우팅으로 한 줄 보낸다.
 func browserErrors(out io.Writer, args []string) error {
@@ -161,28 +217,9 @@ func browserErrors(out io.Writer, args []string) error {
 	if !send {
 		return nil
 	}
-	st, err := state.NewStore(state.DefaultDir())
-	if err != nil {
-		return err
-	}
-	agents, err := st.List()
-	if err != nil {
-		return err
-	}
-	info, err := page.Info()
-	if err != nil {
-		return err
-	}
-	cands := browser.Candidates(agents, info.URL, browser.ExecLsof)
-	if len(cands) == 0 {
-		return fmt.Errorf("전송할 에이전트가 없습니다 (agentlayer status 확인)")
-	}
-	line := fmt.Sprintf("콘솔 에러 로그 확인해줘: %s (페이지: %s)", path, info.URL)
-	if err := (tmuxx.Tmux{}).SendText(cands[0].Tmux.PaneID, line); err != nil {
-		return err
-	}
-	fmt.Fprintf(out, "→ %s에게 전송\n", cands[0].ID)
-	return nil
+	return sendToAgent(out, os.Stdin, page, func(pageURL string) string {
+		return fmt.Sprintf("콘솔 에러 로그 확인해줘: %s (페이지: %s)", path, pageURL)
+	})
 }
 
 // parsePreviewArgs는 preview의 포트 목록 인자를 파싱한다 — 각각 1~65535
@@ -270,26 +307,7 @@ func browserShot(out io.Writer, args []string) error {
 		fmt.Fprintln(out, path)
 		return nil
 	}
-	st, err := state.NewStore(state.DefaultDir())
-	if err != nil {
-		return err
-	}
-	agents, err := st.List()
-	if err != nil {
-		return err
-	}
-	info, err := page.Info()
-	if err != nil {
-		return err
-	}
-	cands := browser.Candidates(agents, info.URL, browser.ExecLsof)
-	if len(cands) == 0 {
-		return fmt.Errorf("전송할 에이전트가 없습니다 (agentlayer status 확인)")
-	}
-	line := fmt.Sprintf("브라우저 스크린샷 확인해줘: %s (페이지: %s)", path, info.URL)
-	if err := (tmuxx.Tmux{}).SendText(cands[0].Tmux.PaneID, line); err != nil {
-		return err
-	}
-	fmt.Fprintf(out, "→ %s에게 전송\n", cands[0].ID)
-	return nil
+	return sendToAgent(out, os.Stdin, page, func(pageURL string) string {
+		return fmt.Sprintf("브라우저 스크린샷 확인해줘: %s (페이지: %s)", path, pageURL)
+	})
 }
