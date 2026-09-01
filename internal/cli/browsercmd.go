@@ -14,6 +14,7 @@ import (
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/netwaif/agentlayer/internal/browser"
+	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/wt"
@@ -40,6 +41,8 @@ func RunBrowser(out io.Writer, args []string) error {
 		return browserPreview(out, args)
 	case "cookies":
 		return browserCookies(out, args)
+	case "mcp":
+		return browserMCP(out)
 	default:
 		return fmt.Errorf("모르는 browser 서브커맨드 %q — 'agentlayer help' 참고", sub)
 	}
@@ -47,7 +50,7 @@ func RunBrowser(out io.Writer, args []string) error {
 
 // browserLaunch는 전용 브라우저를 기동(또는 기존 인스턴스에 attach)한다.
 func browserLaunch(out io.Writer) error {
-	if _, err := browser.Connect(state.DefaultDir()); err != nil {
+	if _, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault()); err != nil {
 		return err
 	}
 	fmt.Fprintln(out, "에이전트 전용 브라우저 준비 완료 (프로필: browser-profile — 로그인 세션 유지)")
@@ -61,7 +64,7 @@ func browserPick(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	b, err := browser.Connect(state.DefaultDir())
+	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
 	if err != nil {
 		return err
 	}
@@ -189,7 +192,7 @@ func browserErrors(out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	b, err := browser.Connect(state.DefaultDir())
+	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
 	if err != nil {
 		return err
 	}
@@ -265,7 +268,7 @@ func browserPreview(out io.Writer, args []string) error {
 		}
 	}
 	// 열 서버가 확정된 뒤에 연결한다 — 0건 안내만 하고 끝날 때 브라우저 기동 방지.
-	b, err := browser.Connect(state.DefaultDir())
+	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
 	if err != nil {
 		return err
 	}
@@ -284,7 +287,7 @@ func browserShot(out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	b, err := browser.Connect(state.DefaultDir())
+	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
 	if err != nil {
 		return err
 	}
@@ -326,7 +329,7 @@ func browserCookies(out io.Writer, args []string) error {
 		return fmt.Errorf("가져올 도메인을 하나 이상 지정하세요 " +
 			"(예: agentlayer browser cookies import youtube.com)")
 	}
-	b, err := browser.Connect(state.DefaultDir())
+	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
 	if err != nil {
 		return err
 	}
@@ -335,4 +338,27 @@ func browserCookies(out io.Writer, args []string) error {
 		return err
 	}
 	return browser.ImportCookies(b, home, "", domains, time.Now(), out)
+}
+
+// MCPCommands는 claude·codex·gemini에 chrome-devtools-mcp를 전용 브라우저
+// (고정 CDP 포트)로 붙이는 설치 명령. 실행하지 않고 출력만 — 각 CLI 설정
+// 파일을 agentlayer가 건드리지 않는다. 문법은 세 CLI에서 실검증됨(2026-09-02).
+func MCPCommands(port int) []string {
+	url := fmt.Sprintf("--browserUrl=http://127.0.0.1:%d", port)
+	return []string{
+		"claude mcp add --scope user chrome-devtools -- npx chrome-devtools-mcp@latest " + url,
+		"codex mcp add chrome-devtools -- npx chrome-devtools-mcp@latest " + url,
+		"gemini mcp add --scope user chrome-devtools npx -- chrome-devtools-mcp@latest " + url,
+	}
+}
+
+// browserMCP: agentlayer browser mcp — 에이전트별 MCP 설치 명령을 출력한다.
+func browserMCP(out io.Writer) error {
+	port := config.Load().BrowserPortOrDefault()
+	fmt.Fprintf(out, "# 전용 브라우저 CDP: http://127.0.0.1:%d (config browser_port)\n", port)
+	fmt.Fprintln(out, "# 쓰는 에이전트의 줄을 골라 실행하세요 — 등록 후 에이전트가 이 브라우저를 직접 조작·검사합니다")
+	for _, l := range MCPCommands(port) {
+		fmt.Fprintln(out, l)
+	}
+	return nil
 }

@@ -25,9 +25,13 @@ type Config struct {
 	ChannelLabels map[string]string `json:"channel_labels,omitempty"`
 	// TUI 미리보기 갱신 주기 (Go duration 문자열, 예 "500ms"·"2s"). 비면 1s.
 	PreviewInterval string `json:"preview_interval,omitempty"`
+	// 전용 브라우저의 CDP 디버깅 포트. 고정이라 MCP(chrome-devtools-mcp 등)가
+	// 늘 같은 주소로 붙는다. 비면 9222.
+	BrowserPort int `json:"browser_port,omitempty"`
 }
 
 const (
+	defaultBrowserPort = 9222
 	defaultPreviewTick = time.Second
 	// capture-pane 서브프로세스 폭주 방지 하한
 	minPreviewTick = 200 * time.Millisecond
@@ -44,6 +48,14 @@ func (c *Config) PreviewTick() time.Duration {
 		return minPreviewTick
 	}
 	return d
+}
+
+// BrowserPortOrDefault는 browser_port를 반영한 디버깅 포트. 범위 밖(0 이하·65535 초과)은 기본값.
+func (c *Config) BrowserPortOrDefault() int {
+	if c.BrowserPort <= 0 || c.BrowserPort > 65535 {
+		return defaultBrowserPort
+	}
+	return c.BrowserPort
 }
 
 // MacOSEnabled는 기본값(true)을 반영한 접근자.

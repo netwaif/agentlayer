@@ -103,6 +103,8 @@ agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참
 - `preview_interval`(선택): TUI 미리보기 갱신 주기. Go duration 문자열
   (`"500ms"`, `"2s"`). 기본 `1s`, 하한 200ms(그 아래는 200ms로 보정).
   목록 폴링(2초)과는 별개로 미리보기만 조절된다. TUI 재시작 시 적용
+- `browser_port`(선택): 전용 브라우저 CDP 디버깅 포트. 기본 `9222`.
+  MCP 설정이 이 주소를 고정으로 보므로 바꾸면 `agentlayer browser mcp`를 다시 등록
 
 ## Worktree 병렬 모드
 
@@ -138,10 +140,19 @@ agentlayer browser shot [url] [--send]   # 전체 페이지 스크린샷 — 경
 agentlayer browser errors [--send]       # 콘솔 에러·JS 예외를 Enter까지 수집해 덤프(stdout+파일), --send면 pane 전송
 agentlayer browser preview [포트...]     # worktree dev 서버(또는 지정 포트)를 브랜치 라벨(⎇) 창으로 열기
 agentlayer browser cookies import <도메인...>  # 실사용 크롬의 지정 도메인 쿠키만 골라 전용 프로필로 가져오기 (macOS)
+agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mcp를 이 브라우저로 붙이는 설치 명령 출력
 ```
 
 - 전용 프로필 `~/.local/state/agentlayer/browser-profile`로 뜬다 —
   로그인 세션은 이 프로필에 보존되고, 실사용 Chrome과 격리된다
+- CDP 디버깅 포트는 고정(`browser_port`, 기본 9222)이라 재부팅 뒤에도
+  기록 없이 같은 브라우저를 찾아 attach한다. 포트를 다른 프로세스가
+  물고 있으면 명시적으로 실패한다 — config에서 포트를 바꾸면 된다
+- **에이전트가 직접 조작·검사(클릭·입력·콘솔·네트워크)하려면 MCP를 붙인다** —
+  agentlayer는 제어 기능을 자체 구현하지 않고 chrome-devtools-mcp에 위임한다.
+  `agentlayer browser mcp`가 출력한 줄 중 쓰는 에이전트의 것을 실행하면
+  세 에이전트가 같은 로그인 브라우저를 공유한다. Playwright MCP를 쓰려면
+  `npx @playwright/mcp --cdp-endpoint http://127.0.0.1:9222`로 같은 포트에 붙는다
 - `cookies import`는 2FA 재로그인이 번거로운 사이트용 — 실사용 크롬에서
   지정 도메인 쿠키만 복호화해 전용 프로필에 심는다(전체 프로필 복사가 아님).
   실행 시 macOS Keychain 접근 팝업이 뜨면 '항상 허용'을 눌러야 한다.

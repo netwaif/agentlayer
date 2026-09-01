@@ -33,12 +33,13 @@ func TestConnectIdempotentIntegration(t *testing.T) {
 	SetHeadlessForTest(true)
 	defer SetHeadlessForTest(false)
 	dir := t.TempDir()
-	b1, err := Connect(dir)
+	port := freePort(t)
+	b1, err := Connect(dir, port)
 	if err != nil {
 		t.Fatal(err)
 	}
 	in1, _ := LoadInstance(dir)
-	b2, err := Connect(dir) // 두 번째는 attach여야 한다
+	b2, err := Connect(dir, port) // 두 번째는 attach여야 한다
 	if err != nil {
 		t.Fatal(err)
 	}

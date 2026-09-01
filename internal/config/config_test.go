@@ -61,17 +61,35 @@ func TestPreviewTick(t *testing.T) {
 		in   string
 		want time.Duration
 	}{
-		{"", time.Second},              // 미설정 → 기본
+		{"", time.Second}, // 미설정 → 기본
 		{"500ms", 500 * time.Millisecond},
 		{"2s", 2 * time.Second},
-		{"바나나", time.Second},          // 파싱 불가 → 기본
-		{"-1s", time.Second},           // 음수 → 기본
+		{"바나나", time.Second},             // 파싱 불가 → 기본
+		{"-1s", time.Second},             // 음수 → 기본
 		{"50ms", 200 * time.Millisecond}, // 하한 클램프
 	}
 	for _, c := range cases {
 		got := (&Config{PreviewInterval: c.in}).PreviewTick()
 		if got != c.want {
 			t.Errorf("PreviewTick(%q) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestBrowserPortOrDefault(t *testing.T) {
+	cases := []struct {
+		in   int
+		want int
+	}{
+		{0, 9222},     // 미설정 → 기본
+		{9333, 9333},  // 지정값
+		{-1, 9222},    // 음수 → 기본
+		{70000, 9222}, // 범위 밖 → 기본
+	}
+	for _, c := range cases {
+		got := (&Config{BrowserPort: c.in}).BrowserPortOrDefault()
+		if got != c.want {
+			t.Errorf("BrowserPortOrDefault(%d) = %d, want %d", c.in, got, c.want)
 		}
 	}
 }

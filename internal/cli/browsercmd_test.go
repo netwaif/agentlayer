@@ -179,3 +179,32 @@ func TestRunBrowserUnknownSub(t *testing.T) {
 		t.Errorf("에러에 help 안내가 없다: %v", err)
 	}
 }
+
+func TestMCPCommands(t *testing.T) {
+	lines := MCPCommands(9333)
+	want := []string{
+		"claude mcp add --scope user chrome-devtools -- npx chrome-devtools-mcp@latest --browserUrl=http://127.0.0.1:9333",
+		"codex mcp add chrome-devtools -- npx chrome-devtools-mcp@latest --browserUrl=http://127.0.0.1:9333",
+		"gemini mcp add --scope user chrome-devtools npx -- chrome-devtools-mcp@latest --browserUrl=http://127.0.0.1:9333",
+	}
+	if len(lines) != len(want) {
+		t.Fatalf("줄 수 %d, want %d: %v", len(lines), len(want), lines)
+	}
+	for i := range want {
+		if lines[i] != want[i] {
+			t.Errorf("[%d]\n got %q\nwant %q", i, lines[i], want[i])
+		}
+	}
+}
+
+func TestRunBrowserMCPPrintsCommands(t *testing.T) {
+	var out bytes.Buffer
+	if err := RunBrowser(&out, []string{"mcp"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range []string{"claude mcp add", "codex mcp add", "gemini mcp add"} {
+		if !strings.Contains(out.String(), tool) {
+			t.Errorf("%q 누락:\n%s", tool, out.String())
+		}
+	}
+}
