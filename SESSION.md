@@ -15,25 +15,16 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.2.4 릴리즈 완료**(tap Casks 1.2.4 확인). 오늘(8-31) 두 건: 미리보기 주기
-config화 `preview_interval`(355af28)·wake-all/close-all/broadcast gemini
-포함(a196e9a). **매뉴얼 기술 검증·v1.2.4 정렬 완료**(35p PDF, agentlayer-c6
-세션 관할 — youtube/AgentLoops/agentlayer). 영상 게시됨, 매뉴얼 미배포.
-로컬 make install = a196e9a. 워킹트리 클린(SESSION.md 제외).
+**GitHub 릴리즈 = v1.2.5**(usage stale-while-revalidate, tap Casks 1.2.5·디스코드 공지 완료 — 시청자 설치본은 여기까지). **로컬 main은 origin 대비 17커밋 앞섬(미푸시)** — 에이전트 전용 브라우저(browser 명령 5종 + cookies import)가 로컬 main에만 머지됨. 로컬 make install = 2b4f6a0. 워킹트리 클린(SESSION.md 제외).
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. 촬영 백업 폴더 삭제: 복원 불필요 **판정 완료**(pane ID들 이미 재사용 중·academy
-   재생성됨) — rm이 auto 모드 분류기에 차단돼 사용자가 직접 실행 필요:
-   `rm -rf ~/.local/state/agentlayer/agents-backup-filming/`
-2. 대시보드 채널에 이미 쌓인 옛 핑 메시지는 Discord에서 수동 삭제(웹훅 메시지라
-   카드 upsert가 안 건드림) — 앞으로는 안 쌓임(567c2c9)
-3. 매뉴얼 배포 여부 확인(영상은 게시됨) — deploy-manual/send-manual 스킬이
-   agentlayer 매뉴얼 지원함(스킬 목록 확인됨)
-4. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드(60칸 미만 컬럼 축소), MultiAgent 패널
-   날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트(영상용), provider
-   게이지 막대 텍스트화
+1. **Mac 복귀 후 손확인**(SSH 원격이라 GUI 팝업·창 조작 불가로 보류): ① `agentlayer browser` → `browser pick` 실클릭→오버레이→pane 수신 ② `agentlayer browser cookies import youtube.com` 실사용. 자동 테스트·github.com 실검증은 통과, 손맛만 확인
+2. 손확인 통과 시 릴리즈: push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영(선반영 금지 원칙대로 릴리즈 후)
+3. `browser errors` 비상호작용 모드(`--duration Ns` 또는 리로드 1회 수집) 추가 여부 결정 — 현재는 stdin Enter 대기라 에이전트 자율 사용 불가(사람→에이전트 전용). shot은 이미 자율 사용 가능
+4. 대시보드 채널 옛 핑 메시지 Discord 수동 삭제(웹훅 메시지, 앞으로는 안 쌓임 567c2c9)
+5. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트, provider 게이지 막대 텍스트화, browser 기동 시 이미 떠 있으면 창 앞으로/새 탭(attach만 하면 아무 일 안 일어난 것처럼 보임)
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -108,6 +99,12 @@ config화 `preview_interval`(355af28)·wake-all/close-all/broadcast gemini
 - 2026-08-31 wake-all/close-all/broadcast에 gemini 포함(a196e9a) — Targets 필터(claude·codex만)는 gemini 편입(8-26) 전날 작성된 잔재로 판정, 3사 공통 원칙 위반이라 수정. TUI W·C·B도 같은 경로라 함께 적용
 - 2026-08-31 매뉴얼 선반영 금지 원칙(agentlayer-c6 지적 수용) — 미릴리즈 코드 변경은 매뉴얼에 먼저 반영하지 않는다. 시청자 설치본 기준 유지, 릴리즈 후 반영
 - 2026-08-31 v1.2.4 릴리즈(preview_interval+gemini 포함): push→태그→goreleaser→릴리즈 자산 3종·tap Casks 1.2.4 확인. 매뉴얼도 v1.2.4 기준으로 정렬 완료
+- 2026-09-01 매뉴얼 배포 확인 — "미배포" 기록은 낡은 것. Drive `agentlayer 한국어 매뉴얼 v1.2.0.pdf`(ID 1c6ud4ALnvfJaOFVtFq4VmFKwJAzQO6eZ, 도구 v1.2.4 정렬본) 로컬과 MD5 일치·공유 켜짐, agentlayer-c6 세션이 8-31 배포함. 촬영 백업 폴더는 rm auto 분류기 재차단으로 `~/.Trash/agents-backup-filming-20260901`로 mv 정리
+- 2026-09-01 v1.2.5 릴리즈 — usage stale-while-revalidate(5b6761a): coach 콜드 실행이 실측 1분58초라 캐시 만료 시 TUI/카드가 통째로 늦던 문제. ReadCached(나이 불문 읽기 전용) 신설, TUI Init에 usageCacheCmd(낡은 캐시 즉시 그림+뒤에서 갱신), 카드는 1차 캐시 즉시 게시→coach 갱신→TS 변화 시만 2차 재게시(--event는 1차 단일). push→태그→goreleaser→tap Casks 1.2.5·디스코드 공지(채널 1522490241859059784)·영상 COcgg7Q_r8U 고정댓글에 업데이트 블록 추가(고정댓글 ID Ugw34-uRD1kfykfUsUF4AaABAg, my-videos videos.json에 기록)
+- 2026-09-01 에이전트 전용 브라우저 착수 — Orca 대응 "브라우저에서 요소 찍으면 터미널 에이전트가 고치는" 역방향 다리. 스펙 `docs/superpowers/specs/2026-09-01-agent-browser-design.md`, 계획 `docs/superpowers/plans/2026-09-01-agent-browser.md`. 접근=Go+rod(순수 CDP, 자동 다운로드 금지·시스템 Chrome, 단일 바이너리 유지). SDD 9태스크 서브에이전트 구동(구현 Fable5·리뷰 Opus·최종리뷰 Fable5), 태스크별+최종 브랜치 리뷰 전부 클린 후 로컬 main 머지(브랜치 삭제)
+- 2026-09-01 브라우저 설계 결정: 내장 브라우저 UI(터미널 임베드 불가)·원격 스트리밍·쿠키 전체복사·제어 API·TUI 통합·다중 프로필 제외. pick 지시입력은 브라우저 내 shadow DOM 오버레이(사용자 선택). 라우팅=페이지 localhost 포트→lsof cwd→에이전트 레코드 최장일치, 실패/복수면 선택. 전송은 tmuxx.SendText 한 줄(맥락은 picks/ md·png 파일)이라 3사 공통
+- 2026-09-01 cookies import 편입(2b4f6a0) — 사용자 지적("기능 최대한 넣으라 했는데 왜 뺐나") 수용. 전체 프로필 복사가 아닌 **도메인 화이트리스트** 방식이라 격리 원칙과 양립. 2FA 재로그인 회피용. Fable5 safeguard가 쿠키 복호화를 민감작업으로 보고 Opus4.8로 전환→Opus가 정당맥락(본인 머신·본인 쿠키·명시요청·Orca도 제공)에서 직접 구현. macOS Keychain "Chrome Safe Storage"+v10 복호화, github.com 6개 실검증(패딩 검증 통과=키 정확). 세션 모델이 이 작업 때마다 Fable↔Opus 오간 건 safeguard 정상 동작
+- 2026-09-01 브라우저 shot/errors 자율성: shot은 비상호작용(경로 stdout)이라 에이전트가 자기 dev서버 캡처→검증 자율 사용 가능. errors는 stdin Enter 대기(사람이 버그 재현)라 에이전트 자율 불가 — 필요 시 `--duration`/리로드 1회 수집 모드 후속(다음 단계 3)
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -176,3 +173,17 @@ config화 `preview_interval`(355af28)·wake-all/close-all/broadcast gemini
 - `README.md` preview_interval 문서화
 - 시스템 상태 추가: GitHub 릴리즈 v1.2.4, tap Casks/agentlayer.rb 1.2.4
 - 외부: 매뉴얼 정본 `~/ai-folder/youtube/AgentLoops/agentlayer/tasks/agentlayer-video-prep/artifacts/manual/agentlayer-manual.txt` (agentlayer-c6 세션 관할, v1.2.4 정렬됨)
+- `internal/usage/cache.go` ReadCached(나이 불문 읽기 전용)·readCacheFile 추출, cache_test.go TestReadCached 2종
+- `internal/ui/model.go` usageCacheCmd(Init에서 낡은 캐시 즉시 usageMsg), `main.go` publishCard 2-pass(stale 즉시 게시→FetchCached→usagePayloadChanged 시 2차)·usagePayloadChanged, main_card_test.go
+- `internal/browser/instance.go` Connect(멱등 attach·죽은 기록 정리)·Instance{WSURL}·Load/Save/RemoveInstance, browser.json·browser-profile/, Leakless(false)·launcher.LookPath (자동 다운로드 금지). export_test.go SetHeadlessForTest
+- `internal/browser/route.go` RunLsof·ExecLsof·PortCWD(lsof -Fp/-Fn)·Candidates(localhost 포트→cwd→최장일치, 외부/실패면 산 에이전트 전원)
+- `internal/browser/context.go` PickContext·SavePick(picks/<ts>.md+png)·PromptLine(strings.Fields로 한 줄 강제)
+- `internal/browser/pick.go` RunPick(검사모드 EachEvent 동기구독+wait·abort 정리·OverlayEnable 명시·shadow DOM 오버레이 selectorJS/overlayJS·el.Eval/page.Info 에러반환)·ActivePage, pick_test.go(실클릭 e2e·탭닫힘·취소)
+- `internal/browser/shot.go` Shot(전체 캡처 picks/<ts>-shot.png), `internal/cli/browsercmd.go` parseShotArgs(위치 무관 --send)·sendToAgent·chooseAgent(복수 후보 stdin 선택)
+- `internal/browser/errors.go` CollectErrors(RuntimeExceptionThrown·RuntimeConsoleAPICalled error/warn·LogEntryAdded·Value.Nil()→Description 폴백)·SaveErrors(picks/<ts>-errors.txt)
+- `internal/browser/preview.go` DevServers(전 리스너 스캔→worktree 경로 아래·빈 경로 가드)·OpenPreview(새 창+⎇브랜치 제목)·DevServer
+- `internal/browser/cookies.go` ImportCookies·pbkdf2SHA1·matchesDomain·parseHexBlob·chromeEpochToTime·decryptV10(v10·PKCS7·SHA256 host_key 프리픽스 제거)·parseCookieRows·buildCookieParams·readChromeCookies(sqlite3 -separator·WAL 복사)·safeStoragePassword(security find-generic-password), cookies_test.go(RFC PBKDF2 벡터·라운드트립·필터)
+- `internal/cli/browsercmd.go` RunBrowser 디스패치(기동/pick/shot/errors/preview/cookies), `main.go` case "browser", `internal/cli/helpcmd.go` browser 행
+- `go.mod` github.com/go-rod/rod 직접 의존성 추가(순수 Go, goreleaser 무변경)
+- 시스템 상태 추가: `~/.local/state/agentlayer/browser.json`(CDP ws_url)·`browser-profile/`(전용 프로필)·`picks/`(pick 산출물). 로컬 main 2b4f6a0(origin 대비 17커밋 미푸시, GitHub 릴리즈는 v1.2.5)
+- 외부: SDD 레저·브리프는 작업 완료로 삭제됨(`.superpowers/sdd/2026-09-01-agent-browser/`) — 정본은 git 이력
