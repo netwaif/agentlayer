@@ -6,6 +6,42 @@ import (
 	"testing"
 )
 
+// 플래그는 인자 위치와 무관하게 인식돼야 한다 — Go flag는 첫 비플래그
+// 인자에서 멈추므로 `shot <url> --send`가 --send를 조용히 삼키면 안 된다.
+func TestParseShotArgs(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		url     string
+		send    bool
+		wantErr bool
+	}{
+		{"url 뒤 --send", []string{"https://example.com", "--send"}, "https://example.com", true, false},
+		{"--send 뒤 url", []string{"--send", "https://example.com"}, "https://example.com", true, false},
+		{"인자 없음", nil, "", false, false},
+		{"url만", []string{"https://example.com"}, "https://example.com", false, false},
+		{"잉여 인자는 에러", []string{"a", "b"}, "", false, true},
+		{"모르는 플래그는 에러", []string{"--bogus"}, "", false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			url, send, err := parseShotArgs(c.args)
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("에러여야 함: url=%q send=%v", url, send)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if url != c.url || send != c.send {
+				t.Errorf("got url=%q send=%v, want url=%q send=%v", url, send, c.url, c.send)
+			}
+		})
+	}
+}
+
 // 미지 서브커맨드는 명확한 에러로 알린다 — Task 6~8이 case를 추가해도
 // default 분기의 문구는 유지돼야 한다.
 func TestRunBrowserUnknownSub(t *testing.T) {

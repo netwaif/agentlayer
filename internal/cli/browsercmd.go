@@ -74,11 +74,37 @@ func browserPick(out io.Writer) error {
 	}
 }
 
+// parseShotArgs는 shot의 url·--send를 인자 위치와 무관하게 파싱한다.
+// Go flag는 첫 비플래그 인자에서 멈추므로 `shot <url> --send`가 --send를
+// 조용히 삼키지 않게, 위치 인자를 걷어내며 끝까지 재파싱한다.
+func parseShotArgs(args []string) (url string, send bool, err error) {
+	fs := flag.NewFlagSet("shot", flag.ContinueOnError)
+	fs.SetOutput(io.Discard) // usage 자동 출력 억제 — 반환 에러로 충분
+	sendFlag := fs.Bool("send", false, "에이전트 pane으로 경로 전송")
+	var rest []string
+	for {
+		if err := fs.Parse(args); err != nil {
+			return "", false, err
+		}
+		if fs.NArg() == 0 {
+			break
+		}
+		rest = append(rest, fs.Arg(0))
+		args = fs.Args()[1:]
+	}
+	if len(rest) > 1 {
+		return "", false, fmt.Errorf("잉여 인자 %q — 사용법: agentlayer browser shot [url] [--send]", rest[1:])
+	}
+	if len(rest) == 1 {
+		url = rest[0]
+	}
+	return url, *sendFlag, nil
+}
+
 // browserShot은 전체 페이지를 캡처해 경로를 출력하거나(--send면) pane으로 보낸다.
 func browserShot(out io.Writer, args []string) error {
-	fs := flag.NewFlagSet("shot", flag.ContinueOnError)
-	sendFlag := fs.Bool("send", false, "에이전트 pane으로 경로 전송")
-	if err := fs.Parse(args); err != nil {
+	url, send, err := parseShotArgs(args)
+	if err != nil {
 		return err
 	}
 	b, err := browser.Connect(state.DefaultDir())
@@ -86,7 +112,8 @@ func browserShot(out io.Writer, args []string) error {
 		return err
 	}
 	var page *rod.Page
-	if url := fs.Arg(0); url != "" {
+	if url != "" {
+		// 새 탭은 닫지 않고 남긴다 — 캡처 결과를 사용자가 브라우저에서 확인할 수 있게.
 		page, err = b.Page(proto.TargetCreateTarget{URL: url})
 		if err != nil {
 			return err
@@ -101,7 +128,7 @@ func browserShot(out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	if !*sendFlag {
+	if !send {
 		fmt.Fprintln(out, path)
 		return nil
 	}
