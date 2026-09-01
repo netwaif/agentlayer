@@ -137,10 +137,15 @@ agentlayer browser pick            # 활성 탭에서 요소 클릭 → 오버�
 agentlayer browser shot [url] [--send]   # 전체 페이지 스크린샷 — 경로 출력, --send면 담당 에이전트 pane으로 전송
 agentlayer browser errors [--send]       # 콘솔 에러·JS 예외를 Enter까지 수집해 덤프(stdout+파일), --send면 pane 전송
 agentlayer browser preview [포트...]     # worktree dev 서버(또는 지정 포트)를 브랜치 라벨(⎇) 창으로 열기
+agentlayer browser cookies import <도메인...>  # 실사용 크롬의 지정 도메인 쿠키만 골라 전용 프로필로 가져오기 (macOS)
 ```
 
 - 전용 프로필 `~/.local/state/agentlayer/browser-profile`로 뜬다 —
   로그인 세션은 이 프로필에 보존되고, 실사용 Chrome과 격리된다
+- `cookies import`는 2FA 재로그인이 번거로운 사이트용 — 실사용 크롬에서
+  지정 도메인 쿠키만 복호화해 전용 프로필에 심는다(전체 프로필 복사가 아님).
+  실행 시 macOS Keychain 접근 팝업이 뜨면 '항상 허용'을 눌러야 한다.
+  예: `agentlayer browser cookies import youtube.com google.com`
 - pick 산출물(요소 컨텍스트 `.md` + 스크린샷 `.png`)과 shot·errors 덤프는
   `~/.local/state/agentlayer/picks/`에 저장된다
 - 전송 대상 라우팅: 페이지가 localhost면 포트를 `lsof`로 역추적해

@@ -38,6 +38,8 @@ func RunBrowser(out io.Writer, args []string) error {
 		return browserErrors(out, args)
 	case "preview":
 		return browserPreview(out, args)
+	case "cookies":
+		return browserCookies(out, args)
 	default:
 		return fmt.Errorf("모르는 browser 서브커맨드 %q — 'agentlayer help' 참고", sub)
 	}
@@ -310,4 +312,27 @@ func browserShot(out io.Writer, args []string) error {
 	return sendToAgent(out, os.Stdin, page, func(pageURL string) string {
 		return fmt.Sprintf("브라우저 스크린샷 확인해줘: %s (페이지: %s)", path, pageURL)
 	})
+}
+
+// browserCookies: agentlayer browser cookies import <도메인...>
+// 실사용 크롬의 지정 도메인 쿠키만 골라 에이전트 프로필로 가져온다.
+func browserCookies(out io.Writer, args []string) error {
+	if len(args) == 0 || args[0] != "import" {
+		return fmt.Errorf("사용법: agentlayer browser cookies import <도메인...> " +
+			"(예: agentlayer browser cookies import youtube.com google.com)")
+	}
+	domains := args[1:]
+	if len(domains) == 0 {
+		return fmt.Errorf("가져올 도메인을 하나 이상 지정하세요 " +
+			"(예: agentlayer browser cookies import youtube.com)")
+	}
+	b, err := browser.Connect(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	return browser.ImportCookies(b, home, "", domains, time.Now(), out)
 }

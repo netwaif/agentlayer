@@ -19,7 +19,7 @@ func HelpText() string {
   close-all      전 세션에 "세션 마감" 전달  (플래그는 wake-all과 동일)
   broadcast <메시지>  전 세션에 임의 메시지 전달
   wt <명령>      worktree 워커 관리 (new·list·diff·test·review·send·merge·clean) — 'agentlayer wt'로 상세
-  browser [pick|shot|errors|preview]  에이전트 전용 브라우저 (기동/요소찍기/캡처/콘솔에러/wt 프리뷰)
+  browser [pick|shot|errors|preview|cookies]  에이전트 전용 브라우저 (기동/요소찍기/캡처/콘솔에러/wt 프리뷰/쿠키 가져오기)
   version        버전 정보 (-v/--version)
   help           이 도움말 (-h/--help)
 `
