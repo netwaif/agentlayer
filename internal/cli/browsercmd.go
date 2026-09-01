@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -14,6 +15,7 @@ import (
 	"github.com/netwaif/agentlayer/internal/browser"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
+	"github.com/netwaif/agentlayer/internal/wt"
 )
 
 // RunBrowser는 browser 서브커맨드를 디스패치한다.
@@ -33,6 +35,8 @@ func RunBrowser(out io.Writer, args []string) error {
 		return browserShot(out, args)
 	case "errors":
 		return browserErrors(out, args)
+	case "preview":
+		return browserPreview(out, args)
 	default:
 		return fmt.Errorf("모르는 browser 서브커맨드 %q — 'agentlayer help' 참고", sub)
 	}
@@ -178,6 +182,60 @@ func browserErrors(out io.Writer, args []string) error {
 		return err
 	}
 	fmt.Fprintf(out, "→ %s에게 전송\n", cands[0].ID)
+	return nil
+}
+
+// parsePreviewArgs는 preview의 포트 목록 인자를 파싱한다 — 각각 1~65535
+// 정수여야 하고, 비정수·범위 밖은 에러.
+func parsePreviewArgs(args []string) ([]int, error) {
+	var ports []int
+	for _, a := range args {
+		p, err := strconv.Atoi(a)
+		if err != nil || p < 1 || p > 65535 {
+			return nil, fmt.Errorf("포트가 아닌 인자 %q — 사용법: agentlayer browser preview [포트...]", a)
+		}
+		ports = append(ports, p)
+	}
+	return ports, nil
+}
+
+// browserPreview는 worktree의 dev 서버(또는 지정 포트)를 브랜치 라벨 창으로 연다.
+func browserPreview(out io.Writer, args []string) error {
+	ports, err := parsePreviewArgs(args)
+	if err != nil {
+		return err
+	}
+	var servers []browser.DevServer
+	if len(ports) > 0 {
+		for _, p := range ports {
+			servers = append(servers, browser.DevServer{Port: p, Branch: fmt.Sprintf("포트 %d", p)})
+		}
+	} else {
+		metas, err := wt.ListMetas(state.DefaultDir())
+		if err != nil {
+			return err
+		}
+		wts := make(map[string]string, len(metas))
+		for _, m := range metas {
+			wts[m.Path] = m.Branch
+		}
+		servers = browser.DevServers(browser.ExecLsof, wts)
+		if len(servers) == 0 {
+			fmt.Fprintln(out, "worktree에서 실행 중인 dev 서버가 없습니다 (포트를 인자로 지정 가능)")
+			return nil
+		}
+	}
+	// 열 서버가 확정된 뒤에 연결한다 — 0건 안내만 하고 끝날 때 브라우저 기동 방지.
+	b, err := browser.Connect(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	for _, s := range servers {
+		if err := browser.OpenPreview(b, s); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "⎇%s http://localhost:%d 열림\n", s.Branch, s.Port)
+	}
 	return nil
 }
 

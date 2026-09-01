@@ -75,6 +75,46 @@ func TestParseErrorsArgs(t *testing.T) {
 	}
 }
 
+// preview 인자는 포트 목록 — 각각 정수여야 하고 범위(1~65535)를 벗어나면 에러.
+func TestParsePreviewArgs(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		ports   []int
+		wantErr bool
+	}{
+		{"인자 없음", nil, nil, false},
+		{"포트 하나", []string{"3000"}, []int{3000}, false},
+		{"포트 여럿", []string{"3000", "5173"}, []int{3000, 5173}, false},
+		{"비정수는 에러", []string{"abc"}, nil, true},
+		{"섞여도 에러", []string{"3000", "abc"}, nil, true},
+		{"0은 에러", []string{"0"}, nil, true},
+		{"범위 초과는 에러", []string{"70000"}, nil, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ports, err := parsePreviewArgs(c.args)
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("에러여야 함: %v", ports)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(ports) != len(c.ports) {
+				t.Fatalf("got %v, want %v", ports, c.ports)
+			}
+			for i := range ports {
+				if ports[i] != c.ports[i] {
+					t.Errorf("got %v, want %v", ports, c.ports)
+				}
+			}
+		})
+	}
+}
+
 // 미지 서브커맨드는 명확한 에러로 알린다 — Task 6~8이 case를 추가해도
 // default 분기의 문구는 유지돼야 한다.
 func TestRunBrowserUnknownSub(t *testing.T) {
