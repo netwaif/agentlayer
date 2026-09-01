@@ -142,15 +142,16 @@ func browserErrors(out io.Writer, args []string) error {
 		close(until)
 	}()
 	lines := browser.CollectErrors(page, until)
-	path, err := browser.SaveErrors(state.DefaultDir(), lines, time.Now())
-	if err != nil {
-		return err
-	}
+	// 저장 실패해도 수집분이 유실되지 않게 라인부터 stdout에 찍는다.
 	if len(lines) == 0 {
 		fmt.Fprintln(out, "(수집된 에러 없음)")
 	}
 	for _, l := range lines {
 		fmt.Fprintln(out, l)
+	}
+	path, err := browser.SaveErrors(state.DefaultDir(), lines, time.Now())
+	if err != nil {
+		return err
 	}
 	fmt.Fprintln(out, path)
 	if !send {

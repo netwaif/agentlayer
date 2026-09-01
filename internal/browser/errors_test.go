@@ -27,6 +27,26 @@ func TestCollectErrorsCapturesConsoleAndException(t *testing.T) {
 	}
 }
 
+// 객체 인자는 CDP가 value를 채우지 않는다 — Description 폴백으로
+// console.error(new Error(...))가 무정보(<nil>)로 덤프되면 안 된다.
+func TestCollectErrorsObjectArgFallsBackToDescription(t *testing.T) {
+	p := headlessPage(t, `<body></body>`)
+	until := make(chan struct{})
+	got := make(chan []string, 1)
+	go func() { got <- CollectErrors(p, until) }()
+	time.Sleep(300 * time.Millisecond)
+	p.MustEval(`() => { console.error(new Error('객체에러')) }`)
+	time.Sleep(500 * time.Millisecond)
+	close(until)
+	joined := strings.Join(<-got, "\n")
+	if !strings.Contains(joined, "객체에러") {
+		t.Errorf("객체 인자의 Description이 수집돼야: %s", joined)
+	}
+	if strings.Contains(joined, "<nil>") {
+		t.Errorf("<nil> 무정보 덤프 금지: %s", joined)
+	}
+}
+
 // console.log 같은 비에러 호출은 걸러져야 한다.
 func TestCollectErrorsIgnoresLog(t *testing.T) {
 	p := headlessPage(t, `<body></body>`)

@@ -36,7 +36,13 @@ func CollectErrors(page *rod.Page, until <-chan struct{}) []string {
 			}
 			s := "[console." + string(e.Type) + "]"
 			for _, a := range e.Args {
-				s += " " + a.Value.String()
+				// 객체 인자(Error 포함)는 CDP가 value를 채우지 않는다 —
+				// 예외 분기의 Description 사용과 대칭으로 폴백한다.
+				if a.Value.Nil() {
+					s += " " + a.Description
+				} else {
+					s += " " + a.Value.String()
+				}
 			}
 			add(s)
 		},
