@@ -11,7 +11,7 @@ func TestHelpTextListsAllCommands(t *testing.T) {
 	out := HelpText()
 	for _, cmd := range []string{
 		"status", "info", "card", "init", "resume", "restore",
-		"wake-all", "close-all", "broadcast", "wt", "version", "help",
+		"wake-all", "close-all", "broadcast", "wt", "browser", "version", "help",
 	} {
 		if !strings.Contains(out, cmd) {
 			t.Errorf("help에 %q 명령이 없다", cmd)

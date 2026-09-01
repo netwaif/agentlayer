@@ -72,6 +72,8 @@ func run(args []string) error {
 	case "help", "--help", "-h":
 		fmt.Print(cli.HelpText())
 		return nil
+	case "browser":
+		return cli.RunBrowser(os.Stdout, args[1:])
 	case "wt":
 		st, err := state.NewStore(state.DefaultDir())
 		if err != nil {
