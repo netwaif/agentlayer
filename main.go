@@ -189,7 +189,6 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 	if err != nil {
 		return err
 	}
-	pay := usage.FetchCached(st.Dir, usageMaxAge, usage.CoachRunner, now)
 	ctx := usage.AgentCtx(agents, usage.LoadSnapshots(usage.SnapshotsDir()),
 		usage.CodexSessionsRoot(), usage.GeminiDir())
 	home, _ := os.UserHomeDir()
@@ -218,17 +217,19 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 			branches[m.Path] = m.Branch
 		}
 	}
-	comps := discord.BuildCard(discord.CardData{
-		Pay: pay, Agents: agents, Ctx: ctx, Wired: wired, Branches: branches,
-		DefModels: usage.DefaultModels(home),
-		Tasks:     starter.ActiveTasks(starter.DefaultRoot()),
-		Home:      home,
-	}, now)
+	build := func(pay *usage.Payload) []any {
+		return discord.BuildCard(discord.CardData{
+			Pay: pay, Agents: agents, Ctx: ctx, Wired: wired, Branches: branches,
+			DefModels: usage.DefaultModels(home),
+			Tasks:     starter.ActiveTasks(starter.DefaultRoot()),
+			Home:      home,
+		}, now)
+	}
 
 	if outOnly {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(comps)
+		return enc.Encode(build(usage.FetchCached(st.Dir, usageMaxAge, usage.CoachRunner, now)))
 	}
 
 	cfg := config.Load()
@@ -238,11 +239,28 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 	statePath := discord.CardStatePath(state.DefaultDir())
 	cs := discord.LoadCardState(statePath)
 	client := discord.NewClient(cfg.DiscordWebhookURL)
-	mid, err := client.Upsert(comps, cs.MessageID)
-	if err != nil {
-		return err
+	// 1차: 낡은 usage라도 캐시로 즉시 게시 — 에이전트 상태가 콜드 coach를
+	// 기다리지 않는다 (TUI stale-while-revalidate와 같은 원칙)
+	stale := usage.ReadCached(st.Dir)
+	published := false
+	if stale != nil {
+		mid, err := client.Upsert(build(stale), cs.MessageID)
+		if err != nil {
+			return err
+		}
+		cs.MessageID = mid
+		published = true
 	}
-	cs.MessageID = mid
+	// 2차: usage 갱신이 실제로 있었을 때만 재게시. --event(24h 허용)는
+	// 캐시 그대로라 1차로 끝난다 — 오늘까지의 단일 게시와 동일
+	pay := usage.FetchCached(st.Dir, usageMaxAge, usage.CoachRunner, now)
+	if !published || usagePayloadChanged(stale, pay) {
+		mid, err := client.Upsert(build(pay), cs.MessageID)
+		if err != nil {
+			return err
+		}
+		cs.MessageID = mid
+	}
 	pings, lv := discord.WorsenedPings(pay, cs.LastLevels)
 	cs.LastLevels = lv
 	// 한도 핑은 알림 채널로 — 대시보드 채널은 카드 한 장 전용
@@ -251,6 +269,18 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 		_ = pingClient.Ping(p)
 	}
 	return discord.SaveCardState(statePath, cs)
+}
+
+// usagePayloadChanged는 2차 게시가 필요한지 판정한다 — coach 갱신이
+// 실제 새 데이터(TS 변화)를 가져왔을 때만 true.
+func usagePayloadChanged(old, fresh *usage.Payload) bool {
+	if fresh == nil {
+		return false
+	}
+	if old == nil {
+		return true
+	}
+	return old.TS != fresh.TS
 }
 
 // runInit: agentlayer init [--dry-run]

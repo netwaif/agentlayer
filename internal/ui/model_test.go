@@ -537,3 +537,27 @@ func TestPreviewTickReschedules(t *testing.T) {
 		t.Fatal("previewTickMsg는 미리보기 갱신+다음 틱을 예약해야 한다")
 	}
 }
+
+func TestUsageCacheCmdEmitsCachedImmediately(t *testing.T) {
+	m := fixtureModel(t)
+	// 하루 묵은 캐시를 심는다 — TTL과 무관하게 즉시 표시돼야 한다
+	old := time.Now().Add(-24 * time.Hour)
+	fixture := []byte(`{"ts":"2026-08-25T06:54:43Z","providers":{}}`)
+	usage.FetchCached(m.store.Dir, time.Minute, func() ([]byte, error) { return fixture, nil }, old)
+	m.coachRunner = func() ([]byte, error) {
+		t.Error("usageCacheCmd는 coach를 실행하면 안 된다 (읽기 전용)")
+		return nil, fmt.Errorf("금지")
+	}
+	msg, ok := m.usageCacheCmd()().(usageMsg)
+	if !ok || msg.payload == nil {
+		t.Fatal("낡은 캐시라도 즉시 usageMsg로 올려야 한다")
+	}
+}
+
+func TestUsageCacheCmdNoCache(t *testing.T) {
+	m := fixtureModel(t)
+	msg, ok := m.usageCacheCmd()().(usageMsg)
+	if !ok || msg.payload != nil {
+		t.Fatal("캐시 없으면 nil payload usageMsg (기존 미수집 표시 유지)")
+	}
+}

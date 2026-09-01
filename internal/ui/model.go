@@ -144,7 +144,8 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.refreshCmd(), tickCmd(), m.previewTickCmd(), m.ctxCmd(), m.usageCmd(), usageTickCmd())
+	return tea.Batch(m.refreshCmd(), tickCmd(), m.previewTickCmd(), m.ctxCmd(),
+		m.usageCacheCmd(), m.usageCmd(), usageTickCmd())
 }
 
 func (m Model) previewTickCmd() tea.Cmd {
@@ -157,6 +158,14 @@ func tickCmd() tea.Cmd {
 
 func usageTickCmd() tea.Cmd {
 	return tea.Tick(usageInterval, func(t time.Time) tea.Msg { return usageTickMsg(t) })
+}
+
+// usageCacheCmd는 디스크 캐시를 나이 불문 즉시 usageMsg로 올린다 —
+// 첫 페인트가 콜드 coach를 기다리지 않게(stale-while-revalidate의 stale 쪽).
+// 갱신은 usageCmd가 뒤에서 하고, 나이는 usageAge가 화면에 밝힌다.
+func (m Model) usageCacheCmd() tea.Cmd {
+	dir := m.store.Dir
+	return func() tea.Msg { return usageMsg{payload: usage.ReadCached(dir)} }
 }
 
 // usageCmd는 coach 사용량만 백그라운드에서 가져온다.

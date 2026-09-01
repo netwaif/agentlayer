@@ -73,6 +73,22 @@ func TestFetchCachedInFlightReturnsStale(t *testing.T) {
 	wg.Wait()
 }
 
+func TestReadCachedReturnsExpiredCache(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now().Add(-24 * time.Hour) // 캐시를 하루 묵힌다
+	FetchCached(dir, time.Minute, func() ([]byte, error) { return []byte(coachFixture), nil }, now)
+	p := ReadCached(dir)
+	if p == nil {
+		t.Error("나이 불문 캐시 반환 — 표시용 stale 읽기")
+	}
+}
+
+func TestReadCachedEmptyDir(t *testing.T) {
+	if p := ReadCached(t.TempDir()); p != nil {
+		t.Error("캐시 없으면 nil")
+	}
+}
+
 var errTest = &testErr{}
 
 type testErr struct{}
