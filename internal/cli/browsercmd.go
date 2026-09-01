@@ -2,9 +2,13 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"io"
+	"time"
 
+	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/netwaif/agentlayer/internal/browser"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
@@ -23,6 +27,8 @@ func RunBrowser(out io.Writer, args []string) error {
 		return browserLaunch(out)
 	case "pick":
 		return browserPick(out)
+	case "shot":
+		return browserShot(out, args)
 	default:
 		return fmt.Errorf("모르는 browser 서브커맨드 %q — 'agentlayer help' 참고", sub)
 	}
@@ -52,6 +58,9 @@ func browserPick(out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if len(agents) == 0 {
+		return fmt.Errorf("등록된 에이전트가 없습니다 (agentlayer status 확인)")
+	}
 	tm := tmuxx.Tmux{}
 	send := func(paneID, text string) error { return tm.SendText(paneID, text) }
 	for { // 연속 지목 — Ctrl-C로 종료
@@ -63,4 +72,59 @@ func browserPick(out io.Writer) error {
 			return err
 		}
 	}
+}
+
+// browserShot은 전체 페이지를 캡처해 경로를 출력하거나(--send면) pane으로 보낸다.
+func browserShot(out io.Writer, args []string) error {
+	fs := flag.NewFlagSet("shot", flag.ContinueOnError)
+	sendFlag := fs.Bool("send", false, "에이전트 pane으로 경로 전송")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	b, err := browser.Connect(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	var page *rod.Page
+	if url := fs.Arg(0); url != "" {
+		page, err = b.Page(proto.TargetCreateTarget{URL: url})
+		if err != nil {
+			return err
+		}
+		if err := page.WaitLoad(); err != nil {
+			return err
+		}
+	} else if page, err = browser.ActivePage(b); err != nil {
+		return err
+	}
+	path, err := browser.Shot(page, state.DefaultDir(), time.Now())
+	if err != nil {
+		return err
+	}
+	if !*sendFlag {
+		fmt.Fprintln(out, path)
+		return nil
+	}
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	agents, err := st.List()
+	if err != nil {
+		return err
+	}
+	info, err := page.Info()
+	if err != nil {
+		return err
+	}
+	cands := browser.Candidates(agents, info.URL, browser.ExecLsof)
+	if len(cands) == 0 {
+		return fmt.Errorf("전송할 에이전트가 없습니다 (agentlayer status 확인)")
+	}
+	line := fmt.Sprintf("브라우저 스크린샷 확인해줘: %s (페이지: %s)", path, info.URL)
+	if err := (tmuxx.Tmux{}).SendText(cands[0].Tmux.PaneID, line); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "→ %s에게 전송\n", cands[0].ID)
+	return nil
 }
