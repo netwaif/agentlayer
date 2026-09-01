@@ -82,6 +82,23 @@ func TestDevServersPathBoundary(t *testing.T) {
 	}
 }
 
+// 빈 경로("")·루트("/") 키는 손상된 meta의 흔적 — TrimSuffix 후 ""가 되어
+// 모든 절대경로에 접두사 매칭돼 버리므로 무시해야 한다.
+func TestDevServersIgnoresEmptyAndRootPath(t *testing.T) {
+	run := func(args ...string) ([]byte, error) {
+		for _, a := range args {
+			if a == "cwd" {
+				return []byte("p11\nfcwd\nn/Users/x/anywhere\n"), nil
+			}
+		}
+		return []byte("p11\nf3\nn*:3000\n"), nil
+	}
+	wts := map[string]string{"": "broken-empty", "/": "broken-root"}
+	if got := DevServers(run, wts); len(got) != 0 {
+		t.Fatalf("빈/루트 worktree 경로는 매칭되면 안 됨: %+v", got)
+	}
+}
+
 // lsof 실패(리스너 0개 포함)면 조용히 빈 결과.
 func TestDevServersLsofError(t *testing.T) {
 	run := func(args ...string) ([]byte, error) { return nil, fmt.Errorf("lsof 실패") }

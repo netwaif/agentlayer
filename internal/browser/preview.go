@@ -62,6 +62,9 @@ func DevServers(run RunLsof, wtPaths map[string]string) []DevServer {
 		}
 		for wp, branch := range wtPaths {
 			p := strings.TrimSuffix(wp, "/")
+			if p == "" {
+				continue // 빈/루트 경로(손상된 meta)는 전 경로에 매칭되므로 무시
+			}
 			if cwd == p || strings.HasPrefix(cwd, p+"/") {
 				for _, port := range ports[pid] {
 					res = append(res, DevServer{Port: port, CWD: cwd, Branch: branch})
