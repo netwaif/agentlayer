@@ -1,11 +1,16 @@
 package browser
 
 import (
+	"bytes"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/proto"
+	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/ysmood/gson"
 )
 
@@ -49,5 +54,78 @@ func TestOverlaySubmitRoundTrip(t *testing.T) {
 		if !strings.Contains(r, want) {
 			t.Errorf("제출 JSON에 %q 없음: %s", want, r)
 		}
+	}
+}
+
+func pickAgents() []*state.Agent {
+	return []*state.Agent{{
+		ID: "claude-1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "dev", PaneID: "%1"},
+	}}
+}
+
+func noLsof(...string) ([]byte, error) { return nil, fmt.Errorf("테스트에서 lsof 없음") }
+
+// 탭이 닫히면 클릭 대기가 무한 블록하지 않고 에러로 반환해야 한다.
+func TestRunPickTabCloseReturnsError(t *testing.T) {
+	p := headlessPage(t, `<button id="b">저장</button>`)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- RunPick(p, pickAgents(), noLsof, t.TempDir(),
+			func(paneID, text string) error { return nil }, &bytes.Buffer{})
+	}()
+	time.Sleep(time.Second) // RunPick이 검사 모드 대기에 들어갈 시간
+	_ = p.Close()
+	select {
+	case err := <-errCh:
+		if err == nil {
+			t.Fatal("탭 닫힘인데 에러가 아님")
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("탭 닫힘 후에도 RunPick이 반환하지 않음 (무한 대기)")
+	}
+}
+
+// Esc 취소 제출이 오면 전송 없이 정상 종료해야 한다 (클릭→오버레이 전체 흐름).
+func TestRunPickCancelDoesNotSend(t *testing.T) {
+	p := headlessPage(t, `<button id="b">저장</button>`)
+	pt := p.MustElement("#b").MustShape().OnePointInside()
+	sent := false
+	var out bytes.Buffer
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- RunPick(p, pickAgents(), noLsof, t.TempDir(),
+			func(paneID, text string) error { sent = true; return nil }, &out)
+	}()
+	// 검사 모드가 켜질 때까지 클릭을 반복 시도, 오버레이가 뜨면 진행
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		if res, err := p.Eval(`() => !!document.getElementById('agentlayer-overlay')`); err == nil && res.Value.Bool() {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("오버레이가 뜨지 않음 (검사 모드 클릭 미인식)")
+		}
+		_ = p.Mouse.MoveTo(*pt)
+		_ = p.Mouse.Click(proto.InputMouseButtonLeft, 1)
+		time.Sleep(100 * time.Millisecond)
+	}
+	p.MustEval(`() => {
+		const root = document.getElementById('agentlayer-overlay').shadowRoot;
+		root.querySelector('input').dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape'}));
+	}`)
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("취소는 정상 종료여야 함: %v", err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("취소 제출 후에도 RunPick이 반환하지 않음")
+	}
+	if sent {
+		t.Error("취소인데 pane 전송이 일어남")
+	}
+	if !strings.Contains(out.String(), "취소됨") {
+		t.Errorf("출력에 취소 안내 없음: %q", out.String())
 	}
 }

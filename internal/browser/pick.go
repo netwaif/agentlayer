@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -97,14 +98,32 @@ func RunPick(page *rod.Page, agents []*state.Agent, lsof RunLsof, stateDir strin
 
 	// 1. 클릭될 노드를 기다린다 (하이라이트는 Chrome 내장).
 	// EachEvent는 호출 시점에 구독하므로 반드시 setInspectMode 전에 건다.
-	picked := make(chan proto.DOMBackendNodeID, 1)
-	wait := page.EachEvent(func(e *proto.OverlayInspectNodeRequested) bool {
-		picked <- e.BackendNodeID
-		return true
-	})
-	// Overlay.setInspectMode는 DOM 에이전트 활성화를 요구한다.
+	// 콜백은 wait() 호출 스택에서 동기 실행되므로 채널 없이 지역 변수로 받는다.
+	// 탭 닫힘(Inspector.detached)도 대기를 풀어 무한 블록을 막는다.
+	evCtx, cancelEv := context.WithCancel(page.GetContext())
+	defer cancelEv()
+	var nodeID proto.DOMBackendNodeID
+	picked := false
+	wait := page.Context(evCtx).EachEvent(
+		func(e *proto.OverlayInspectNodeRequested) bool {
+			nodeID, picked = e.BackendNodeID, true
+			return true
+		},
+		func(e *proto.InspectorDetached) bool { return true },
+	)
+	// 에러 경로에서도 구독을 정리한다 — cancel로 이벤트 채널을 닫으면
+	// wait()가 즉시 반환한다 (RunPick은 루프에서 반복 호출되므로 누수 금지).
+	abort := func(err error) error { cancelEv(); wait(); return err }
+	// setInspectMode는 DOM 에이전트를, 이벤트 발화는 Overlay 활성화를 요구한다
+	// (rod EachEvent의 자동 enable만으로는 headless에서 이벤트가 오지 않음 — 실측).
 	if err := (proto.DOMEnable{}).Call(page); err != nil {
-		return err
+		return abort(err)
+	}
+	if err := (proto.OverlayEnable{}).Call(page); err != nil {
+		return abort(err)
+	}
+	if err := (proto.InspectorEnable{}).Call(page); err != nil {
+		return abort(err)
 	}
 	alpha := 0.4
 	err := proto.OverlaySetInspectMode{
@@ -112,11 +131,14 @@ func RunPick(page *rod.Page, agents []*state.Agent, lsof RunLsof, stateDir strin
 		HighlightConfig: &proto.OverlayHighlightConfig{ContentColor: &proto.DOMRGBA{R: 111, G: 168, B: 220, A: &alpha}},
 	}.Call(page)
 	if err != nil {
-		return err
+		return abort(err)
 	}
 	fmt.Fprintln(out, "브라우저에서 수정할 요소를 클릭하세요…")
 	wait()
-	nodeID := <-picked
+	cancelEv()
+	if !picked {
+		return fmt.Errorf("클릭을 받기 전에 페이지가 닫혔습니다 — 탭을 다시 열고 시도하세요")
+	}
 	_ = proto.OverlaySetInspectMode{Mode: proto.OverlayInspectModeNone}.Call(page)
 
 	// 2. 노드 → 요소 → 맥락 추출
@@ -128,13 +150,20 @@ func RunPick(page *rod.Page, agents []*state.Agent, lsof RunLsof, stateDir strin
 	if err != nil {
 		return err
 	}
-	sel := el.MustEval(selectorJS).Str()
+	selObj, err := el.Eval(selectorJS)
+	if err != nil {
+		return fmt.Errorf("셀렉터 계산 실패 (요소가 사라졌을 수 있음): %w", err)
+	}
+	sel := selObj.Value.Str()
 	html, _ := el.HTML()
 	if len(html) > 4000 {
 		html = html[:4000] + "\n<!-- 절단됨 -->"
 	}
 	shot, _ := el.Screenshot(proto.PageCaptureScreenshotFormatPng, 0)
-	info := page.MustInfo()
+	info, err := page.Info()
+	if err != nil {
+		return err
+	}
 
 	// 3. 라우팅 후보 산출 → 오버레이 입력
 	cands := Candidates(agents, info.URL, lsof)
@@ -156,6 +185,16 @@ func RunPick(page *rod.Page, agents []*state.Agent, lsof RunLsof, stateDir strin
 		return err
 	}
 	defer func() { _ = stop() }()
+	// 오버레이가 뜬 뒤 페이지가 이동/닫히면 제출은 영원히 안 온다 —
+	// 메인 프레임 이동·탭 닫힘을 감지해 대기를 끊는다.
+	navCtx, cancelNav := context.WithCancel(page.GetContext())
+	defer cancelNav()
+	navWait := page.Context(navCtx).EachEvent(
+		func(e *proto.PageFrameNavigated) bool { return e.Frame.ParentID == "" },
+		func(e *proto.InspectorDetached) bool { return true },
+	)
+	gone := make(chan struct{})
+	go func() { navWait(); close(gone) }()
 	shape, err := el.Shape()
 	x, y := 20.0, 20.0
 	if err == nil && shape.Box() != nil {
@@ -165,7 +204,16 @@ func RunPick(page *rod.Page, agents []*state.Agent, lsof RunLsof, stateDir strin
 	if _, err := page.Eval(overlayJS, x, y, opts); err != nil {
 		return err
 	}
-	sub := <-done
+	var sub pickSubmit
+	select {
+	case sub = <-done:
+	case <-gone:
+		select {
+		case sub = <-done: // 제출 직후 이동한 경합 — 제출을 우선
+		default:
+			return fmt.Errorf("오버레이 입력 전에 페이지가 이동하거나 닫혔습니다 — 다시 시도하세요")
+		}
+	}
 	if sub.Cancel || sub.Text == "" {
 		fmt.Fprintln(out, "취소됨")
 		return nil
