@@ -42,6 +42,39 @@ func TestParseShotArgs(t *testing.T) {
 	}
 }
 
+// errors는 위치 인자가 없다 — --send만 인식하고 잉여 인자는 에러.
+func TestParseErrorsArgs(t *testing.T) {
+	cases := []struct {
+		name    string
+		args    []string
+		send    bool
+		wantErr bool
+	}{
+		{"인자 없음", nil, false, false},
+		{"--send", []string{"--send"}, true, false},
+		{"잉여 인자는 에러", []string{"뭔가"}, false, true},
+		{"잉여 인자 뒤 --send도 에러", []string{"뭔가", "--send"}, false, true},
+		{"모르는 플래그는 에러", []string{"--bogus"}, false, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			send, err := parseErrorsArgs(c.args)
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("에러여야 함: send=%v", send)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if send != c.send {
+				t.Errorf("got send=%v, want %v", send, c.send)
+			}
+		})
+	}
+}
+
 // 미지 서브커맨드는 명확한 에러로 알린다 — Task 6~8이 case를 추가해도
 // default 분기의 문구는 유지돼야 한다.
 func TestRunBrowserUnknownSub(t *testing.T) {

@@ -2,9 +2,11 @@
 package cli
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -29,6 +31,8 @@ func RunBrowser(out io.Writer, args []string) error {
 		return browserPick(out)
 	case "shot":
 		return browserShot(out, args)
+	case "errors":
+		return browserErrors(out, args)
 	default:
 		return fmt.Errorf("모르는 browser 서브커맨드 %q — 'agentlayer help' 참고", sub)
 	}
@@ -99,6 +103,81 @@ func parseShotArgs(args []string) (url string, send bool, err error) {
 		url = rest[0]
 	}
 	return url, *sendFlag, nil
+}
+
+// parseErrorsArgs는 errors의 --send를 파싱한다 — 위치 인자는 없으므로
+// 비플래그 인자가 남으면 잉여로 에러 처리한다.
+func parseErrorsArgs(args []string) (send bool, err error) {
+	fs := flag.NewFlagSet("errors", flag.ContinueOnError)
+	fs.SetOutput(io.Discard) // usage 자동 출력 억제 — 반환 에러로 충분
+	sendFlag := fs.Bool("send", false, "에이전트 pane으로 경로 전송")
+	if err := fs.Parse(args); err != nil {
+		return false, err
+	}
+	if fs.NArg() > 0 {
+		return false, fmt.Errorf("잉여 인자 %q — 사용법: agentlayer browser errors [--send]", fs.Args())
+	}
+	return *sendFlag, nil
+}
+
+// browserErrors는 활성 탭의 콘솔 에러·JS 예외를 Enter까지 온디맨드 수집해
+// 덤프(stdout+파일)하고, --send면 shot과 같은 라우팅으로 한 줄 보낸다.
+func browserErrors(out io.Writer, args []string) error {
+	send, err := parseErrorsArgs(args)
+	if err != nil {
+		return err
+	}
+	b, err := browser.Connect(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	page, err := browser.ActivePage(b)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "수집 시작 — 버그를 재현한 뒤 Enter…")
+	until := make(chan struct{})
+	go func() {
+		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+		close(until)
+	}()
+	lines := browser.CollectErrors(page, until)
+	path, err := browser.SaveErrors(state.DefaultDir(), lines, time.Now())
+	if err != nil {
+		return err
+	}
+	if len(lines) == 0 {
+		fmt.Fprintln(out, "(수집된 에러 없음)")
+	}
+	for _, l := range lines {
+		fmt.Fprintln(out, l)
+	}
+	fmt.Fprintln(out, path)
+	if !send {
+		return nil
+	}
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	agents, err := st.List()
+	if err != nil {
+		return err
+	}
+	info, err := page.Info()
+	if err != nil {
+		return err
+	}
+	cands := browser.Candidates(agents, info.URL, browser.ExecLsof)
+	if len(cands) == 0 {
+		return fmt.Errorf("전송할 에이전트가 없습니다 (agentlayer status 확인)")
+	}
+	line := fmt.Sprintf("콘솔 에러 로그 확인해줘: %s (페이지: %s)", path, info.URL)
+	if err := (tmuxx.Tmux{}).SendText(cands[0].Tmux.PaneID, line); err != nil {
+		return err
+	}
+	fmt.Fprintf(out, "→ %s에게 전송\n", cands[0].ID)
+	return nil
 }
 
 // browserShot은 전체 페이지를 캡처해 경로를 출력하거나(--send면) pane으로 보낸다.
