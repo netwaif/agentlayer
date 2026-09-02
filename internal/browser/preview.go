@@ -4,6 +4,7 @@ package browser
 import (
 	"fmt"
 	"net/http"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -62,19 +63,46 @@ func DevServers(run RunLsof, wtPaths map[string]string) []DevServer {
 				cwd = l[1:]
 			}
 		}
+		// 서버가 어느 폴더를 서빙하는지: cwd가 그 아래이거나, 명령 인자에 그 폴더가 있으면
+		// (`python3 -m http.server --directory <worktree>`처럼 루트에서 띄운 경우 — 2026-09-03
+		// 촬영에서 cwd만 보고 저장소 루트로 오판해 ⎇ 없는 새 창이 열렸다). 후보가 여럿이면
+		// 가장 깊은 경로(worktree > 저장소 루트) 하나만 — 같은 포트가 두 번 열리지 않게.
+		args := ProcArgs(pid)
+		bestPath, bestBranch := "", ""
 		for wp, branch := range wtPaths {
 			p := strings.TrimSuffix(wp, "/")
 			if p == "" {
 				continue // 빈/루트 경로(손상된 meta)는 전 경로에 매칭되므로 무시
 			}
-			if cwd == p || strings.HasPrefix(cwd, p+"/") {
-				for _, port := range ports[pid] {
-					res = append(res, DevServer{Port: port, CWD: cwd, Branch: branch})
+			inCWD := cwd == p || strings.HasPrefix(cwd, p+"/")
+			inArgs := args != "" && (strings.Contains(args, p+" ") || strings.HasSuffix(args, p) || strings.Contains(args, p+"/"))
+			if !inCWD && !inArgs && cwd != "" {
+				// 상대 경로로 넘긴 경우: cwd 기준으로 풀어 본다
+				if rel := strings.TrimPrefix(p, cwd+"/"); rel != p && args != "" && strings.Contains(args, rel) {
+					inArgs = true
 				}
 			}
+			if (inCWD || inArgs) && len(p) > len(bestPath) {
+				bestPath, bestBranch = p, branch
+			}
+		}
+		if bestPath == "" {
+			continue
+		}
+		for _, port := range ports[pid] {
+			res = append(res, DevServer{Port: port, CWD: bestPath, Branch: bestBranch})
 		}
 	}
 	return res
+}
+
+// ProcArgs는 pid의 명령줄(ps -o args=). 테스트에서 바꿔 끼운다.
+var ProcArgs = func(pid string) string {
+	out, err := exec.Command("ps", "-o", "args=", "-p", pid).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // OpenPreview는 dev 서버를 새 창으로 열고 제목에 ⎇브랜치를 새긴다.

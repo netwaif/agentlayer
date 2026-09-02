@@ -38,6 +38,39 @@ func TestDevServersFiltersByWorktree(t *testing.T) {
 	}
 }
 
+// 저장소 루트에서 `--directory <worktree>`로 띄운 서버도 worktree(⎇브랜치)로 잡아야 하고,
+// 루트·worktree 두 경로에 다 걸려도 한 번만(가장 깊은 경로) 나와야 한다.
+func TestDevServersMatchesWorktreeByArgsAndPicksDeepest(t *testing.T) {
+	run := func(args ...string) ([]byte, error) {
+		for _, a := range args {
+			if a == "cwd" {
+				return []byte("p11\nfcwd\nn/Users/x/repo\n"), nil
+			}
+		}
+		return []byte("p11\nf3\nn127.0.0.1:8101\n"), nil
+	}
+	old := ProcArgs
+	ProcArgs = func(pid string) string {
+		return "python3 -m http.server 8101 --bind 127.0.0.1 --directory /Users/x/repo/.agentlayer/worktrees/hero-claude"
+	}
+	defer func() { ProcArgs = old }()
+	wts := map[string]string{"/Users/x/repo": "", "/Users/x/repo/.agentlayer/worktrees/hero-claude": "agent/hero-claude"}
+	got := DevServers(run, wts)
+	if len(got) != 1 {
+		t.Fatalf("같은 포트는 한 번만: %+v", got)
+	}
+	if got[0].Branch != "agent/hero-claude" || got[0].CWD != "/Users/x/repo/.agentlayer/worktrees/hero-claude" {
+		t.Errorf("인자의 worktree로 잡혀야 함: %+v", got[0])
+	}
+	// 상대 경로(--directory .agentlayer/worktrees/hero-claude)도
+	ProcArgs = func(string) string {
+		return "python3 -m http.server 8101 --directory .agentlayer/worktrees/hero-claude"
+	}
+	if got := DevServers(run, wts); len(got) != 1 || got[0].Branch != "agent/hero-claude" {
+		t.Errorf("상대 경로 인자도 worktree로: %+v", got)
+	}
+}
+
 // IPv6 주소([::1]:3000)도 포트를 파싱하고, 같은 pid의 같은 포트가
 // IPv4/IPv6로 중복 나열돼도 한 번만 세야 한다. 같은 pid의 다른 포트는 모두.
 func TestDevServersIPv6AndDedup(t *testing.T) {
