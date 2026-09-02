@@ -123,9 +123,12 @@ type Model struct {
 	defModels       map[string]string        // CLI별 기본 모델 설정
 	devServers      []browser.DevServer      // 에이전트 폴더 아래 listen 중인 dev 서버 (🌐 뱃지·p)
 	browserPort     int                      // 전용 Chrome CDP 포트 — dev 서버 목록에서 제외
+	autoPreview     bool                     // config preview_auto: 새 dev 서버 자동 열기
+	seenServers     map[string]bool          // 이번 실행에서 본 dev 서버(cwd:port) — 자동 열기는 한 번만
 	// 주입점 (테스트용)
 	devScan       func(paths map[string]string) []browser.DevServer        // dev 서버 스캔
 	openPreview   func(servers []browser.DevServer) error                  // p: 프리뷰 창 열기
+	hasTab        func(port int) bool                                      // 전용 브라우저에 localhost:port 탭이 있는지
 	browserCmd    func(args ...string) tea.Cmd                             // b/s: agentlayer browser … 실행
 	popupRecord   func(cols, rows int, cursor string)                      // 팝업 안이면 크기·커서 기록 (재오픈 복원용)
 	restoreCursor string                                                   // 재오픈 직후 복원할 에이전트 ID
@@ -167,6 +170,8 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 		input:           ti,
 		previewInterval: cfg.PreviewTick(),
 		browserPort:     cfg.BrowserPortOrDefault(),
+		autoPreview:     cfg.PreviewAutoEnabled(),
+		seenServers:     map[string]bool{},
 		insideTmux:      os.Getenv("TMUX") != "",
 		spawnWindow:     tm.SpawnShellWindow,
 		activeSession:   tm.ActiveSession,
@@ -190,6 +195,26 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 				}
 			}
 			return nil
+		},
+		hasTab: func(port int) bool {
+			b, err := browser.Connect(state.DefaultDir(), cfg.BrowserPortOrDefault())
+			if err != nil {
+				return false
+			}
+			pages, err := b.Pages()
+			if err != nil {
+				return false
+			}
+			for _, p := range pages {
+				info, err := p.Info()
+				if err != nil {
+					continue
+				}
+				if strings.Contains(info.URL, fmt.Sprintf("localhost:%d", port)) || strings.Contains(info.URL, fmt.Sprintf("127.0.0.1:%d", port)) {
+					return true
+				}
+			}
+			return false
 		},
 		browserCmd: func(args ...string) tea.Cmd {
 			bin, err := os.Executable()
@@ -229,6 +254,46 @@ func (m Model) devScanCmd() tea.Cmd {
 			return devServersMsg(nil)
 		}
 		return devServersMsg(scan(paths))
+	}
+}
+
+// autoPreviewCmd는 처음 보는 dev 서버(에이전트 폴더 아래, 전용 Chrome 제외)를
+// 골라 탭이 없으면 한 번 연다. 본 서버는 이번 실행 동안 다시 열지 않는다 —
+// 사용자가 탭을 닫았는데 10초마다 되살아나면 안 된다.
+func (m *Model) autoPreviewCmd() tea.Cmd {
+	if m.seenServers == nil {
+		m.seenServers = map[string]bool{}
+	}
+	var fresh []browser.DevServer
+	for _, a := range m.agents {
+		for _, s := range m.serversFor(a) {
+			key := s.CWD + ":" + strconv.Itoa(s.Port)
+			if m.seenServers[key] {
+				continue
+			}
+			m.seenServers[key] = true
+			fresh = append(fresh, s)
+		}
+	}
+	if !m.autoPreview || len(fresh) == 0 || m.openPreview == nil || m.hasTab == nil {
+		return nil
+	}
+	open, hasTab := m.openPreview, m.hasTab
+	return func() tea.Msg {
+		var opened []string
+		for _, s := range fresh {
+			if hasTab(s.Port) {
+				continue
+			}
+			if err := open([]browser.DevServer{s}); err != nil {
+				return noticeMsg{err: err}
+			}
+			opened = append(opened, ":"+strconv.Itoa(s.Port))
+		}
+		if len(opened) == 0 {
+			return nil
+		}
+		return noticeMsg{text: "새 dev 서버를 전용 브라우저에 열었습니다 🌐" + strings.Join(opened, ",")}
 	}
 }
 
@@ -513,7 +578,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case devServersMsg:
 		m.devServers = []browser.DevServer(msg)
-		return m, nil
+		return m, m.autoPreviewCmd()
 
 	case noticeMsg:
 		if msg.err != nil {

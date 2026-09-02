@@ -677,3 +677,57 @@ func TestPopupCursorRestoredOnFirstRefresh(t *testing.T) {
 		t.Error("복원은 한 번만")
 	}
 }
+
+// ── 자동 프리뷰: 새 dev 서버가 처음 보이면 탭이 없을 때 한 번만 연다 ────
+
+func autoPreviewFixture(t *testing.T, hasTab bool) (Model, *[]int) {
+	t.Helper()
+	m := fixtureModel(t)
+	m.agents[0].CWD = "/w/app"
+	m.autoPreview = true
+	opened := &[]int{}
+	m.openPreview = func(s []browser.DevServer) error {
+		for _, x := range s {
+			*opened = append(*opened, x.Port)
+		}
+		return nil
+	}
+	m.hasTab = func(port int) bool { return hasTab }
+	return m, opened
+}
+
+func runCmd(t *testing.T, m Model, msg tea.Msg) Model {
+	t.Helper()
+	next, cmd := m.Update(msg)
+	if cmd != nil {
+		if out := cmd(); out != nil {
+			next, _ = next.(Model).Update(out)
+		}
+	}
+	return next.(Model)
+}
+
+func TestAutoPreviewOpensNewServerOnce(t *testing.T) {
+	m, opened := autoPreviewFixture(t, false)
+	srv := devServersMsg{{Port: 3000, CWD: "/w/app"}, {Port: 9999, CWD: "/elsewhere"}}
+	m = runCmd(t, m, srv)
+	m = runCmd(t, m, srv) // 같은 서버 재감지 — 다시 열지 않는다
+	if len(*opened) != 1 || (*opened)[0] != 3000 {
+		t.Errorf("에이전트 폴더 서버만 한 번 열어야 함: %v", *opened)
+	}
+}
+
+func TestAutoPreviewSkipsWhenTabExistsOrDisabled(t *testing.T) {
+	m, opened := autoPreviewFixture(t, true)
+	m = runCmd(t, m, devServersMsg{{Port: 3000, CWD: "/w/app"}})
+	if len(*opened) != 0 {
+		t.Errorf("탭이 이미 있으면 열지 않음: %v", *opened)
+	}
+	m2, opened2 := autoPreviewFixture(t, false)
+	m2.autoPreview = false
+	runCmd(t, m2, devServersMsg{{Port: 3000, CWD: "/w/app"}})
+	if len(*opened2) != 0 {
+		t.Errorf("옵션 꺼짐이면 열지 않음: %v", *opened2)
+	}
+	_ = m
+}

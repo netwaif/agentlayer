@@ -93,3 +93,13 @@ func TestBrowserPortOrDefault(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviewAutoEnabled(t *testing.T) {
+	if !(&Config{}).PreviewAutoEnabled() {
+		t.Error("미설정이면 자동 프리뷰 켬")
+	}
+	off := false
+	if (&Config{PreviewAuto: &off}).PreviewAutoEnabled() {
+		t.Error("false면 끔")
+	}
+}
