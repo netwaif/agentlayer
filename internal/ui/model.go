@@ -16,6 +16,7 @@ import (
 	"github.com/netwaif/agentlayer/internal/browser"
 	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/config"
+	"github.com/netwaif/agentlayer/internal/popup"
 	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/starter"
 	"github.com/netwaif/agentlayer/internal/state"
@@ -126,6 +127,8 @@ type Model struct {
 	devScan       func(paths map[string]string) []browser.DevServer        // dev 서버 스캔
 	openPreview   func(servers []browser.DevServer) error                  // p: 프리뷰 창 열기
 	browserCmd    func(args ...string) tea.Cmd                             // b/s: agentlayer browser … 실행
+	popupRecord   func(cols, rows int, cursor string)                      // 팝업 안이면 크기·커서 기록 (재오픈 복원용)
+	restoreCursor string                                                   // 재오픈 직후 복원할 에이전트 ID
 	spawnWindow   func(session, name, dir, command string) (string, error) // resume 창 생성
 	activeSession func() string                                            // 활성 클라이언트의 세션
 	hasSession    func(name string) bool                                   // 세션 생존 (완전일치)
@@ -137,6 +140,17 @@ type Model struct {
 	geminiDir     string
 	starterRoot   string
 	homeDir       string
+}
+
+// WithPopup은 팝업 바인딩으로 떴을 때의 배선 — 기록 파일과 커서 복원.
+func (m Model) WithPopup(stateDir string) Model {
+	m.popupRecord = func(cols, rows int, cursor string) {
+		popup.Save(stateDir, popup.Record{PID: os.Getpid(), Cols: cols, Rows: rows, Cursor: cursor})
+	}
+	if rec, ok := popup.Load(stateDir); ok {
+		m.restoreCursor = rec.Cursor
+	}
+	return m
 }
 
 func New(st *state.Store, tm tmuxx.Tmux) Model {
@@ -428,6 +442,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.recordPopup()
 		return m, nil
 
 	case tickMsg:
@@ -460,6 +475,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.agents = msg.agents
 		m.wtBranch = msg.wtBranches
 		m.now = msg.now
+		if m.restoreCursor != "" { // 팝업 재오픈 — 직전 선택 행으로
+			for i, a := range m.agents {
+				if a.ID == m.restoreCursor {
+					m.cursor = i
+				}
+			}
+			m.restoreCursor = ""
+		}
 		if m.cursor >= len(m.agents) {
 			m.cursor = max(0, len(m.agents)-1)
 		}
@@ -588,11 +611,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor < len(m.agents)-1 {
 				m.cursor++
 			}
+			m.recordPopup()
 			return m, m.previewCmd()
 		case "k", "up":
 			if m.cursor > 0 {
 				m.cursor--
 			}
+			m.recordPopup()
 			return m, m.previewCmd()
 		case "r":
 			return m, tea.Batch(m.refreshCmd(), m.usageCmd(), m.ctxCmd())
@@ -707,6 +732,18 @@ func (m Model) buildInfo(a *state.Agent) string {
 	var buf strings.Builder
 	cli.RenderInfo(&buf, d, time.Now())
 	return buf.String()
+}
+
+// recordPopup은 팝업 안일 때 크기·커서를 남긴다 — client-resized 훅이 재오픈 판단에 쓴다.
+func (m Model) recordPopup() {
+	if m.popupRecord == nil {
+		return
+	}
+	cursor := ""
+	if a := m.selected(); a != nil {
+		cursor = a.ID
+	}
+	m.popupRecord(m.width, m.height, cursor)
 }
 
 func (m Model) selected() *state.Agent {

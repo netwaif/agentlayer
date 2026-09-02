@@ -42,7 +42,7 @@ agentlayer init            # Claude hook 등록 (기존 hook 보존, 백업 생�
 agentlayer init --dry-run  # 뭘 바꾸는지 먼저 확인
 ```
 
-tmux 팝업(`C-b a`)을 쓰려면 init이 안내하는 한 줄을 `.tmux.conf`에 추가한다.
+tmux 팝업(`C-b a`)을 쓰려면 init이 안내하는 두 줄(bind-key + client-resized 훅)을 `.tmux.conf`에 추가한다. 훅은 터미널을 쪼갰다 합칠 때 팝업이 옛 크기로 남는 tmux 동작을 같은 자리에 다시 여는 것으로 보정한다(커서 유지).
 agentlayer는 tmux 설정을 자동으로 수정하지 않는다.
 
 ## 사용

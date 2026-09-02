@@ -120,6 +120,12 @@ func TestTmuxBindingAdvice(t *testing.T) {
 	if !strings.Contains(out, "/Users/x/.local/bin/agentlayer") {
 		t.Errorf("절대 경로로 안내해야 함 (tmux 서버 최소 PATH): %s", out)
 	}
+	// 팝업은 클라이언트가 커져도 안 따라오므로 client-resized 훅으로 재오픈한다
+	for _, want := range []string{"-e AGENTLAYER_POPUP=1", "set-hook -g client-resized", "popup-refresh #{client_name}"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q 안내 누락: %s", want, out)
+		}
+	}
 	buf.Reset()
 	PrintTmuxBinding(&buf, true, "/x") // 충돌 케이스
 	if !strings.Contains(buf.String(), "이미") {

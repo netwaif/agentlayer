@@ -19,6 +19,7 @@ import (
 	"github.com/netwaif/agentlayer/internal/discord"
 	"github.com/netwaif/agentlayer/internal/hookcmd"
 	"github.com/netwaif/agentlayer/internal/notify"
+	"github.com/netwaif/agentlayer/internal/popup"
 	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/starter"
 	"github.com/netwaif/agentlayer/internal/state"
@@ -60,6 +61,8 @@ func run(args []string) error {
 		return runCard(args[1:])
 	case "resume":
 		return runResume(args[1:])
+	case "popup-refresh":
+		return runPopupRefresh(os.Args[2:])
 	case "restore":
 		return runRestore(args[1:])
 	case "info":
@@ -128,9 +131,34 @@ func runTUI() error {
 	if err != nil {
 		return err
 	}
-	p := tea.NewProgram(ui.New(st, tmuxx.Tmux{}), tea.WithAltScreen())
+	m := ui.New(st, tmuxx.Tmux{})
+	if popup.InPopup() {
+		m = m.WithPopup(state.DefaultDir())
+		defer popup.Remove(state.DefaultDir())
+	}
+	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err = p.Run()
 	return err
+}
+
+// runPopupRefresh: agentlayer popup-refresh <client> — tmux client-resized 훅이 부른다.
+func runPopupRefresh(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("사용법: agentlayer popup-refresh <tmux client>")
+	}
+	bin, _ := os.Executable()
+	tm := func(a ...string) (string, error) {
+		out, err := exec.Command(tmuxx.Bin(), a...).Output()
+		return string(out), err
+	}
+	open := func(a ...string) { // display-popup -E는 팝업이 닫힐 때까지 블록 — 기다리지 않는다
+		c := exec.Command(tmuxx.Bin(), a...)
+		if err := c.Start(); err == nil {
+			go c.Wait()
+		}
+	}
+	popup.Refresh(state.DefaultDir(), args[0], bin, tm, open, time.Sleep)
+	return nil
 }
 
 // runStatus: agentlayer status [--json]

@@ -651,3 +651,29 @@ func TestDevServerBadgeExcludesBrowserPort(t *testing.T) {
 		t.Errorf("9222 제외·3000 표시여야 함:\n%s", v)
 	}
 }
+
+// ── 팝업 재오픈 지원: 크기·커서 기록, 커서 복원 ─────────────────────
+
+func TestPopupRecordWrittenOnResizeAndCursor(t *testing.T) {
+	m := fixtureModel(t)
+	var got []string
+	m.popupRecord = func(cols, rows int, cursor string) { got = append(got, fmt.Sprintf("%dx%d %s", cols, rows, cursor)) }
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 88, Height: 22})
+	next, _ = next.(Model).Update(key("j"))
+	_ = next
+	if len(got) != 2 || got[0] != "88x22 claude-7" || got[1] != "88x22 claude-3" {
+		t.Errorf("기록 호출: %v", got)
+	}
+}
+
+func TestPopupCursorRestoredOnFirstRefresh(t *testing.T) {
+	m := fixtureModel(t)
+	m.restoreCursor = "claude-3"
+	next, _ := m.Update(refreshMsg{agents: m.agents, now: t0})
+	if got := next.(Model).selected(); got == nil || got.ID != "claude-3" {
+		t.Errorf("커서가 claude-3로 복원돼야 함: %+v", got)
+	}
+	if next.(Model).restoreCursor != "" {
+		t.Error("복원은 한 번만")
+	}
+}

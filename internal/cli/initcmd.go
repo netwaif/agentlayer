@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/netwaif/agentlayer/internal/popup"
 	"io"
 	"os"
 	"path/filepath"
@@ -172,8 +173,10 @@ func PrintTmuxBinding(w io.Writer, conflict bool, binPath string) {
 	if binPath == "" {
 		binPath = "agentlayer"
 	}
-	fmt.Fprintln(w, "tmux 팝업을 쓰려면 ~/.tmux.conf에 다음 한 줄을 추가하세요 (C-b a):")
-	fmt.Fprintf(w, "  bind-key a display-popup -E -w 90%% -h 80%% \"%s\"\n", binPath)
+	fmt.Fprintln(w, "tmux 팝업을 쓰려면 ~/.tmux.conf에 다음 두 줄을 추가하세요 (C-b a):")
+	fmt.Fprintf(w, "  %s\n", popup.BindLine(binPath))
+	fmt.Fprintf(w, "  %s\n", popup.HookLine(binPath))
 	fmt.Fprintln(w, "적용: tmux source-file ~/.tmux.conf")
+	fmt.Fprintln(w, "(둘째 줄: tmux 팝업은 창이 커져도 안 따라오므로 리사이즈 때 같은 자리에 다시 연다 — 커서 유지)")
 	fmt.Fprintln(w, "(절대 경로인 이유: tmux 서버는 PATH가 최소한이라 명령 이름만 쓰면 팝업이 바로 닫힙니다)")
 }
