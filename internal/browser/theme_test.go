@@ -86,3 +86,24 @@ func TestEnsureProfileThemeSkipsMissingLocalState(t *testing.T) {
 		t.Error("Local State를 새로 만들면 안 됨")
 	}
 }
+
+// pkill 뒤 재기동 시 이전 탭 복원 금지 — exit_type Normal·restore_on_startup 5.
+func TestEnsureProfileThemeDisablesCrashRestore(t *testing.T) {
+	dir := t.TempDir()
+	prefPath := filepath.Join(dir, "Default", "Preferences")
+	_ = os.MkdirAll(filepath.Dir(prefPath), 0o755)
+	_ = os.WriteFile(prefPath, []byte(`{"profile":{"exit_type":"Crashed","name":"AgentLayer"},"browser":{"theme":{"is_grayscale2":true}}}`), 0o600)
+	if err := EnsureProfileTheme(dir); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(prefPath)
+	var prefs map[string]any
+	_ = json.Unmarshal(raw, &prefs)
+	profile := prefs["profile"].(map[string]any)
+	if profile["exit_type"] != "Normal" || profile["exited_cleanly"] != true {
+		t.Errorf("크래시 복원이 꺼져야 함: %v", profile)
+	}
+	if session, _ := prefs["session"].(map[string]any); session == nil || session["restore_on_startup"] != float64(5) {
+		t.Errorf("restore_on_startup=5 여야 함: %v", prefs["session"])
+	}
+}

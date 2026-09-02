@@ -56,6 +56,9 @@ const probeTimeout = 2 * time.Second
 // probePort는 고정 포트에 떠 있는 Chrome의 CDP ws URL을 찾는다.
 // 포트가 닫혀 있으면 ("", false, nil) — 기동해도 된다.
 // 열려 있는데 CDP가 아니면 에러 — 다른 프로세스가 점유 중.
+// IsUp은 CDP 포트가 살아 있는지(기동 없이 확인만).
+func IsUp(port int) bool { _, ok, _ := probePort(port); return ok }
+
 func probePort(port int) (string, bool, error) {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	conn, err := net.DialTimeout("tcp", addr, probeTimeout)

@@ -90,12 +90,28 @@ func ensurePrefsTheme(profileDir string) error {
 		profile["name"] = agentProfileName
 		changed = true
 	}
+	// pkill로 내린 뒤 다시 뜰 때 "제대로 종료되지 않았다"며 이전 탭을 복원하면 같은 dev 서버
+	// 탭이 두 개가 된다(실측 2026-09-02). 에이전트 브라우저는 매번 깨끗하게 시작한다.
+	if profile["exit_type"] != "Normal" || profile["exited_cleanly"] != true {
+		profile["exit_type"] = "Normal"
+		profile["exited_cleanly"] = true
+		changed = true
+	}
+	session, _ := prefs["session"].(map[string]any)
+	if session == nil {
+		session = map[string]any{}
+	}
+	if v, ok := session["restore_on_startup"].(float64); !ok || v != 5 {
+		session["restore_on_startup"] = 5 // 5 = 새 탭 페이지로 시작(이전 세션 복원 안 함)
+		changed = true
+	}
 	if !changed {
 		return nil
 	}
 	browser["theme"] = theme
 	prefs["browser"] = browser
 	prefs["profile"] = profile
+	prefs["session"] = session
 	out, err := json.Marshal(prefs)
 	if err != nil {
 		return err

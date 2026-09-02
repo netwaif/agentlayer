@@ -4,11 +4,14 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -570,8 +573,49 @@ func browserMCPServe() error {
 	if npx == "" {
 		return fmt.Errorf("npx를 찾을 수 없습니다 — Node.js 설치 필요 (brew install node)")
 	}
-	argv := MCPServeArgv(npx, cfg.BrowserPortOrDefault())
-	return syscall.Exec(argv[0], argv, usage.ExtendedEnv()) // npx 셔뱅이 node를 PATH에서 찾는다
+	port := cfg.BrowserPortOrDefault()
+	argv := MCPServeArgv(npx, port)
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Env = usage.ExtendedEnv() // npx 셔뱅이 node를 PATH에서 찾는다
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
+	go func() { <-sig; _ = cmd.Process.Signal(syscall.SIGTERM) }()
+	// 클라이언트→서버 메시지를 그대로 넘기되, 도구 호출(tools/call)이 처음 지나갈 때
+	// Chrome이 없으면 띄운다. initialize·tools/list만 하는 세션 시작 때는 안 띄운다 —
+	// 세션이 뜰 때마다 브라우저가 튀어나오던 문제(2026-09-02).
+	r := bufio.NewReaderSize(os.Stdin, 1<<20)
+	for {
+		line, rerr := r.ReadBytes('\n')
+		if len(line) > 0 {
+			if IsMCPToolCall(line) && !browser.IsUp(port) {
+				_, _ = browser.Connect(state.DefaultDir(), port) // 기동만; 클라이언트는 세션 동안 유지
+			}
+			if _, werr := in.Write(line); werr != nil {
+				break
+			}
+		}
+		if rerr != nil {
+			break
+		}
+	}
+	_ = in.Close()
+	return cmd.Wait()
+}
+
+// IsMCPToolCall은 MCP stdio(JSON-RPC 한 줄)가 tools/call인지 본다.
+func IsMCPToolCall(line []byte) bool {
+	var msg struct {
+		Method string `json:"method"`
+	}
+	return json.Unmarshal(line, &msg) == nil && msg.Method == "tools/call"
 }
 
 // PreviewPaths는 산 에이전트 폴더 → 브랜치 맵을 만든다. worktree 폴더는 wt 메타의
@@ -657,6 +701,16 @@ func browserAutoPreview(out io.Writer) error {
 	}
 	for _, s := range browser.AutoPreview(state.DefaultDir(), paths, scan, hasTab, open, time.Now()) {
 		fmt.Fprintf(out, "🌐 http://localhost:%d 열림 (%s)\n", s.Port, s.CWD)
+	}
+	// 에이전트 브라우저가 화면 잠자기 방지 잠금("Capturing")을 들고 있으면 풀어 준다.
+	// 브라우저가 떠 있을 때만(안 떠 있으면 잠금도 없다) — 여기서 브라우저를 띄우지는 않는다.
+	if browser.IsUp(port) && browser.ThrottleOK(state.DefaultDir(), "capture-janitor", 30*time.Second, time.Now()) &&
+		browser.HasCaptureLock(port, browser.ExecLsof, browser.RunPmsetAssertions) {
+		if br := connect(); br != nil {
+			if n := browser.ReleaseCaptures(br); n > 0 {
+				fmt.Fprintf(out, "화면 잠자기 잠금 해제: 탭 %d개\n", n)
+			}
+		}
 	}
 	return nil
 }
