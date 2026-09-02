@@ -249,3 +249,28 @@ func TestClearCookiesIntegration(t *testing.T) {
 		t.Errorf("출력: %s", out.String())
 	}
 }
+
+func TestFormatCookieListSummaryAndDetail(t *testing.T) {
+	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+	future := proto.TimeSinceEpoch(float64(now.Add(48 * time.Hour).Unix()))
+	past := proto.TimeSinceEpoch(float64(now.Add(-time.Hour).Unix()))
+	all := []*proto.NetworkCookie{
+		{Name: "ct0", Value: "SECRET", Domain: ".x.com", Expires: future},
+		{Name: "auth", Value: "SECRET", Domain: ".x.com", Expires: -1},
+		{Name: "old", Value: "SECRET", Domain: "api.x.com", Expires: past},
+		{Name: "gh", Value: "SECRET", Domain: "github.com", Expires: future},
+	}
+	sum := FormatCookieList(all, nil, now)
+	if !strings.Contains(sum, "쿠키 4개, 호스트 3개") || !strings.HasPrefix(strings.TrimSpace(strings.SplitN(sum, "\n", 2)[1]), "2  x.com") {
+		t.Errorf("요약 출력 틀림:\n%s", sum)
+	}
+	det := FormatCookieList(all, []string{"x.com"}, now)
+	for _, want := range []string{"x.com: 쿠키 3개", "auth", "세션", "old", "만료됨", "ct0", "만료 2026-09-04"} {
+		if !strings.Contains(det, want) {
+			t.Errorf("%q 없음:\n%s", want, det)
+		}
+	}
+	if strings.Contains(sum+det, "SECRET") || strings.Contains(det, "github") {
+		t.Errorf("값이 새거나 다른 도메인이 섞임:\n%s", det)
+	}
+}

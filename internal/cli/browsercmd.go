@@ -481,7 +481,7 @@ func browserOpen(out io.Writer, args []string) error {
 // clear는 에이전트 프로필에서 그 도메인 쿠키만 지운다(실사용 크롬은 무관).
 func browserCookies(out io.Writer, args []string) error {
 	usage := "사용법: agentlayer browser cookies import <도메인...> [--profile <디렉터리|이름>] | " +
-		"cookies clear <도메인...> (예: agentlayer browser cookies import x.com)"
+		"cookies list [도메인...] | cookies clear <도메인...> (예: agentlayer browser cookies import x.com)"
 	if len(args) == 0 {
 		return fmt.Errorf("%s", usage)
 	}
@@ -489,6 +489,8 @@ func browserCookies(out io.Writer, args []string) error {
 	case "import":
 	case "clear":
 		return browserCookiesClear(out, args[1:])
+	case "list":
+		return browserCookiesList(out, args[1:])
 	default:
 		return fmt.Errorf("%s", usage)
 	}
@@ -520,6 +522,14 @@ func browserCookies(out io.Writer, args []string) error {
 		return err
 	}
 	return browser.ImportCookies(b, home, "", *profile, domains, time.Now(), out)
+}
+
+func browserCookiesList(out io.Writer, domains []string) error {
+	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
+	if err != nil {
+		return err
+	}
+	return browser.ListCookies(b, domains, time.Now(), out)
 }
 
 func browserCookiesClear(out io.Writer, domains []string) error {

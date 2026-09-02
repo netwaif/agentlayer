@@ -446,3 +446,74 @@ func ClearCookies(b *rod.Browser, domains []string, out io.Writer) error {
 	fmt.Fprintln(out, "완료 — 에이전트 브라우저에서 해당 사이트는 로그아웃 상태가 됩니다.")
 	return nil
 }
+
+// FormatCookieList는 전용 프로필 쿠키를 사람이 읽을 표로 만든다. 값은 절대 찍지 않는다.
+// domains가 비면 호스트별 개수(많은 순), 있으면 그 도메인(하위 포함) 쿠키의 이름·호스트·만료.
+func FormatCookieList(all []*proto.NetworkCookie, domains []string, now time.Time) string {
+	var sb strings.Builder
+	if len(domains) == 0 {
+		byHost := map[string]int{}
+		for _, c := range all {
+			byHost[strings.TrimPrefix(c.Domain, ".")]++
+		}
+		hosts := make([]string, 0, len(byHost))
+		for h := range byHost {
+			hosts = append(hosts, h)
+		}
+		sort.Slice(hosts, func(i, j int) bool {
+			if byHost[hosts[i]] != byHost[hosts[j]] {
+				return byHost[hosts[i]] > byHost[hosts[j]]
+			}
+			return hosts[i] < hosts[j]
+		})
+		fmt.Fprintf(&sb, "전용 프로필 쿠키 %d개, 호스트 %d개\n", len(all), len(hosts))
+		for _, h := range hosts {
+			fmt.Fprintf(&sb, "  %4d  %s\n", byHost[h], h)
+		}
+		if len(hosts) > 0 {
+			sb.WriteString("상세: agentlayer browser cookies list <도메인>\n")
+		}
+		return sb.String()
+	}
+	for i, d := range domains {
+		var rows []*proto.NetworkCookie
+		for _, c := range all {
+			if matchesDomain(c.Domain, d) {
+				rows = append(rows, c)
+			}
+		}
+		sort.Slice(rows, func(i, j int) bool {
+			if rows[i].Domain != rows[j].Domain {
+				return rows[i].Domain < rows[j].Domain
+			}
+			return rows[i].Name < rows[j].Name
+		})
+		if i > 0 {
+			sb.WriteString("\n")
+		}
+		fmt.Fprintf(&sb, "%s: 쿠키 %d개\n", d, len(rows))
+		for _, c := range rows {
+			exp := "세션"
+			if c.Expires > 0 {
+				t := time.Unix(int64(c.Expires), 0)
+				if t.Before(now) {
+					exp = "만료됨"
+				} else {
+					exp = "만료 " + t.Local().Format("2006-01-02")
+				}
+			}
+			fmt.Fprintf(&sb, "  %-28s %-24s %s\n", c.Name, c.Domain, exp)
+		}
+	}
+	return sb.String()
+}
+
+// ListCookies는 전용 프로필의 쿠키 현황을 출력한다(clear 전에 확인하는 용도).
+func ListCookies(b *rod.Browser, domains []string, now time.Time, out io.Writer) error {
+	res, err := proto.StorageGetCookies{}.Call(b)
+	if err != nil {
+		return fmt.Errorf("쿠키 조회 실패: %w", err)
+	}
+	_, err = io.WriteString(out, FormatCookieList(res.Cookies, domains, now))
+	return err
+}
