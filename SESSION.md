@@ -20,11 +20,11 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **B 재촬영 버그 창구** — 타워 세션(agentbrowser-11, `~/ai-folder/youtube/AgentBrowser`)이 순서표 관리, 이 세션은 코드. B 전제(타워에 전달됨): demo-b 새로 띄움 / B1 프롬프트를 "worker는 편집+커밋만, 서버는 코디네이터가 worktree 3개에 8101·8102·8103으로 띄움"으로(codex 샌드박스는 백그라운드 서버를 못 남김·worker가 자기 탭을 열면 중복 탭) / gemini(agy) worker는 폴더 신뢰 창을 사람이 눌러야 함(미해결, ~/.antigravity에 설정 못 찾음)
+1. **B 재촬영 버그 창구** — 타워 세션(agentbrowser-11, `~/ai-folder/youtube/AgentBrowser`)이 순서표 관리, 이 세션은 코드. B 전제(타워에 전달됨): demo-b 새로 띄움 / B1 프롬프트를 "worker는 편집+커밋만, 서버는 코디네이터가 worktree 3개에 8101·8102·8103으로 띄움"으로(codex 샌드박스는 백그라운드 서버를 못 남김·worker가 자기 탭을 열면 중복 탭) / worker 기동 신뢰 질문은 dd66109부터 자동 승인(agy 실검증은 B 재촬영에서)
 2. 촬영 끝나면 `browser-mcp` → main 머지 → push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영. 릴리즈 노트에 오늘 19커밋 포함
 3. 촬영 뒤 정리: x.com 쿠키는 `cookies clear x.com`(순서표 E 마지막 컷), `~/.local/state/agentlayer/picks/` 정리 선택, `~/.local/state/agentlayer/worktrees/demo.review.diff`·search-* 메타(memo 데모) 정리 선택
 4. 대시보드 채널 옛 핑 메시지 Discord 수동 삭제(567c2c9)
-5. 보류 아이디어: agy 폴더 신뢰 자동화, `agentlayer status --prune`(DEAD 즉시 삭제 명령, 지금은 24h 보존), Termius 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정, provider 게이지 텍스트화, 브라우저 프로필 다중화, `init --iterm2`, autopreview 포트 제외 옵션
+5. 보류 아이디어: `agentlayer status --prune`(DEAD 즉시 삭제 명령, 지금은 24h 보존), Termius 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정, provider 게이지 텍스트화, 브라우저 프로필 다중화, `init --iterm2`, autopreview 포트 제외 옵션
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -130,6 +130,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-02 ActivePage: chrome://newtab 등 내부 탭 제외, 포커스>보임>첫 웹 탭. 촬영 중 pick이 빈 새 탭에 검사 모드 건 사고
 - 2026-09-02 모니터 안 꺼짐 원인 = MCP(puppeteer) 스크린샷이 남기는 Chrome "Capturing" NoDisplaySleep 잠금(실측 7h14m). 같은 페이지 캡처 완료 시 풀림 → hook이 감지해 탭마다 1×1 캡처(ReleaseCaptures, 30s 스로틀). 브라우저 튀어나옴 원인 = mcp-serve가 세션 시작마다 Chrome 기동 → stdio 프록시로 첫 tools/call에서만 기동(chrome-devtools-mcp 지연 연결 실측) + pkill 뒤 크래시 탭 복원(exit_type Normal·restore_on_startup 5)
 - 2026-09-03 worktree 프리뷰 창 3개 타일 배치(f63604d)는 사용자 판단으로 철회(터미널 덮음) → 같은 창의 탭(⎇ 제목, 리로드 유지 MarkBranch). B 실패 원인 3개: codex 샌드박스가 백그라운드 서버 못 남김(탭 없음), claude worker가 자기 탭(127.0.0.1:8101)을 열어 프리뷰 탭과 중복, gemini(agy) 내부 포트 51871이 dev 서버로 잡힘 → HTTP 판정(text/html·<400) 추가. B1은 코디네이터가 서버를 띄우는 구성으로 변경 권고
+- 2026-09-03 worker 기동 시 폴더 신뢰 질문(codex·claude·gemini/agy) 자동 승인 — 설정 사전 등록은 codex가 저장소 루트별로 다시 묻고(루트 "/" trusted도 안 덮음) agy는 저장 위치 불명이라, wt new가 분리 감시자(`wt accept-prompts <pane>`, 40s)를 띄워 화면에 신뢰 질문이 보이면 Enter. 화면 파싱 금지 원칙의 명시적 예외(기동 핸드셰이크). 오늘 codex 질문이 "지나간" 건 코디네이터 dispatch의 Enter가 기본 선택을 확정한 것
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -246,3 +247,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - `README.md` cookies list/clear·말로 시키기·pick --once·Capturing 정리 문단
 - 외부: `~/ai-folder/youtube/AgentBrowser/handoff-agentlayer-browser-2026-09-02.md`(핸드오프, CLI 정본은 README), 순서표 아티팩트 64b97f91, footage/A-기본루프.mov
 - 시스템 상태: `~/.claude/skills/orchestration/SKILL.md` 갱신(init), `~/.local/state/agentlayer/capture-janitor.throttle`, browser-profile Preferences exit_type Normal, agents/ DEAD 12개 삭제(2026-09-03), 브랜치 `browser-mcp` 3b54684
+- `internal/wt/prompts.go` IsTrustPrompt·AcceptStartupPrompts, prompts_test.go(4); `internal/wt/lifecycle.go` NewOptions.AcceptPrompts·openWindow→paneID; `internal/tmuxx/tmux.go` NewWindowPane·SendEnter; `internal/cli/wtcmd.go` accept-prompts·spawnAcceptPrompts. 브랜치 `browser-mcp` dd66109
