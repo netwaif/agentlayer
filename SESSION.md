@@ -15,15 +15,16 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**GitHub 릴리즈 = v1.2.5**(시청자 설치본). **로컬 main은 origin 대비 18커밋 앞섬(미푸시)**, 그 위에 브랜치 `browser-mcp`(cd44d02, main 미머지) — 브라우저 "명령 0개" 작업 4단계 전부 구현·실검증·커밋 완료. 로컬 make install = cd44d02, 사용자 실사용 피드백 대기 중. 워킹트리 클린. 사용자 Mac 실환경: 전용 Chrome 9222 기동 중, claude/codex/gemini 세 CLI에 chrome-devtools MCP(mcp-serve) 등록됨, iTerm2 Smart Selection 규칙 설정됨, orchestration 스킬 브라우저 절 설치됨.
+**GitHub 릴리즈 = v1.2.5**(시청자 설치본). **로컬 main은 origin 대비 18커밋 앞섬(미푸시)**, 그 위 브랜치 `browser-mcp`(b1ae112, main 미머지, 24커밋) — 브라우저 "명령 0개"(init MCP 자동등록·mcp-serve·관제탑 b/s/p·스킬 절·iTerm2 감지) + 팝업 리사이즈 재오픈 + hook 자동 프리뷰(preview_auto) + 테마(다크 grayscale) + pick 복귀/요소 캡처 레티나 수정 + cookies 프로필 자동 선택까지 구현·실검증. 로컬 make install = b1ae112. **영상 제작 단계 진입**: 시연 4종(A·B·C·E) 계획 `docs/demos/2026-09-02-browser-video-demos.md`, 시연 저장소 `~/ai-folder/demo/browser-demo`, x.com 쿠키 가져오기 완료(로그인 확인). 워킹트리 클린. 사용자 환경: 전용 Chrome 9222, 3사 MCP 등록, iTerm2 Smart Selection 규칙, `~/.tmux.conf` bind+client-resized 훅(백업 `~/.tmux.conf.bak-20260902-110420`).
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **사용자 실사용 피드백 반영** — 관제탑 `b`(지목)·`s`(캡처)·`p`(프리뷰 🌐 뱃지), 코덱스에서 chrome-devtools MCP 도구 사용(재시작 필요), iTerm2 ⌘-클릭 → 전용 브라우저. 피드백 나오면 `browser-mcp` 브랜치에서 고침
-2. 피드백 정리 후 `browser-mcp` → main 머지 → push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영(릴리즈 후). 릴리즈 단위 = 브라우저 5종+cookies+open/notify+MCP 자동등록+관제탑 키
-3. 대시보드 채널 옛 핑 메시지 Discord 수동 삭제(웹훅 메시지, 앞으로는 안 쌓임 567c2c9)
-4. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트, provider 게이지 막대 텍스트화, 브라우저 프로필 다중화(실수요 생기면), iTerm2 규칙 자동 주입 `init --iterm2`(필요 시), 원격 스트리밍(범위 밖)
+1. **촬영 중 버그 창구** — 사용자가 증상 붙여넣으면 `browser-mcp` 브랜치에서 수정 → `make install` 즉시 반영. 시연 문서 `docs/demos/2026-09-02-browser-video-demos.md` 기준(영상 컨트롤 타워 세션은 별도)
+2. 촬영 끝나면 `browser-mcp` → main 머지 → push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영(릴리즈 후). 릴리즈 단위 = 브라우저 전부(5종+cookies+open/notify+MCP 자동등록+관제탑 키+팝업 재오픈+자동 프리뷰)
+3. 촬영 뒤 정리: 전용 Chrome 프로필의 x.com 쿠키는 그대로 둠(사용자 판단), `~/.local/state/agentlayer/preview-seen.json`·`picks/` 정리 선택
+4. 대시보드 채널 옛 핑 메시지 Discord 수동 삭제(567c2c9)
+5. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정, provider 게이지 텍스트화, 브라우저 프로필 다중화, iTerm2 규칙 자동 주입 `init --iterm2`, 원격 스트리밍(범위 밖), autopreview 포트 범위 제외 옵션(실사용 피드백 뒤)
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -114,6 +115,15 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-02 "명령 0개" 원칙: 관제탑이 표면, CLI는 배관. init이 MCP 등록(mcp-serve 래퍼로 기동까지 자동)·관제탑 b/s/p 키·스킬 절. iTerm2 규칙 자동 주입은 iTerm2 되쓰기 위험으로 감지+안내만
 - 2026-09-02 codex 브라우저 실패 원인은 ChatGPT 앱 내장 browser:control-in-app-browser 스킬 — 스킬 문단에 사용 금지 명시, chrome-devtools MCP 지목
 - 2026-09-02 사용자 요청으로 codex(~/.codex/config.toml)에 chrome-devtools MCP 등록 — 이후 init이 mcp-serve로 교체
+
+- 2026-09-02 팝업 형태 유지 확정(사용자 선호). tmux 3.6a 팝업은 커져도 안 따라옴(실측) → client-resized 훅 + popup-refresh 재오픈(커서 유지, 재오픈은 비동기 — display-popup -E가 블록)
+- 2026-09-02 자동 프리뷰는 관제탑이 아니라 hook 경로가 정본(관제탑 닫혀도 동작). preview-seen.json으로 "한 번만", 사라진 서버는 잊음, 5초 스로틀, 기존 탭은 앞으로 가져옴. config preview_auto 기본 켬
+- 2026-09-02 전용 브라우저 테마 = 다크 grayscale(검정·중성 회색, Claude Desktop 톤). 시드 색은 전부 색기운 남아 탈락(주황→갈색, 회색→푸른빛). 구분은 북마크바로(사용자). 프로필명 정본은 Local State. enable-automation 인포바 제거
+- 2026-09-02 사용자 원칙: 색·디자인은 AgentLoops 산출물 팔레트(웜다크 #1f1e1d·#262624·#2d2c2a, 테라코타 #d97757, 크림 #faf9f5)를 먼저 확인. "구분보다 예쁜 게 우선"
+- 2026-09-02 pick 요소 스크린샷: rod el.Screenshot은 CSS 좌표 크롭이라 레티나에서 오류 → Page.captureScreenshot clip(문서 좌표=뷰포트+스크롤, scale 1=기기 픽셀)로 교체, DPR 2 에뮬레이션 회귀 테스트
+- 2026-09-02 pick 복귀 경로: 터미널 esc/q/Ctrl-C(raw stdin 감시) + 오버레이 취소 시 루프 종료(ErrPickCancelled)
+- 2026-09-02 cookies import는 Chrome 프로필 자동 선택(도메인 쿠키 최다, 동률 last_used, --profile 지정). 이 Mac의 Default는 다른 계정, 사용자 계정은 Profile 1(netwaif)
+- 2026-09-02 영상 시연 선정: A 기본 루프·B 3사 A/B(orchestration)·C 디스코드 원격(shot --notify)·E x.com 로그인 소식 수집. D(코덱스 비포/애프터)는 매뉴얼 내용이라 제외
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -210,3 +220,12 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - `README.md` browser 섹션(open·shot --notify/--agent·mcp·관제탑 키·링크 라우팅 Smart Selection·SSH 원격·browser_port)
 - `docs/superpowers/specs/2026-09-02-browser-zero-command-design.md` 명령 0개 설계(4단계, 4번은 감지+안내로 확정)
 - 시스템 상태 추가: `~/.claude.json`·`~/.codex/config.toml`·`~/.gemini/settings.json` mcpServers.chrome-devtools = `~/.local/bin/agentlayer browser mcp-serve`(각 .agentlayer.bak), `~/.claude/skills/orchestration/SKILL.md` 브라우저 절 포함(.bak), iTerm2 Default 프로필 Smart Selection "Agent browser URL" 규칙, 전용 Chrome 9222(browser.json), 브랜치 `browser-mcp` cd44d02
+- `internal/popup/popup.go` Record·Save/Load/Remove·InPopup·ExpectedInner·Mismatch·DisplayArgs·BindLine·HookLine·Refresh(flock·5회 루프·open 비동기), popup_test.go 6종; `internal/ui/model.go` popupRecord·restoreCursor·recordPopup·WithPopup; `main.go` runPopupRefresh·case "popup-refresh"; `internal/cli/initcmd.go` PrintTmuxBinding 두 줄 안내
+- `internal/browser/autopreview.go` AutoPreview(preview-seen.json·5초 스로틀·사라진 서버 망각)·autopreview_test.go 3종; `internal/cli/browsercmd.go` browserAutoPreview(hasTab는 기존 탭 Activate); `main.go` runHook defer spawn("browser","autopreview"); `internal/config/config.go` PreviewAuto·PreviewAutoEnabled
+- `internal/ui/model.go` autoPreview·seenServers·hasTab·autoPreviewCmd(관제탑 쪽 자동 열기, 인메모리), model_test.go 자동 프리뷰 2종
+- `internal/browser/theme.go` EnsureProfileTheme(ensurePrefsTheme is_grayscale2+color_scheme2=2·ensureLocalStateName AgentLayer), theme_test.go 4종; `instance.go` Delete("enable-automation")
+- `internal/browser/pick.go` ErrPickCancelled·ElementShot(문서 좌표 clip); `internal/cli/browsercmd.go` watchQuitKeys(x/term raw)·quitKey; pick_test.go TestElementShotCapturesScrolledElement(DPR 2)
+- `internal/browser/cookies.go` ChromeProfile·ListChromeProfiles(Local State)·ChooseProfile·countDomainCookies·chromeCookiesPath(home, profile)·ImportCookies(profile 인자), cookies_test.go 2종; CLI `cookies import --profile`
+- `docs/demos/2026-09-02-browser-video-demos.md` 시연 4종 계획(프롬프트·키·기대 화면·리스크)
+- 외부: `~/ai-folder/demo/browser-demo/`(index.html·CLAUDE.md·SESSION.md, git master e1e2756) 시연 저장소
+- 시스템 상태 추가: `~/.tmux.conf` bind-key a에 -e AGENTLAYER_POPUP=1 + set-hook client-resized(백업 .bak-20260902-110420), `~/.local/state/agentlayer/preview-seen.json`·`popup.json`(팝업 열려 있을 때만), 전용 프로필 x.com 로그인 쿠키 16개(Profile 1에서), 브랜치 `browser-mcp` b1ae112
