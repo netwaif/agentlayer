@@ -14,11 +14,13 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -158,9 +160,92 @@ func sameSiteLabel(v int) string {
 }
 
 // chromeCookiesPath는 기본 프로필 Cookies DB 경로.
-func chromeCookiesPath(home string) string {
-	return filepath.Join(home, "Library", "Application Support",
-		"Google", "Chrome", "Default", "Cookies")
+func chromeRoot(home string) string {
+	return filepath.Join(home, "Library", "Application Support", "Google", "Chrome")
+}
+
+func chromeCookiesPath(home, profileDir string) string {
+	if profileDir == "" {
+		profileDir = "Default"
+	}
+	return filepath.Join(chromeRoot(home), profileDir, "Cookies")
+}
+
+// ChromeProfile은 실사용 Chrome의 프로필 하나(계정별 디렉터리).
+type ChromeProfile struct {
+	Dir  string // "Default", "Profile 1" …
+	Name string // 표시 이름
+	User string // 로그인 이메일(있으면)
+}
+
+// ListChromeProfiles는 Local State에서 프로필 목록(디렉터리명 순)과 마지막 사용 프로필을 읽는다.
+// Chrome은 계정마다 프로필이 갈리므로 Default가 사용자 본인 계정이 아닐 수 있다.
+func ListChromeProfiles(home string) ([]ChromeProfile, string) {
+	raw, err := os.ReadFile(filepath.Join(chromeRoot(home), "Local State"))
+	if err != nil {
+		return []ChromeProfile{{Dir: "Default"}}, "Default"
+	}
+	var ls struct {
+		Profile struct {
+			InfoCache map[string]struct {
+				Name string `json:"name"`
+				User string `json:"user_name"`
+			} `json:"info_cache"`
+			LastUsed string `json:"last_used"`
+		} `json:"profile"`
+	}
+	if json.Unmarshal(raw, &ls) != nil || len(ls.Profile.InfoCache) == 0 {
+		return []ChromeProfile{{Dir: "Default"}}, "Default"
+	}
+	var out []ChromeProfile
+	for dir, v := range ls.Profile.InfoCache {
+		out = append(out, ChromeProfile{Dir: dir, Name: v.Name, User: v.User})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Dir < out[j].Dir })
+	return out, ls.Profile.LastUsed
+}
+
+// ChooseProfile은 want(디렉터리명 또는 표시 이름)가 있으면 그것, 없으면 countFor
+// (도메인 쿠키 수)가 최대인 프로필, 동률이면 lastUsed. 로그인 세션은 쿠키가 많은
+// 프로필에 있다는 경험칙 — Default만 읽어 남의 계정을 가져오던 문제의 해법.
+func ChooseProfile(ps []ChromeProfile, countFor func(dir string) int, lastUsed string, want ...string) ChromeProfile {
+	if len(want) > 0 && want[0] != "" {
+		for _, p := range ps {
+			if p.Dir == want[0] || p.Name == want[0] {
+				return p
+			}
+		}
+		return ChromeProfile{Dir: want[0]}
+	}
+	best, bestN := ChromeProfile{Dir: "Default"}, -1
+	for _, p := range ps {
+		n := 0
+		if countFor != nil {
+			n = countFor(p.Dir)
+		}
+		if n > bestN || (n == bestN && p.Dir == lastUsed) {
+			best, bestN = p, n
+		}
+	}
+	return best
+}
+
+// countDomainCookies는 프로필의 쿠키 DB에서 도메인에 매칭되는 행 수(복호화 없이).
+func countDomainCookies(sqlite3Path, dbPath string, domains []string) int {
+	rows, err := readChromeCookies(sqlite3Path, dbPath)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, r := range rows {
+		for _, d := range domains {
+			if matchesDomain(r.HostKey, d) {
+				n++
+				break
+			}
+		}
+	}
+	return n
 }
 
 // buildCookieParams는 도메인에 매칭되는 쿠키만 복호화해 CDP 파라미터로 만든다.
@@ -256,14 +341,27 @@ func safeStoragePassword() ([]byte, error) {
 
 // ImportCookies는 전 과정을 엮는다: Keychain 키 → DB 조회 → 도메인 필터·복호화
 // → CDP 주입 → 개수 보고. 쿠키 값은 절대 출력하지 않는다(개수·도메인만).
-func ImportCookies(b *rod.Browser, home, sqlite3Path string, domains []string, now time.Time, out io.Writer) error {
+func ImportCookies(b *rod.Browser, home, sqlite3Path, profile string, domains []string, now time.Time, out io.Writer) error {
+	profiles, lastUsed := ListChromeProfiles(home)
+	chosen := ChooseProfile(profiles, func(dir string) int {
+		return countDomainCookies(sqlite3Path, chromeCookiesPath(home, dir), domains)
+	}, lastUsed, profile)
+	label := chosen.Dir
+	if chosen.Name != "" {
+		label += " (" + chosen.Name
+		if chosen.User != "" {
+			label += " · " + chosen.User
+		}
+		label += ")"
+	}
+	fmt.Fprintf(out, "실사용 Chrome 프로필: %s — 다른 프로필은 --profile <디렉터리|이름>\n", label)
 	fmt.Fprintln(out, "Keychain 접근 권한을 요청합니다 — macOS 팝업이 뜨면 '항상 허용'을 눌러주세요…")
 	pw, err := safeStoragePassword()
 	if err != nil {
 		return err
 	}
 	key := pbkdf2SHA1(pw, []byte("saltysalt"), 1003, 16)
-	rows, err := readChromeCookies(sqlite3Path, chromeCookiesPath(home))
+	rows, err := readChromeCookies(sqlite3Path, chromeCookiesPath(home, chosen.Dir))
 	if err != nil {
 		return err
 	}

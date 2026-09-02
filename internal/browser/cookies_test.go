@@ -6,6 +6,8 @@ import (
 	"crypto/cipher"
 	"crypto/sha256"
 	"encoding/hex"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -147,5 +149,41 @@ func TestSameSiteLabel(t *testing.T) {
 		if got := sameSiteLabel(in); got != want {
 			t.Errorf("sameSiteLabel(%d)=%q, want %q", in, got, want)
 		}
+	}
+}
+
+// 실사용 Chrome은 프로필이 여러 개(계정별)라 Default만 읽으면 남의 계정 쿠키를 가져온다.
+// Local State에서 프로필 목록을 읽고, 도메인 쿠키가 가장 많은 프로필을 고른다.
+func TestListChromeProfiles(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, "Library", "Application Support", "Google", "Chrome")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "Local State"), []byte(`{"profile":{"info_cache":{
+		"Default":{"name":"사용자 이름 1","user_name":"a@x.com"},
+		"Profile 1":{"name":"netwaif","user_name":"b@x.com"}},"last_used":"Profile 1"}}`), 0o600)
+	ps, last := ListChromeProfiles(home)
+	if len(ps) != 2 || last != "Profile 1" {
+		t.Fatalf("profiles=%v last=%q", ps, last)
+	}
+	if ps[1].Dir != "Profile 1" || ps[1].Name != "netwaif" {
+		t.Errorf("정렬·이름: %+v", ps)
+	}
+}
+
+func TestChooseProfileMostCookies(t *testing.T) {
+	ps := []ChromeProfile{{Dir: "Default", Name: "a"}, {Dir: "Profile 1", Name: "b"}, {Dir: "Profile 4", Name: "c"}}
+	counts := map[string]int{"Default": 5, "Profile 1": 16, "Profile 4": 0}
+	got := ChooseProfile(ps, func(d string) int { return counts[d] }, "Default")
+	if got.Dir != "Profile 1" {
+		t.Errorf("쿠키 많은 프로필 선택: %+v", got)
+	}
+	// 동률이면 마지막 사용 프로필
+	counts["Default"] = 16
+	if got := ChooseProfile(ps, func(d string) int { return counts[d] }, "Default"); got.Dir != "Default" {
+		t.Errorf("동률은 last_used: %+v", got)
+	}
+	// 지정 프로필(디렉터리명 또는 표시 이름)
+	if got := ChooseProfile(ps, nil, "", "c"); got.Dir != "Profile 4" {
+		t.Errorf("이름 지정: %+v", got)
 	}
 }

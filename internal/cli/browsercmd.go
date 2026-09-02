@@ -480,13 +480,27 @@ func browserOpen(out io.Writer, args []string) error {
 // 실사용 크롬의 지정 도메인 쿠키만 골라 에이전트 프로필로 가져온다.
 func browserCookies(out io.Writer, args []string) error {
 	if len(args) == 0 || args[0] != "import" {
-		return fmt.Errorf("사용법: agentlayer browser cookies import <도메인...> " +
-			"(예: agentlayer browser cookies import youtube.com google.com)")
+		return fmt.Errorf("사용법: agentlayer browser cookies import <도메인...> [--profile <디렉터리|이름>] " +
+			"(예: agentlayer browser cookies import x.com)")
 	}
-	domains := args[1:]
+	fs := flag.NewFlagSet("cookies import", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	profile := fs.String("profile", "", "실사용 Chrome 프로필 (기본: 도메인 쿠키가 가장 많은 프로필)")
+	var domains []string
+	rest := args[1:]
+	for { // 도메인과 플래그 순서 무관
+		if err := fs.Parse(rest); err != nil {
+			return err
+		}
+		if fs.NArg() == 0 {
+			break
+		}
+		domains = append(domains, fs.Arg(0))
+		rest = fs.Args()[1:]
+	}
 	if len(domains) == 0 {
 		return fmt.Errorf("가져올 도메인을 하나 이상 지정하세요 " +
-			"(예: agentlayer browser cookies import youtube.com)")
+			"(예: agentlayer browser cookies import x.com)")
 	}
 	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
 	if err != nil {
@@ -496,7 +510,7 @@ func browserCookies(out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	return browser.ImportCookies(b, home, "", domains, time.Now(), out)
+	return browser.ImportCookies(b, home, "", *profile, domains, time.Now(), out)
 }
 
 // browserMCPServe: MCP 클라이언트가 서버 명령으로 띄운다. Chrome을 보장한 뒤
