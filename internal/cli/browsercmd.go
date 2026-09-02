@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/netwaif/agentlayer/internal/browser"
 	"github.com/netwaif/agentlayer/internal/config"
+	"github.com/netwaif/agentlayer/internal/discord"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/wt"
@@ -43,6 +45,8 @@ func RunBrowser(out io.Writer, args []string) error {
 		return browserCookies(out, args)
 	case "mcp":
 		return browserMCP(out)
+	case "open":
+		return browserOpen(out, args)
 	default:
 		return fmt.Errorf("모르는 browser 서브커맨드 %q — 'agentlayer help' 참고", sub)
 	}
@@ -91,14 +95,23 @@ func browserPick(out io.Writer) error {
 // parseShotArgs는 shot의 url·--send를 인자 위치와 무관하게 파싱한다.
 // Go flag는 첫 비플래그 인자에서 멈추므로 `shot <url> --send`가 --send를
 // 조용히 삼키지 않게, 위치 인자를 걷어내며 끝까지 재파싱한다.
-func parseShotArgs(args []string) (url string, send bool, err error) {
+// shotOpts는 shot의 인자. --send는 에이전트 pane, --notify는 알림 웹훅(폰 Discord).
+type shotOpts struct {
+	URL    string
+	Send   bool
+	Notify bool
+}
+
+func parseShotArgs(args []string) (shotOpts, error) {
 	fs := flag.NewFlagSet("shot", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // usage 자동 출력 억제 — 반환 에러로 충분
-	sendFlag := fs.Bool("send", false, "에이전트 pane으로 경로 전송")
+	var o shotOpts
+	fs.BoolVar(&o.Send, "send", false, "에이전트 pane으로 경로 전송")
+	fs.BoolVar(&o.Notify, "notify", false, "알림 웹훅으로 이미지 전송")
 	var rest []string
 	for {
 		if err := fs.Parse(args); err != nil {
-			return "", false, err
+			return shotOpts{}, err
 		}
 		if fs.NArg() == 0 {
 			break
@@ -107,12 +120,12 @@ func parseShotArgs(args []string) (url string, send bool, err error) {
 		args = fs.Args()[1:]
 	}
 	if len(rest) > 1 {
-		return "", false, fmt.Errorf("잉여 인자 %q — 사용법: agentlayer browser shot [url] [--send]", rest[1:])
+		return shotOpts{}, fmt.Errorf("잉여 인자 %q — 사용법: agentlayer browser shot [url] [--send] [--notify]", rest[1:])
 	}
 	if len(rest) == 1 {
-		url = rest[0]
+		o.URL = rest[0]
 	}
-	return url, *sendFlag, nil
+	return o, nil
 }
 
 // parseErrorsArgs는 errors의 --send를 파싱한다 — 위치 인자는 없으므로
@@ -281,20 +294,25 @@ func browserPreview(out io.Writer, args []string) error {
 	return nil
 }
 
-// browserShot은 전체 페이지를 캡처해 경로를 출력하거나(--send면) pane으로 보낸다.
+// browserShot은 전체 페이지를 캡처해 경로를 출력하고, --send면 pane으로,
+// --notify면 알림 웹훅으로 이미지를 보낸다 (둘 다 가능).
 func browserShot(out io.Writer, args []string) error {
-	url, send, err := parseShotArgs(args)
+	o, err := parseShotArgs(args)
 	if err != nil {
 		return err
 	}
-	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
+	cfg := config.Load()
+	if o.Notify && cfg.NotifyURL() == "" {
+		return fmt.Errorf("--notify에는 config notify_webhook_url(또는 discord_webhook_url)이 필요합니다")
+	}
+	b, err := browser.Connect(state.DefaultDir(), cfg.BrowserPortOrDefault())
 	if err != nil {
 		return err
 	}
 	var page *rod.Page
-	if url != "" {
+	if o.URL != "" {
 		// 새 탭은 닫지 않고 남긴다 — 캡처 결과를 사용자가 브라우저에서 확인할 수 있게.
-		page, err = b.Page(proto.TargetCreateTarget{URL: url})
+		page, err = b.Page(proto.TargetCreateTarget{URL: o.URL})
 		if err != nil {
 			return err
 		}
@@ -308,13 +326,49 @@ func browserShot(out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	if !send {
-		fmt.Fprintln(out, path)
+	fmt.Fprintln(out, path)
+	if o.Notify {
+		info, err := page.Info()
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if err := discord.NewClient(cfg.NotifyURL()).PostFile(
+			"브라우저 스크린샷: "+info.URL, filepath.Base(path), data); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "→ 알림 웹훅으로 전송")
+	}
+	if !o.Send {
 		return nil
 	}
 	return sendToAgent(out, os.Stdin, page, func(pageURL string) string {
 		return fmt.Sprintf("브라우저 스크린샷 확인해줘: %s (페이지: %s)", path, pageURL)
 	})
+}
+
+// browserOpen: agentlayer browser open <url> — 전용 브라우저에 탭을 열고 앞으로 가져온다.
+// 터미널 링크 클릭을 실사용 브라우저 대신 여기로 보내는 진입점(iTerm2 Semantic History 등).
+func browserOpen(out io.Writer, args []string) error {
+	if len(args) != 1 || args[0] == "" {
+		return fmt.Errorf("사용법: agentlayer browser open <url>")
+	}
+	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
+	if err != nil {
+		return err
+	}
+	page, err := b.Page(proto.TargetCreateTarget{URL: args[0]})
+	if err != nil {
+		return err
+	}
+	if _, err := page.Activate(); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "열림:", args[0])
+	return nil
 }
 
 // browserCookies: agentlayer browser cookies import <도메인...>

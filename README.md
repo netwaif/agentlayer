@@ -136,7 +136,8 @@ agentlayer wt clean auth-api                    # 보존 우선 정리
 ```bash
 agentlayer browser                 # 전용 브라우저 기동 (떠 있으면 기존 인스턴스에 attach)
 agentlayer browser pick            # 활성 탭에서 요소 클릭 → 오버레이에 지시 입력 → 담당 에이전트 pane으로 한 줄 전송 (연속 지목, Ctrl-C 종료)
-agentlayer browser shot [url] [--send]   # 전체 페이지 스크린샷 — 경로 출력, --send면 담당 에이전트 pane으로 전송
+agentlayer browser open <url>      # 전용 브라우저에 탭 열기 (터미널 링크 클릭을 여기로 보내는 진입점)
+agentlayer browser shot [url] [--send] [--notify]   # 전체 페이지 스크린샷 — 경로 출력, --send면 담당 에이전트 pane, --notify면 알림 웹훅(폰 Discord)으로 이미지 전송
 agentlayer browser errors [--send]       # 콘솔 에러·JS 예외를 Enter까지 수집해 덤프(stdout+파일), --send면 pane 전송
 agentlayer browser preview [포트...]     # worktree dev 서버(또는 지정 포트)를 브랜치 라벨(⎇) 창으로 열기
 agentlayer browser cookies import <도메인...>  # 실사용 크롬의 지정 도메인 쿠키만 골라 전용 프로필로 가져오기 (macOS)
@@ -159,6 +160,17 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   예: `agentlayer browser cookies import youtube.com google.com`
 - pick 산출물(요소 컨텍스트 `.md` + 스크린샷 `.png`)과 shot·errors 덤프는
   `~/.local/state/agentlayer/picks/`에 저장된다
+- **터미널 링크를 전용 브라우저로**: 기본은 ⌘-클릭이 실사용 브라우저로 간다.
+  iTerm2 → Settings → Profiles → Advanced → Semantic History를
+  "Run command…"로 두고 `agentlayer browser open \1`을 넣으면 링크가 전용
+  브라우저에 열린다(에이전트가 보는 화면 = 사람이 클릭한 화면). 시스템
+  브라우저로 열고 싶을 땐 우클릭 → Open URL
+- **SSH 원격에서 쓸 때**: 에이전트(MCP)는 Mac의 전용 브라우저를 그대로
+  조작한다(Mac이 GUI 로그인 상태면 됨). 사람이 화면을 보는 방법은 두 가지 —
+  ① `agentlayer browser shot --notify`로 스크린샷을 알림 웹훅(폰 Discord)으로
+  받기, ② 노트북이면 `ssh -L 9222:127.0.0.1:9222 <mac>` 뒤 노트북 Chrome의
+  `chrome://inspect` → Configure에 `localhost:9222` 등록 → inspect로 전용
+  브라우저 탭을 실시간으로 보고 클릭까지 할 수 있다
 - 전송 대상 라우팅: 페이지가 localhost면 포트를 `lsof`로 역추적해
   dev 서버의 작업 폴더와 에이전트 폴더를 최장일치로 대조한다.
   좁혀지지 않으면 산 에이전트 전원이 후보가 된다

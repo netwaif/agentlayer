@@ -14,33 +14,42 @@ func TestParseShotArgs(t *testing.T) {
 	cases := []struct {
 		name    string
 		args    []string
-		url     string
-		send    bool
+		want    shotOpts
 		wantErr bool
 	}{
-		{"url 뒤 --send", []string{"https://example.com", "--send"}, "https://example.com", true, false},
-		{"--send 뒤 url", []string{"--send", "https://example.com"}, "https://example.com", true, false},
-		{"인자 없음", nil, "", false, false},
-		{"url만", []string{"https://example.com"}, "https://example.com", false, false},
-		{"잉여 인자는 에러", []string{"a", "b"}, "", false, true},
-		{"모르는 플래그는 에러", []string{"--bogus"}, "", false, true},
+		{"url 뒤 --send", []string{"https://example.com", "--send"}, shotOpts{URL: "https://example.com", Send: true}, false},
+		{"--send 뒤 url", []string{"--send", "https://example.com"}, shotOpts{URL: "https://example.com", Send: true}, false},
+		{"인자 없음", nil, shotOpts{}, false},
+		{"url만", []string{"https://example.com"}, shotOpts{URL: "https://example.com"}, false},
+		{"--notify", []string{"--notify", "https://example.com"}, shotOpts{URL: "https://example.com", Notify: true}, false},
+		{"--send --notify 동시", []string{"https://example.com", "--send", "--notify"}, shotOpts{URL: "https://example.com", Send: true, Notify: true}, false},
+		{"잉여 인자는 에러", []string{"a", "b"}, shotOpts{}, true},
+		{"모르는 플래그는 에러", []string{"--bogus"}, shotOpts{}, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			url, send, err := parseShotArgs(c.args)
+			got, err := parseShotArgs(c.args)
 			if c.wantErr {
 				if err == nil {
-					t.Fatalf("에러여야 함: url=%q send=%v", url, send)
+					t.Fatalf("에러여야 함: %+v", got)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
-			if url != c.url || send != c.send {
-				t.Errorf("got url=%q send=%v, want url=%q send=%v", url, send, c.url, c.send)
+			if got != c.want {
+				t.Errorf("got %+v, want %+v", got, c.want)
 			}
 		})
+	}
+}
+
+func TestRunBrowserOpenRequiresURL(t *testing.T) {
+	var out bytes.Buffer
+	err := RunBrowser(&out, []string{"open"})
+	if err == nil || !strings.Contains(err.Error(), "사용법") {
+		t.Fatalf("url 없으면 사용법 에러, got %v", err)
 	}
 }
 
