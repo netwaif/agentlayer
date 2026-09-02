@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -19,6 +20,7 @@ import (
 	"github.com/netwaif/agentlayer/internal/discord"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
+	"github.com/netwaif/agentlayer/internal/usage"
 	"github.com/netwaif/agentlayer/internal/wt"
 )
 
@@ -47,6 +49,8 @@ func RunBrowser(out io.Writer, args []string) error {
 		return browserMCP(out)
 	case "open":
 		return browserOpen(out, args)
+	case "mcp-serve":
+		return browserMCPServe()
 	default:
 		return fmt.Errorf("모르는 browser 서브커맨드 %q — 'agentlayer help' 참고", sub)
 	}
@@ -392,6 +396,21 @@ func browserCookies(out io.Writer, args []string) error {
 		return err
 	}
 	return browser.ImportCookies(b, home, "", domains, time.Now(), out)
+}
+
+// browserMCPServe: MCP 클라이언트가 서버 명령으로 띄운다. Chrome을 보장한 뒤
+// chrome-devtools-mcp로 프로세스를 갈아끼워 stdio를 그대로 넘긴다.
+func browserMCPServe() error {
+	cfg := config.Load()
+	if _, err := browser.Connect(state.DefaultDir(), cfg.BrowserPortOrDefault()); err != nil {
+		return err
+	}
+	npx := usage.LookupTool("npx")
+	if npx == "" {
+		return fmt.Errorf("npx를 찾을 수 없습니다 — Node.js 설치 필요 (brew install node)")
+	}
+	argv := MCPServeArgv(npx, cfg.BrowserPortOrDefault())
+	return syscall.Exec(argv[0], argv, usage.ExtendedEnv()) // npx 셔뱅이 node를 PATH에서 찾는다
 }
 
 // MCPCommands는 claude·codex·gemini에 chrome-devtools-mcp를 전용 브라우저

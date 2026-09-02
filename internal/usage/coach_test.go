@@ -2,6 +2,8 @@ package usage
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -82,5 +84,25 @@ func TestResetLabel(t *testing.T) {
 	}
 	if ResetLabel(nil) != "" {
 		t.Error("nil은 빈 문자열")
+	}
+}
+
+// nvm 사용자(시스템 node 없음)도 npx를 찾아야 한다 — 최신 버전 bin을 후보에 넣는다.
+func TestToolDirsIncludesNvmLatest(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, v := range []string{"v20.1.0", "v22.3.0", "v9.9.9"} {
+		os.MkdirAll(filepath.Join(home, ".nvm", "versions", "node", v, "bin"), 0o755)
+	}
+	dirs := toolDirs()
+	want := filepath.Join(home, ".nvm", "versions", "node", "v22.3.0", "bin")
+	found := false
+	for _, d := range dirs {
+		if d == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("nvm 최신 bin 누락: %v", dirs)
 	}
 }

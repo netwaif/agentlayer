@@ -43,9 +43,47 @@ func toolDirs() []string {
 	var dirs []string
 	if home, err := os.UserHomeDir(); err == nil {
 		dirs = append(dirs, filepath.Join(home, ".local", "bin"))
+		if nvm := nvmLatestBin(home); nvm != "" {
+			dirs = append(dirs, nvm) // nvm 전용 사용자 — 시스템 node 없이도 npx 발견
+		}
 	}
 	return append(dirs, "/opt/homebrew/bin", "/usr/local/bin")
 }
+
+// nvmLatestBin은 ~/.nvm/versions/node/<가장 높은 버전>/bin. 없으면 "".
+func nvmLatestBin(home string) string {
+	entries, err := os.ReadDir(filepath.Join(home, ".nvm", "versions", "node"))
+	if err != nil {
+		return ""
+	}
+	best, bestKey := "", []int{}
+	for _, e := range entries {
+		var a, b, c int
+		if _, err := fmt.Sscanf(e.Name(), "v%d.%d.%d", &a, &b, &c); err != nil {
+			continue
+		}
+		key := []int{a, b, c}
+		if best == "" || versionLess(bestKey, key) {
+			best, bestKey = e.Name(), key
+		}
+	}
+	if best == "" {
+		return ""
+	}
+	return filepath.Join(home, ".nvm", "versions", "node", best, "bin")
+}
+
+func versionLess(a, b []int) bool {
+	for i := range a {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return false
+}
+
+// ExtendedEnv는 PATH를 흔한 도구 위치까지 넓힌 환경 — 외부 프로세스에 넘길 때 사용.
+func ExtendedEnv() []string { return extendedEnv() }
 
 // LookupTool은 name을 PATH에서, 없으면 흔한 위치에서 찾는다.
 // (tmux 팝업의 최소 PATH 환경 대응 — coach·lazygit 등 외부 도구 공용)

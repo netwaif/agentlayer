@@ -330,6 +330,23 @@ func runInit(args []string) error {
 		}
 		fmt.Println()
 	}
+	// chrome-devtools MCP — 에이전트가 전용 브라우저를 직접 조작하도록 세 CLI에 등록.
+	// 서버 명령은 `agentlayer browser mcp-serve`라 Chrome 기동까지 자동.
+	fmt.Println("chrome-devtools MCP 등록 (에이전트 전용 브라우저):")
+	if err := cli.InstallClaudeMCP(os.Stdout, filepath.Join(home, ".claude.json"), binPath, *dryRun); err != nil {
+		return err
+	}
+	if _, err := os.Stat(filepath.Dir(codexConfig)); err == nil {
+		if err := cli.InstallCodexMCP(os.Stdout, codexConfig, binPath, *dryRun); err != nil {
+			return err
+		}
+	}
+	if _, err := os.Stat(filepath.Dir(geminiSettings)); err == nil {
+		if err := cli.InstallGeminiMCP(os.Stdout, geminiSettings, binPath, *dryRun); err != nil {
+			return err
+		}
+	}
+	fmt.Println()
 	// /orchestration 스킬 — 바이너리 동봉본을 ~/.claude/skills에 설치
 	skillsDir := filepath.Join(home, ".claude", "skills")
 	fmt.Println("orchestration 스킬 설치:", skillsDir)

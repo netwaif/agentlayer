@@ -149,11 +149,16 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
 - CDP 디버깅 포트는 고정(`browser_port`, 기본 9222)이라 재부팅 뒤에도
   기록 없이 같은 브라우저를 찾아 attach한다. 포트를 다른 프로세스가
   물고 있으면 명시적으로 실패한다 — config에서 포트를 바꾸면 된다
-- **에이전트가 직접 조작·검사(클릭·입력·콘솔·네트워크)하려면 MCP를 붙인다** —
+- **에이전트가 직접 조작·검사(클릭·입력·콘솔·네트워크)하는 건 MCP** —
   agentlayer는 제어 기능을 자체 구현하지 않고 chrome-devtools-mcp에 위임한다.
-  `agentlayer browser mcp`가 출력한 줄 중 쓰는 에이전트의 것을 실행하면
-  세 에이전트가 같은 로그인 브라우저를 공유한다. Playwright MCP를 쓰려면
-  `npx @playwright/mcp --cdp-endpoint http://127.0.0.1:9222`로 같은 포트에 붙는다
+  `agentlayer init`이 claude(`~/.claude.json`)·codex(`~/.codex/config.toml`)·
+  gemini(`~/.gemini/settings.json`)에 MCP 서버 `chrome-devtools`를 등록한다
+  (백업 `.agentlayer.bak`, 같은 이름의 기존 항목은 건드리지 않음). 서버 명령은
+  `agentlayer browser mcp-serve`라 에이전트가 브라우저 도구를 부르는 순간
+  Chrome이 없으면 띄우고 chrome-devtools-mcp로 넘긴다 — 기동 명령이 따로 없다.
+  세 에이전트는 같은 로그인 브라우저를 공유하되 각자 자기 탭에서 작업한다.
+  수동 등록이 필요하면 `agentlayer browser mcp`가 명령을 출력한다. Playwright
+  MCP를 쓰려면 `npx @playwright/mcp --cdp-endpoint http://127.0.0.1:9222`
 - `cookies import`는 2FA 재로그인이 번거로운 사이트용 — 실사용 크롬에서
   지정 도메인 쿠키만 복호화해 전용 프로필에 심는다(전체 프로필 복사가 아님).
   실행 시 macOS Keychain 접근 팝업이 뜨면 '항상 허용'을 눌러야 한다.
