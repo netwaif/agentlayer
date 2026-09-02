@@ -268,3 +268,14 @@ func TestQuitKey(t *testing.T) {
 		}
 	}
 }
+
+func TestIsMCPToolCall(t *testing.T) {
+	if !IsMCPToolCall([]byte(`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_pages"}}` + "\n")) {
+		t.Error("tools/call 인식")
+	}
+	for _, l := range []string{`{"jsonrpc":"2.0","id":1,"method":"initialize"}`, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`, `not json`} {
+		if IsMCPToolCall([]byte(l)) {
+			t.Errorf("%s 는 도구 호출 아님", l)
+		}
+	}
+}
