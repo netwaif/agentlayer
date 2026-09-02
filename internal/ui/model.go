@@ -211,6 +211,7 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 					continue
 				}
 				if strings.Contains(info.URL, fmt.Sprintf("localhost:%d", port)) || strings.Contains(info.URL, fmt.Sprintf("127.0.0.1:%d", port)) {
+					_, _ = p.Activate() // 이미 열린 탭이면 앞으로
 					return true
 				}
 			}

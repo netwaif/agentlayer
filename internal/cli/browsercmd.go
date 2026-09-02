@@ -568,6 +568,7 @@ func browserAutoPreview(out io.Writer) error {
 		for _, pg := range pages {
 			if info, err := pg.Info(); err == nil &&
 				(strings.Contains(info.URL, fmt.Sprintf("localhost:%d", p)) || strings.Contains(info.URL, fmt.Sprintf("127.0.0.1:%d", p))) {
+				_, _ = pg.Activate() // 이미 열린 탭이면 앞으로 가져와 "떴다"는 신호를 준다
 				return true
 			}
 		}
