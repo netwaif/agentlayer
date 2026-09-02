@@ -118,22 +118,34 @@ func TestMergeGuideConfirmFlow(t *testing.T) {
 }
 
 func TestCommandFor(t *testing.T) {
-	if got := commandFor("claude"); got != "claude" {
+	if got := commandFor("claude", false); got != "claude" {
 		t.Fatalf("claude: got %q", got)
 	}
-	if got := commandFor("codex"); got != "codex" {
+	if got := commandFor("codex", false); got != "codex" {
 		t.Fatalf("codex: got %q", got)
 	}
 	// gemini는 agy 흔적 유무로 갈린다 (usage.GeminiCommand 규칙 공유)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if got := commandFor("gemini"); got != "gemini" {
+	if got := commandFor("gemini", false); got != "gemini" {
 		t.Fatalf("agy 흔적 없음 = stock 폴백이어야: got %q", got)
 	}
 	if err := os.MkdirAll(filepath.Join(home, ".gemini", "antigravity-cli"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got := commandFor("gemini"); got != "agy" {
+	if got := commandFor("gemini", false); got != "agy" {
 		t.Fatalf("antigravity-cli 흔적 있으면 agy여야: got %q", got)
+	}
+}
+
+func TestGeminiCommandAutoApproveFlags(t *testing.T) {
+	if got := geminiCommand("agy", true); got != "agy --dangerously-skip-permissions" {
+		t.Errorf("agy: %q", got)
+	}
+	if got := geminiCommand("gemini", true); got != "gemini --yolo" {
+		t.Errorf("gemini: %q", got)
+	}
+	if got := geminiCommand("agy", false); got != "agy" {
+		t.Errorf("끄면 플래그 없음: %q", got)
 	}
 }

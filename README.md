@@ -103,6 +103,9 @@ agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참
 - `preview_interval`(선택): TUI 미리보기 갱신 주기. Go duration 문자열
   (`"500ms"`, `"2s"`). 기본 `1s`, 하한 200ms(그 아래는 200ms로 보정).
   목록 폴링(2초)과는 별개로 미리보기만 조절된다. TUI 재시작 시 적용
+- `worker_auto_approve`(선택, 기본 true): `wt new`로 띄우는 gemini worker를 승인 없이
+  돌린다(agy `--dangerously-skip-permissions`, stock gemini `--yolo`). claude·codex는 각자
+  설정(auto 모드·trusted)을 따른다. false면 gemini worker가 도구마다 승인을 묻는다
 - `preview_auto`(선택): 에이전트 폴더 아래에 새 dev 서버가 뜨면 전용 브라우저에
   자동으로 연다. 기본 `true`. 에이전트 hook(상태 전이)마다 백그라운드로 스캔하므로
   관제탑이 닫혀 있어도 동작한다(스캔 5초 스로틀). 같은 서버는 한 번만, 이미 탭이

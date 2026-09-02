@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/wt"
@@ -47,7 +48,7 @@ func RunWT(w io.Writer, stateDir string, st *state.Store, tm tmuxx.Tmux, args []
 		if err != nil {
 			return err
 		}
-		m, err := wt.New(stateDir, wt.NewOptions{Task: task, Repo: *repo, Base: *base, AcceptPrompts: spawnAcceptPrompts,
+		m, err := wt.New(stateDir, wt.NewOptions{Task: task, Repo: *repo, Base: *base, AcceptPrompts: spawnAcceptPrompts, AutoApprove: config.Load().WorkerAutoApproveEnabled(),
 			Agent: *agent, TestCmd: *test, Tmux: tm})
 		if err != nil {
 			return err

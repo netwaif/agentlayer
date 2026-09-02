@@ -20,22 +20,37 @@ var agentCommand = map[string]string{
 
 // commandFor는 실제 기동 명령을 결정한다. gemini는 환경에 따라 agy/gemini가
 // 갈린다 (restore의 freshCommand와 같은 규칙 — usage.GeminiCommand 공유).
-func commandFor(agent string) string {
+func commandFor(agent string, autoApprove bool) string {
 	if agent == "gemini" {
-		return usage.GeminiCommand()
+		return geminiCommand(usage.GeminiCommand(), autoApprove)
 	}
 	return agentCommand[agent]
 }
 
+// geminiCommand는 gemini worker 기동 명령. autoApprove면 도구 승인을 묻지 않는 플래그를 단다 —
+// agy는 --dangerously-skip-permissions, stock gemini는 --yolo. (claude는 사용자의 auto 모드,
+// codex는 trusted 설정을 이미 따르므로 별도 플래그 없음. 2026-09-03 촬영: gemini worker만
+// git add/commit마다 승인을 물어 사람이 창에 붙어 있어야 했다.)
+func geminiCommand(base string, autoApprove bool) string {
+	if !autoApprove {
+		return base
+	}
+	if base == "agy" {
+		return base + " --dangerously-skip-permissions"
+	}
+	return base + " --yolo"
+}
+
 // NewOptions는 wt new의 입력.
 type NewOptions struct {
-	Task     string
-	Repo     string // repo 안 아무 경로나 — RepoRoot로 정규화
-	Base     string // 비면 현재 HEAD 브랜치
-	Agent    string // claude(기본) | codex | gemini
-	TestCmd  string
-	Tmux     tmuxx.Tmux
-	NoWindow bool // tmux window 생성 생략 (테스트·수동 모드)
+	Task        string
+	Repo        string // repo 안 아무 경로나 — RepoRoot로 정규화
+	Base        string // 비면 현재 HEAD 브랜치
+	Agent       string // claude(기본) | codex | gemini
+	TestCmd     string
+	Tmux        tmuxx.Tmux
+	NoWindow    bool // tmux window 생성 생략 (테스트·수동 모드)
+	AutoApprove bool // worker를 승인 없이(gemini/agy 플래그) — config worker_auto_approve
 	// AcceptPrompts는 window 생성 직후 pane ID로 불린다 — 기동 시 신뢰 질문 자동 승인
 	// 감시자를 분리 실행하는 주입점(nil이면 생략).
 	AcceptPrompts func(paneID string)
@@ -84,7 +99,7 @@ func New(stateDir string, o NewOptions) (*Meta, error) {
 		return nil, err
 	}
 	if !o.NoWindow {
-		paneID, err := openWindow(o.Tmux, o.Task, path, commandFor(o.Agent))
+		paneID, err := openWindow(o.Tmux, o.Task, path, commandFor(o.Agent, o.AutoApprove))
 		if err != nil {
 			// worktree는 남긴다 — 사용자가 수동으로 쓸 수 있고, 잔해는 wt list에 보인다
 			return m, fmt.Errorf("worktree는 만들었지만 tmux window 생성 실패: %w", err)

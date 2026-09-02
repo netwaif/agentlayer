@@ -28,6 +28,10 @@ type Config struct {
 	// 새 dev 서버가 감지되면 전용 브라우저에 자동으로 연다. 기본 켜짐.
 	// 같은 서버는 한 번만, 이미 탭이 있으면 안 연다.
 	PreviewAuto *bool `json:"preview_auto,omitempty"`
+	// wt new로 띄우는 worker를 승인 없이 돌린다(gemini/agy: --dangerously-skip-permissions,
+	// stock gemini: --yolo). claude·codex는 각자 설정(auto 모드·trusted)을 따르므로 손대지 않는다.
+	// 기본 켜짐 — worker가 도구마다 승인을 물으면 사람이 창마다 붙어 있어야 한다.
+	WorkerAutoApprove *bool `json:"worker_auto_approve,omitempty"`
 	// 전용 브라우저의 CDP 디버깅 포트. 고정이라 MCP(chrome-devtools-mcp 등)가
 	// 늘 같은 주소로 붙는다. 비면 9222.
 	BrowserPort int `json:"browser_port,omitempty"`
@@ -59,6 +63,14 @@ func (c *Config) PreviewAutoEnabled() bool {
 		return true
 	}
 	return *c.PreviewAuto
+}
+
+// WorkerAutoApproveEnabled는 기본값(true)을 반영한 접근자.
+func (c *Config) WorkerAutoApproveEnabled() bool {
+	if c.WorkerAutoApprove == nil {
+		return true
+	}
+	return *c.WorkerAutoApprove
 }
 
 // BrowserPortOrDefault는 browser_port를 반영한 디버깅 포트. 범위 밖(0 이하·65535 초과)은 기본값.

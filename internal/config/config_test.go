@@ -103,3 +103,15 @@ func TestPreviewAutoEnabled(t *testing.T) {
 		t.Error("false면 끔")
 	}
 }
+
+func TestWorkerAutoApproveDefaultTrue(t *testing.T) {
+	var c Config
+	if !c.WorkerAutoApproveEnabled() {
+		t.Error("기본 켜짐")
+	}
+	off := false
+	c.WorkerAutoApprove = &off
+	if c.WorkerAutoApproveEnabled() {
+		t.Error("false면 꺼짐")
+	}
+}
