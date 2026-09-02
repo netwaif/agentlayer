@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -84,7 +85,50 @@ func ActivePage(b *rod.Browser) (*rod.Page, error) {
 	if err != nil || len(pages) == 0 {
 		return nil, fmt.Errorf("열린 탭이 없습니다 — 브라우저에서 대상 페이지를 먼저 여세요")
 	}
-	return pages[0], nil
+	// 목록 순서(최신 생성)는 사람이 보는 탭과 무관하다 — 재기동 때 열린 chrome://newtab이
+	// 맨 앞에 와서 거기에 검사 모드를 거는 사고가 났다(2026-09-02 촬영). 내부 페이지는
+	// 건너뛰고, 포커스된 탭 > 보이는 탭 > 첫 웹 탭 순으로 고른다.
+	var web, visible, focused *rod.Page
+	for _, p := range pages {
+		info, err := p.Info()
+		if err != nil || !IsWebURL(info.URL) {
+			continue
+		}
+		if web == nil {
+			web = p
+		}
+		res, err := p.Timeout(2 * time.Second).Eval(`() => [document.hasFocus(), document.visibilityState]`)
+		if err != nil {
+			continue
+		}
+		arr := res.Value.Arr()
+		if len(arr) == 2 && arr[0].Bool() && focused == nil {
+			focused = p
+		}
+		if len(arr) == 2 && arr[1].Str() == "visible" && visible == nil {
+			visible = p
+		}
+	}
+	switch {
+	case focused != nil:
+		return focused, nil
+	case visible != nil:
+		return visible, nil
+	case web != nil:
+		return web, nil
+	}
+	return nil, fmt.Errorf("웹 페이지 탭이 없습니다 (새 탭·chrome:// 페이지만 열려 있음) — 대상 페이지를 먼저 여세요")
+}
+
+// IsWebURL은 지목·캡처 대상이 될 수 있는 URL인지 본다 — chrome://·about:·devtools:// 등
+// 브라우저 내부 페이지는 제외.
+func IsWebURL(u string) bool {
+	for _, p := range []string{"http://", "https://", "file://", "data:"} {
+		if strings.HasPrefix(u, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // ElementShot은 요소를 문서 좌표 clip으로 캡처한다(실패 시 nil — 스크린샷은 보조 정보).

@@ -206,3 +206,30 @@ func TestRunPickOnceWritesLineToOut(t *testing.T) {
 		t.Errorf("once 모드는 pane 전송 문구가 없어야 함: %q", got)
 	}
 }
+
+func TestIsWebURL(t *testing.T) {
+	for u, want := range map[string]bool{
+		"http://localhost:8100/": true, "https://x.com/": true, "data:text/html,<b>": true,
+		"chrome://newtab/": false, "about:blank": false, "devtools://devtools/": false, "": false,
+	} {
+		if IsWebURL(u) != want {
+			t.Errorf("IsWebURL(%q) = %v, want %v", u, !want, want)
+		}
+	}
+}
+
+// 맨 앞(최신) 탭이 chrome://newtab·about:blank여도 웹 페이지 탭을 골라야 한다.
+func TestActivePageSkipsInternalTabs(t *testing.T) {
+	p := headlessPage(t, `<h1>대상</h1>`)
+	b := p.Browser()
+	blank := b.MustPage("about:blank") // 더 최신 → 목록 맨 앞
+	defer blank.MustClose()
+	got, err := ActivePage(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := got.MustInfo()
+	if !strings.HasPrefix(info.URL, "data:text/html") {
+		t.Errorf("웹 탭을 골라야 하는데: %s", info.URL)
+	}
+}
