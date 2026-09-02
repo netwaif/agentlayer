@@ -15,16 +15,15 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**GitHub 릴리즈 = v1.2.5**(usage stale-while-revalidate, tap Casks 1.2.5·디스코드 공지 완료 — 시청자 설치본은 여기까지). **로컬 main은 origin 대비 17커밋 앞섬(미푸시)** — 에이전트 전용 브라우저(browser 명령 5종 + cookies import)가 로컬 main에만 머지됨. 로컬 make install = 2b4f6a0. 워킹트리 클린(SESSION.md 제외).
+**GitHub 릴리즈 = v1.2.5**(시청자 설치본). **로컬 main은 origin 대비 18커밋 앞섬(미푸시)**, 그 위에 브랜치 `browser-mcp`(cd44d02, main 미머지) — 브라우저 "명령 0개" 작업 4단계 전부 구현·실검증·커밋 완료. 로컬 make install = cd44d02, 사용자 실사용 피드백 대기 중. 워킹트리 클린. 사용자 Mac 실환경: 전용 Chrome 9222 기동 중, claude/codex/gemini 세 CLI에 chrome-devtools MCP(mcp-serve) 등록됨, iTerm2 Smart Selection 규칙 설정됨, orchestration 스킬 브라우저 절 설치됨.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **Mac 복귀 후 손확인**(SSH 원격이라 GUI 팝업·창 조작 불가로 보류): ① `agentlayer browser` → `browser pick` 실클릭→오버레이→pane 수신 ② `agentlayer browser cookies import youtube.com` 실사용. 자동 테스트·github.com 실검증은 통과, 손맛만 확인
-2. 손확인 통과 시 릴리즈: push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영(선반영 금지 원칙대로 릴리즈 후)
-3. `browser errors` 비상호작용 모드(`--duration Ns` 또는 리로드 1회 수집) 추가 여부 결정 — 현재는 stdin Enter 대기라 에이전트 자율 사용 불가(사람→에이전트 전용). shot은 이미 자율 사용 가능
-4. 대시보드 채널 옛 핑 메시지 Discord 수동 삭제(웹훅 메시지, 앞으로는 안 쌓임 567c2c9)
-5. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트, provider 게이지 막대 텍스트화, browser 기동 시 이미 떠 있으면 창 앞으로/새 탭(attach만 하면 아무 일 안 일어난 것처럼 보임)
+1. **사용자 실사용 피드백 반영** — 관제탑 `b`(지목)·`s`(캡처)·`p`(프리뷰 🌐 뱃지), 코덱스에서 chrome-devtools MCP 도구 사용(재시작 필요), iTerm2 ⌘-클릭 → 전용 브라우저. 피드백 나오면 `browser-mcp` 브랜치에서 고침
+2. 피드백 정리 후 `browser-mcp` → main 머지 → push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영(릴리즈 후). 릴리즈 단위 = 브라우저 5종+cookies+open/notify+MCP 자동등록+관제탑 키
+3. 대시보드 채널 옛 핑 메시지 Discord 수동 삭제(웹훅 메시지, 앞으로는 안 쌓임 567c2c9)
+4. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정 스크립트, provider 게이지 막대 텍스트화, 브라우저 프로필 다중화(실수요 생기면), iTerm2 규칙 자동 주입 `init --iterm2`(필요 시), 원격 스트리밍(범위 밖)
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -105,6 +104,16 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-01 브라우저 설계 결정: 내장 브라우저 UI(터미널 임베드 불가)·원격 스트리밍·쿠키 전체복사·제어 API·TUI 통합·다중 프로필 제외. pick 지시입력은 브라우저 내 shadow DOM 오버레이(사용자 선택). 라우팅=페이지 localhost 포트→lsof cwd→에이전트 레코드 최장일치, 실패/복수면 선택. 전송은 tmuxx.SendText 한 줄(맥락은 picks/ md·png 파일)이라 3사 공통
 - 2026-09-01 cookies import 편입(2b4f6a0) — 사용자 지적("기능 최대한 넣으라 했는데 왜 뺐나") 수용. 전체 프로필 복사가 아닌 **도메인 화이트리스트** 방식이라 격리 원칙과 양립. 2FA 재로그인 회피용. Fable5 safeguard가 쿠키 복호화를 민감작업으로 보고 Opus4.8로 전환→Opus가 정당맥락(본인 머신·본인 쿠키·명시요청·Orca도 제공)에서 직접 구현. macOS Keychain "Chrome Safe Storage"+v10 복호화, github.com 6개 실검증(패딩 검증 통과=키 정확). 세션 모델이 이 작업 때마다 Fable↔Opus 오간 건 safeguard 정상 동작
 - 2026-09-01 브라우저 shot/errors 자율성: shot은 비상호작용(경로 stdout)이라 에이전트가 자기 dev서버 캡처→검증 자율 사용 가능. errors는 stdin Enter 대기(사람이 버그 재현)라 에이전트 자율 불가 — 필요 시 `--duration`/리로드 1회 수집 모드 후속(다음 단계 3)
+
+- 2026-09-02 브라우저 제어는 자체 구현 안 함 — chrome-devtools MCP에 위임(Playwright MCP는 README 한 줄). agentlayer는 프로필·pick·프리뷰·라우팅만
+- 2026-09-02 CDP 포트 고정(browser_port 기본 9222) — MCP가 고정 주소로 붙고, 기록 없이도 포트 프로브로 재attach
+- 2026-09-02 회색 화면 원인은 Chrome 결함이 아니라 rod 기본 기기 에뮬레이션(1280×800) — NoDefaultDevice로 해결. 창 bounds 나지(FitViewport) 처방은 효과 없어 폐기
+- 2026-09-02 errors 비상호작용 모드 폐기 — 에이전트는 MCP 콘솔 도구로 스스로 봄
+- 2026-09-02 링크 라우팅은 iTerm2 Semantic History(파일 전용)가 아니라 Smart Selection 규칙 액션(⌘-클릭이 첫 액션 실행)
+- 2026-09-02 SSH 원격 화면 확인은 shot --notify(Discord 첨부)·chrome://inspect 터널 두 가지로 — 스트리밍은 범위 밖
+- 2026-09-02 "명령 0개" 원칙: 관제탑이 표면, CLI는 배관. init이 MCP 등록(mcp-serve 래퍼로 기동까지 자동)·관제탑 b/s/p 키·스킬 절. iTerm2 규칙 자동 주입은 iTerm2 되쓰기 위험으로 감지+안내만
+- 2026-09-02 codex 브라우저 실패 원인은 ChatGPT 앱 내장 browser:control-in-app-browser 스킬 — 스킬 문단에 사용 금지 명시, chrome-devtools MCP 지목
+- 2026-09-02 사용자 요청으로 codex(~/.codex/config.toml)에 chrome-devtools MCP 등록 — 이후 init이 mcp-serve로 교체
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -187,3 +196,17 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - `go.mod` github.com/go-rod/rod 직접 의존성 추가(순수 Go, goreleaser 무변경)
 - 시스템 상태 추가: `~/.local/state/agentlayer/browser.json`(CDP ws_url)·`browser-profile/`(전용 프로필)·`picks/`(pick 산출물). 로컬 main 2b4f6a0(origin 대비 17커밋 미푸시, GitHub 릴리즈는 v1.2.5)
 - 외부: SDD 레저·브리프는 작업 완료로 삭제됨(`.superpowers/sdd/2026-09-01-agent-browser/`) — 정본은 git 이력
+- `internal/config/config.go` BrowserPort·BrowserPortOrDefault(기본 9222), config_test.go TestBrowserPortOrDefault
+- `internal/browser/instance.go` Connect(stateDir, port)·probePort(/json/version)·attach·newBrowser(NoDefaultDevice)·RemoteDebuggingPort·Delete("no-startup-window"), `port_test.go` TestConnectProbesFixedPortIntegration·TestConnectPortOccupied·TestConnectPagesFollowWindowSizeIntegration
+- `internal/browser/preview.go` OpenPreview 빈 브랜치면 제목 유지
+- `internal/discord/file.go` Client.PostFile(멀티파트 files[0]·payload_json), file_test.go
+- `internal/cli/browsercmd.go` shotOpts{URL,Send,Notify,Agent}·parseShotArgs·parsePickArgs·FilterAgentByID·sendToAgent(agentID)·browserOpen·browserMCP·MCPCommands·browserMCPServe(syscall.Exec npx chrome-devtools-mcp, usage.ExtendedEnv), 디스패치 open/mcp/mcp-serve
+- `internal/cli/mcpinit.go` InstallClaudeMCP(~/.claude.json, UseNumber)·InstallCodexMCP(config.toml 섹션 append)·InstallGeminiMCP·installJSONMCP·MCPServeArgv, mcpinit_test.go
+- `internal/cli/iterm2.go` ITerm2LinkRuleInstalled·ReadITerm2Bookmarks·PrintITerm2LinkGuide, iterm2_test.go
+- `internal/cli/orchestration_skill.md` "## 6. 브라우저" 절 + 하지 말 것 1줄, orchskill_test.go TestOrchestrationSkillHasBrowserSection
+- `internal/usage/coach.go` toolDirs에 nvmLatestBin·ExtendedEnv 공개, coach_test.go TestToolDirsIncludesNvmLatest
+- `internal/ui/model.go` devServers·browserPort·devScan/openPreview/browserCmd 주입점·devTickMsg(10s)·devServersMsg·noticeMsg·browserDoneMsg·serversFor·devBadge, 키 b/s/p; `view.go` 🌐 뱃지·helpLine b/s/p; model_test.go 7종
+- `main.go` runInit: InstallClaudeMCP/CodexMCP/GeminiMCP + PrintITerm2LinkGuide 배선
+- `README.md` browser 섹션(open·shot --notify/--agent·mcp·관제탑 키·링크 라우팅 Smart Selection·SSH 원격·browser_port)
+- `docs/superpowers/specs/2026-09-02-browser-zero-command-design.md` 명령 0개 설계(4단계, 4번은 감지+안내로 확정)
+- 시스템 상태 추가: `~/.claude.json`·`~/.codex/config.toml`·`~/.gemini/settings.json` mcpServers.chrome-devtools = `~/.local/bin/agentlayer browser mcp-serve`(각 .agentlayer.bak), `~/.claude/skills/orchestration/SKILL.md` 브라우저 절 포함(.bak), iTerm2 Default 프로필 Smart Selection "Agent browser URL" 규칙, 전용 Chrome 9222(browser.json), 브랜치 `browser-mcp` cd44d02
