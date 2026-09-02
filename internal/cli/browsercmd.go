@@ -3,6 +3,8 @@ package cli
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -13,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/x/term"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/netwaif/agentlayer/internal/browser"
@@ -120,15 +123,70 @@ func browserPick(out io.Writer, args []string) error {
 	}
 	tm := tmuxx.Tmux{}
 	send := func(paneID, text string) error { return tm.SendText(paneID, text) }
-	for { // 연속 지목 — Ctrl-C로 종료
+	// 터미널 esc/q/Ctrl-C로도 돌아갈 수 있게 — 관제탑 b 키에서 들어온 사용자가
+	// 브라우저를 안 건드리고 취소할 길이 이것뿐이다.
+	quit, restore := watchQuitKeys(os.Stdin)
+	defer restore()
+	for { // 연속 지목 — 오버레이 Esc·터미널 esc/q·Ctrl-C로 종료
 		page, err := browser.ActivePage(b)
 		if err != nil {
 			return err
 		}
-		if err := browser.RunPick(page, agents, browser.ExecLsof, state.DefaultDir(), send, out); err != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			select {
+			case <-quit:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		err = browser.RunPick(page.Context(ctx), agents, browser.ExecLsof, state.DefaultDir(), send, out)
+		cancel()
+		select {
+		case <-quit:
+			fmt.Fprintln(out, "돌아갑니다")
+			return nil
+		default:
+		}
+		if errors.Is(err, browser.ErrPickCancelled) {
+			return nil
+		}
+		if err != nil {
 			return err
 		}
 	}
+}
+
+// quitKey는 pick 대기 중 종료로 볼 키 — esc, q, Ctrl-C.
+func quitKey(b byte) bool { return b == 0x1b || b == 'q' || b == 0x03 }
+
+// watchQuitKeys는 stdin이 터미널이면 raw 모드로 종료 키를 감시한다.
+// 반환 채널은 종료 키에서 닫히고, restore는 터미널 상태를 되돌린다.
+// 터미널이 아니면(파이프·테스트) 아무것도 감시하지 않는다.
+func watchQuitKeys(in *os.File) (<-chan struct{}, func()) {
+	quit := make(chan struct{})
+	fd := in.Fd()
+	if !term.IsTerminal(fd) {
+		return quit, func() {}
+	}
+	st, err := term.MakeRaw(fd)
+	if err != nil {
+		return quit, func() {}
+	}
+	go func() {
+		buf := make([]byte, 1)
+		for {
+			n, err := in.Read(buf)
+			if err != nil {
+				return
+			}
+			if n == 1 && quitKey(buf[0]) {
+				close(quit)
+				return
+			}
+		}
+	}()
+	return quit, func() { _ = term.Restore(fd, st) }
 }
 
 // shotOpts는 shot의 인자. --send는 에이전트 pane, --notify는 알림 웹훅(폰 Discord).

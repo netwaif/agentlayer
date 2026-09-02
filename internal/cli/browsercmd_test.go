@@ -248,3 +248,17 @@ func TestFilterAgentByID(t *testing.T) {
 		t.Errorf("없는 ID는 ID를 품은 에러: %v", err)
 	}
 }
+
+// pick 대기 중 터미널에서 esc·q·Ctrl-C면 관제탑으로 돌아간다.
+func TestQuitKey(t *testing.T) {
+	for _, b := range []byte{0x1b, 'q', 0x03} {
+		if !quitKey(b) {
+			t.Errorf("%#x는 종료 키", b)
+		}
+	}
+	for _, b := range []byte{'a', '\n', ' '} {
+		if quitKey(b) {
+			t.Errorf("%#x는 종료 키 아님", b)
+		}
+	}
+}

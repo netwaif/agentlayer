@@ -2,6 +2,7 @@ package browser
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -116,8 +117,8 @@ func TestRunPickCancelDoesNotSend(t *testing.T) {
 	}`)
 	select {
 	case err := <-errCh:
-		if err != nil {
-			t.Fatalf("취소는 정상 종료여야 함: %v", err)
+		if !errors.Is(err, ErrPickCancelled) {
+			t.Fatalf("취소는 ErrPickCancelled로 끝나야 함(호출자가 루프를 접는다): %v", err)
 		}
 	case <-time.After(15 * time.Second):
 		t.Fatal("취소 제출 후에도 RunPick이 반환하지 않음")

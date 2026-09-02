@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -86,6 +87,10 @@ func ActivePage(b *rod.Browser) (*rod.Page, error) {
 	return pages[0], nil
 }
 
+// ErrPickCancelled은 오버레이에서 Esc/빈 입력으로 취소한 신호 — 호출자가 연속 지목
+// 루프를 접고 관제탑으로 돌아가는 근거. 에러가 아니라 정상 종료다.
+var ErrPickCancelled = errors.New("지목 취소")
+
 type pickSubmit struct {
 	Text   string `json:"text"`
 	Agent  string `json:"agent"`
@@ -133,7 +138,7 @@ func RunPick(page *rod.Page, agents []*state.Agent, lsof RunLsof, stateDir strin
 	if err != nil {
 		return abort(err)
 	}
-	fmt.Fprintln(out, "브라우저에서 수정할 요소를 클릭하세요…")
+	fmt.Fprintln(out, "브라우저에서 수정할 요소를 클릭하세요… (오버레이 Esc 또는 터미널 esc/q: 돌아가기)")
 	wait()
 	cancelEv()
 	if !picked {
@@ -216,7 +221,7 @@ func RunPick(page *rod.Page, agents []*state.Agent, lsof RunLsof, stateDir strin
 	}
 	if sub.Cancel || sub.Text == "" {
 		fmt.Fprintln(out, "취소됨")
-		return nil
+		return ErrPickCancelled
 	}
 
 	// 4. 저장 + 대상 pane으로 한 줄 전송
