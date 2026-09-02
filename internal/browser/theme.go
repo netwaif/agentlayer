@@ -6,13 +6,14 @@ import (
 	"path/filepath"
 )
 
-// 에이전트 브라우저 식별색: 다크 스킴 + tmux 테마 주황(#ffaf5f) 시드 — 짙은 회색
-// 바탕에 주황 기운이 도는 툴바. 기본 다크 Chrome(중성 회색)과 구분된다.
-// 라이트·vibrant·neutral은 실물 비교 후 탈락(2026-09-02). Chrome Refresh(GM3) 키.
+// 에이전트 브라우저 식별색 = AICheatKey 하우스 스타일(웜다크 배경 + 테라코타
+// 오렌지 #d97757, AgentLoops 산출물 팔레트). 다크 스킴 + neutral 변형이면 툴바가
+// 웜다크 회색(#443935 근처)이 되고 액센트만 테라코타로 든다. 라이트·tonal spot·
+// vibrant는 실물 비교 후 탈락(2026-09-02). Chrome Refresh(GM3) Preferences 키.
 const (
-	agentThemeColor   = -16545 // SkColor 0xFFFFAF5F를 int32로
-	agentThemeVariant = 1      // tonal spot
-	agentThemeScheme  = 2      // dark
+	agentThemeColor   = 0xFFD97757 - 1<<32 // SkColor(ARGB)를 int32로
+	agentThemeVariant = 2                  // neutral
+	agentThemeScheme  = 2                  // dark
 	agentProfileName  = "AgentLayer"
 )
 

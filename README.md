@@ -151,7 +151,7 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   뒤에서 부르는 배관이다
 - 전용 프로필 `~/.local/state/agentlayer/browser-profile`로 뜬다 —
   로그인 세션은 이 프로필에 보존되고, 실사용 Chrome과 격리된다.
-  **툴바가 짙은 회색에 주황 기운(tmux 테마 톤)** 이면 에이전트 브라우저다 —
+  **툴바가 웜다크(AICheatKey 하우스 스타일, 테라코타 #d97757 액센트)** 이면 에이전트 브라우저다 —
   기동 시 프로필에 식별 테마와 프로필 이름(AgentLayer, 우상단 프로필 메뉴)을
   심어 실사용 Chrome과 구분된다. Customize Chrome에서 색을 바꾸면 그 선택을 존중한다
 - CDP 디버깅 포트는 고정(`browser_port`, 기본 9222)이라 재부팅 뒤에도
