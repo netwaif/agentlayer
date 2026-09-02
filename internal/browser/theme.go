@@ -6,21 +6,19 @@ import (
 	"path/filepath"
 )
 
-// 에이전트 브라우저 식별색 = AICheatKey 하우스 스타일(웜다크 배경 + 테라코타
-// 오렌지 #d97757, AgentLoops 산출물 팔레트). 다크 스킴 + neutral 변형이면 툴바가
-// 웜다크 회색(#443935 근처)이 되고 액센트만 테라코타로 든다. 라이트·tonal spot·
-// vibrant는 실물 비교 후 탈락(2026-09-02). Chrome Refresh(GM3) Preferences 키.
+// 에이전트 브라우저 테마 = Claude Desktop 다크와 같은 검정·중성 회색 톤(사용자
+// 레퍼런스, 2026-09-02). Chrome은 툴바 색을 직접 못 정하고 시드로 팔레트를 만드는데,
+// 어떤 시드든 색기운이 남아(주황→갈색, 짙은 회색→푸른빛) 중성 회색은 grayscale
+// 모드뿐이다. 다크 + grayscale = 툴바 #3c3c3c·주소창 #282828.
 const (
-	agentThemeColor   = 0xFFD97757 - 1<<32 // SkColor(ARGB)를 int32로
-	agentThemeVariant = 2                  // neutral
-	agentThemeScheme  = 2                  // dark
-	agentProfileName  = "AgentLayer"
+	agentThemeScheme = 2 // dark
+	agentProfileName = "AgentLayer"
 )
 
 // EnsureProfileTheme는 전용 프로필에 식별 테마(Default/Preferences)와 프로필
 // 이름(Local State — 표시 이름의 정본)을 심는다. Chrome은 기동 시 이 파일들을
 // 읽으므로 반드시 Launch 전에, Chrome이 안 떠 있을 때만 부른다(떠 있으면 덮인다).
-// 사용자가 이미 색을 골랐으면(user_color2 존재) 존중한다.
+// 사용자가 이미 테마를 골랐으면(theme 키 존재) 존중한다.
 func EnsureProfileTheme(profileDir string) error {
 	if err := ensurePrefsTheme(profileDir); err != nil {
 		return err
@@ -83,9 +81,8 @@ func ensurePrefsTheme(profileDir string) error {
 		profile = map[string]any{}
 	}
 	changed := false
-	if _, ok := theme["user_color2"]; !ok {
-		theme["user_color2"] = agentThemeColor
-		theme["color_variant2"] = agentThemeVariant
+	if len(theme) == 0 { // 사용자가 Customize Chrome에서 뭐라도 골랐으면 존중
+		theme["is_grayscale2"] = true
 		theme["color_scheme2"] = agentThemeScheme
 		changed = true
 	}

@@ -28,7 +28,7 @@ func TestEnsureProfileThemeCreates(t *testing.T) {
 	}
 	d := readPrefs(t, dir)
 	theme := d["browser"].(map[string]any)["theme"].(map[string]any)
-	if theme["user_color2"] == nil || theme["color_scheme2"] != float64(2) {
+	if theme["is_grayscale2"] != true || theme["color_scheme2"] != float64(2) {
 		t.Errorf("테마 키 없음: %v", theme)
 	}
 	if d["profile"].(map[string]any)["name"] != "AgentLayer" {
