@@ -476,12 +476,21 @@ func browserOpen(out io.Writer, args []string) error {
 	return nil
 }
 
-// browserCookies: agentlayer browser cookies import <도메인...>
-// 실사용 크롬의 지정 도메인 쿠키만 골라 에이전트 프로필로 가져온다.
+// browserCookies: agentlayer browser cookies import|clear <도메인...>
+// import는 실사용 크롬의 지정 도메인 쿠키만 골라 에이전트 프로필로 가져오고,
+// clear는 에이전트 프로필에서 그 도메인 쿠키만 지운다(실사용 크롬은 무관).
 func browserCookies(out io.Writer, args []string) error {
-	if len(args) == 0 || args[0] != "import" {
-		return fmt.Errorf("사용법: agentlayer browser cookies import <도메인...> [--profile <디렉터리|이름>] " +
-			"(예: agentlayer browser cookies import x.com)")
+	usage := "사용법: agentlayer browser cookies import <도메인...> [--profile <디렉터리|이름>] | " +
+		"cookies clear <도메인...> (예: agentlayer browser cookies import x.com)"
+	if len(args) == 0 {
+		return fmt.Errorf("%s", usage)
+	}
+	switch args[0] {
+	case "import":
+	case "clear":
+		return browserCookiesClear(out, args[1:])
+	default:
+		return fmt.Errorf("%s", usage)
 	}
 	fs := flag.NewFlagSet("cookies import", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -511,6 +520,18 @@ func browserCookies(out io.Writer, args []string) error {
 		return err
 	}
 	return browser.ImportCookies(b, home, "", *profile, domains, time.Now(), out)
+}
+
+func browserCookiesClear(out io.Writer, domains []string) error {
+	if len(domains) == 0 {
+		return fmt.Errorf("지울 도메인을 하나 이상 지정하세요 " +
+			"(예: agentlayer browser cookies clear x.com)")
+	}
+	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
+	if err != nil {
+		return err
+	}
+	return browser.ClearCookies(b, domains, out)
 }
 
 // browserMCPServe: MCP 클라이언트가 서버 명령으로 띄운다. Chrome을 보장한 뒤

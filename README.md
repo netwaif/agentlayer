@@ -145,6 +145,7 @@ agentlayer browser shot [url] [--send] [--notify] [--agent <id>]   # 전체 페�
 agentlayer browser errors [--send]       # 콘솔 에러·JS 예외를 Enter까지 수집해 덤프(stdout+파일), --send면 pane 전송
 agentlayer browser preview [포트...]     # worktree dev 서버(또는 지정 포트)를 브랜치 라벨(⎇) 창으로 열기
 agentlayer browser cookies import <도메인...> [--profile <이름>]  # 실사용 크롬의 지정 도메인 쿠키만 골라 전용 프로필로 가져오기 (macOS, 프로필은 쿠키 많은 쪽 자동)
+agentlayer browser cookies clear <도메인...>    # 전용 프로필에서 지정 도메인 쿠키만 지우기 (로그아웃, 실사용 크롬은 무관)
 agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mcp를 이 브라우저로 붙이는 설치 명령 출력
 ```
 
@@ -178,6 +179,8 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   실사용 Chrome에 프로필(계정)이 여럿이면 그 도메인 쿠키가 가장 많은 프로필을
   고르고 어느 것인지 출력한다 — 다른 프로필은 `--profile "Profile 1"`처럼 지정
   예: `agentlayer browser cookies import youtube.com google.com`
+  다 쓴 로그인은 `cookies clear x.com`처럼 그 도메인만 지운다 — 다른 사이트 로그인과
+  실사용 Chrome은 그대로다
 - pick 산출물(요소 컨텍스트 `.md` + 스크린샷 `.png`)과 shot·errors 덤프는
   `~/.local/state/agentlayer/picks/`에 저장된다
 - **터미널 링크를 전용 브라우저로**: 기본은 ⌘-클릭이 실사용 브라우저로 간다.

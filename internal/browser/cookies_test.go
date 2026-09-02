@@ -8,8 +8,12 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-rod/rod/lib/launcher"
+	"github.com/go-rod/rod/lib/proto"
 )
 
 func TestPBKDF2SHA1Vector(t *testing.T) {
@@ -185,5 +189,63 @@ func TestChooseProfileMostCookies(t *testing.T) {
 	// 지정 프로필(디렉터리명 또는 표시 이름)
 	if got := ChooseProfile(ps, nil, "", "c"); got.Dir != "Profile 4" {
 		t.Errorf("이름 지정: %+v", got)
+	}
+}
+
+func TestSelectCookiesByDomain(t *testing.T) {
+	all := []*proto.NetworkCookie{
+		{Name: "a", Domain: ".x.com"},
+		{Name: "b", Domain: "api.x.com"},
+		{Name: "c", Domain: "notx.com"},
+		{Name: "d", Domain: "example.com"},
+	}
+	sel, counts := selectCookies(all, []string{"x.com", "example.com"})
+	if len(sel) != 3 {
+		t.Fatalf("3개여야 하는데 %d개: %+v", len(sel), sel)
+	}
+	if counts["x.com"] != 2 || counts["example.com"] != 1 {
+		t.Errorf("도메인별 개수 틀림: %v", counts)
+	}
+}
+
+// 실브라우저: 지정 도메인(하위 포함)만 지우고 다른 사이트 쿠키는 남아야 한다.
+func TestClearCookiesIntegration(t *testing.T) {
+	if _, ok := launcher.LookPath(); !ok {
+		t.Skip("Chrome 없음")
+	}
+	SetHeadlessForTest(true)
+	defer SetHeadlessForTest(false)
+	dir := t.TempDir()
+	b, err := Connect(dir, freePort(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { b.MustClose(); cleanupProfile(dir) }()
+	exp := proto.TimeSinceEpoch(float64(time.Now().Add(time.Hour).Unix()))
+	seed := []*proto.NetworkCookieParam{
+		{Name: "a", Value: "1", Domain: ".x.com", Path: "/", Secure: true, Expires: exp},
+		{Name: "b", Value: "2", Domain: "api.x.com", Path: "/", Secure: true, Expires: exp},
+		{Name: "c", Value: "3", Domain: "example.com", Path: "/", Secure: true, Expires: exp},
+	}
+	if err := (proto.StorageSetCookies{Cookies: seed}).Call(b); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := ClearCookies(b, []string{"x.com"}, &out); err != nil {
+		t.Fatalf("%v\n%s", err, out.String())
+	}
+	res, err := proto.StorageGetCookies{}.Call(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, c := range res.Cookies {
+		names = append(names, c.Name+"@"+c.Domain)
+	}
+	if len(res.Cookies) != 1 || res.Cookies[0].Name != "c" {
+		t.Fatalf("example.com만 남아야 하는데: %v", names)
+	}
+	if !strings.Contains(out.String(), "x.com: 쿠키 2개 지움") {
+		t.Errorf("출력: %s", out.String())
 	}
 }

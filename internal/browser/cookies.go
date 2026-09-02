@@ -382,3 +382,67 @@ func ImportCookies(b *rod.Browser, home, sqlite3Path, profile string, domains []
 	fmt.Fprintln(out, "완료 — 에이전트 브라우저에서 해당 사이트에 로그인 상태로 접속됩니다.")
 	return nil
 }
+
+// selectCookies는 브라우저에 있는 쿠키 중 요청 도메인(자신·하위)에 속한 것만 고르고
+// 도메인별 개수를 센다. 한 쿠키는 처음 매칭된 도메인에만 센다.
+func selectCookies(all []*proto.NetworkCookie, domains []string) ([]*proto.NetworkCookie, map[string]int) {
+	counts := map[string]int{}
+	var sel []*proto.NetworkCookie
+	for _, c := range all {
+		for _, d := range domains {
+			if matchesDomain(c.Domain, d) {
+				sel = append(sel, c)
+				counts[d]++
+				break
+			}
+		}
+	}
+	return sel, counts
+}
+
+// borrowPage는 Network.deleteCookies가 페이지 타깃을 요구하므로 열린 탭을 빌리거나,
+// 없으면 빈 탭을 만들고 done으로 닫는다.
+func borrowPage(b *rod.Browser) (*rod.Page, func(), error) {
+	if pages, err := b.Pages(); err == nil && len(pages) > 0 {
+		return pages[0], func() {}, nil
+	}
+	p, err := b.Page(proto.TargetCreateTarget{URL: "about:blank"})
+	if err != nil {
+		return nil, nil, fmt.Errorf("탭 생성 실패: %w", err)
+	}
+	return p, func() { _ = p.Close() }, nil
+}
+
+// ClearCookies는 전용 프로필에서 지정 도메인(하위 포함) 쿠키만 지운다 — import의 대칭.
+// 실사용 Chrome·Keychain은 건드리지 않고, 다른 사이트의 로그인은 남는다.
+func ClearCookies(b *rod.Browser, domains []string, out io.Writer) error {
+	res, err := proto.StorageGetCookies{}.Call(b)
+	if err != nil {
+		return fmt.Errorf("쿠키 조회 실패: %w", err)
+	}
+	sel, counts := selectCookies(res.Cookies, domains)
+	if len(sel) == 0 {
+		fmt.Fprintln(out, "지울 쿠키가 없습니다 (도메인 철자를 확인하세요)")
+		return nil
+	}
+	page, done, err := borrowPage(b)
+	if err != nil {
+		return err
+	}
+	defer done()
+	for _, c := range sel {
+		if err := (proto.NetworkDeleteCookies{Name: c.Name, Domain: c.Domain, Path: c.Path}).Call(page); err != nil {
+			return fmt.Errorf("쿠키 삭제 실패 (%s@%s): %w", c.Name, c.Domain, err)
+		}
+	}
+	for _, d := range domains {
+		fmt.Fprintf(out, "%s: 쿠키 %d개 지움\n", d, counts[d])
+	}
+	if after, err := (proto.StorageGetCookies{}).Call(b); err == nil {
+		if remain, _ := selectCookies(after.Cookies, domains); len(remain) > 0 {
+			return fmt.Errorf("%d개가 남았습니다 — 전용 Chrome에서 사이트 데이터 삭제로 마저 지우세요", len(remain))
+		}
+	}
+	fmt.Fprintln(out, "완료 — 에이전트 브라우저에서 해당 사이트는 로그아웃 상태가 됩니다.")
+	return nil
+}
