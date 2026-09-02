@@ -130,6 +130,7 @@ func Connect(stateDir string, port int) (*rod.Browser, error) {
 		Leakless(false). // CLI가 끝나도 브라우저는 살아야 한다
 		RemoteDebuggingPort(port).
 		Delete("no-startup-window"). // 기동 시 빈 창을 보여 "아무 일 없음"처럼 보이지 않게
+		Delete("enable-automation"). // "자동화된 테스트 소프트웨어에 의해 제어" 인포바 제거 — 사람이 같이 쓰는 브라우저
 		Launch()
 	if err != nil {
 		return nil, fmt.Errorf("Chrome 기동 실패: %w", err)
