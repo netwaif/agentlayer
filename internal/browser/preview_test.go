@@ -166,3 +166,12 @@ func TestOpenPreviewLabelsTitle(t *testing.T) {
 		t.Fatalf("포트 %d 페이지가 열려야 함", port)
 	}
 }
+
+func TestTileBoundsThreeAcross(t *testing.T) {
+	for n, want := range [][4]int{{0, 25, 640, 1055}, {640, 25, 640, 1055}, {1280, 25, 640, 1055}, {0, 552, 640, 527}} {
+		l, tp, w, h := TileBounds(0, 25, 1920, 1055, n, 3)
+		if [4]int{l, tp, w, h} != want {
+			t.Errorf("n=%d: got %v want %v", n, [4]int{l, tp, w, h}, want)
+		}
+	}
+}

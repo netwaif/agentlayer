@@ -148,7 +148,7 @@ func browserPick(out io.Writer, args []string) error {
 	quit, restore := watchQuitKeys(os.Stdin)
 	defer restore()
 	for { // 연속 지목 — 오버레이 Esc·터미널 esc/q·Ctrl-C로 종료
-		page, err := browser.ActivePage(b)
+		page, err := pageForAgents(b, agents, agentID != "", config.Load().BrowserPortOrDefault())
 		if err != nil {
 			return err
 		}
@@ -175,6 +175,33 @@ func browserPick(out io.Writer, args []string) error {
 			return err
 		}
 	}
+}
+
+// pageForAgents는 관제탑 b/s처럼 대상 에이전트가 정해져 있으면(pinned) 그 에이전트 폴더
+// 아래 dev 서버의 탭을 고른다 — worker 창이 여럿 떠 있을 때 "지금 포커스된 탭"이 아니라
+// 그 worker의 화면에 검사 모드가 걸리게. 못 찾으면 ActivePage(포커스된 웹 탭).
+func pageForAgents(b *rod.Browser, agents []*state.Agent, pinned bool, cdpPort int) (*rod.Page, error) {
+	if pinned && len(agents) == 1 && agents[0].CWD != "" {
+		servers := browser.DevServers(browser.ExecLsof, map[string]string{agents[0].CWD: ""})
+		if pages, err := b.Pages(); err == nil {
+			for _, s := range servers {
+				if s.Port == cdpPort {
+					continue
+				}
+				for _, p := range pages {
+					info, err := p.Info()
+					if err != nil || !browser.IsWebURL(info.URL) {
+						continue
+					}
+					if strings.Contains(info.URL, fmt.Sprintf("localhost:%d/", s.Port)) || strings.Contains(info.URL, fmt.Sprintf("127.0.0.1:%d/", s.Port)) {
+						_, _ = p.Activate() // 어느 창인지 사용자에게도 보이게
+						return p, nil
+					}
+				}
+			}
+		}
+	}
+	return browser.ActivePage(b)
 }
 
 // quitKey는 pick 대기 중 종료로 볼 키 — esc, q, Ctrl-C.
@@ -442,8 +469,18 @@ func browserShot(out io.Writer, args []string) error {
 		if err := page.WaitLoad(); err != nil {
 			return err
 		}
-	} else if page, err = browser.ActivePage(b); err != nil {
-		return err
+	} else {
+		var agents []*state.Agent
+		if o.Agent != "" {
+			if st, err := state.NewStore(state.DefaultDir()); err == nil {
+				if all, err := st.List(); err == nil {
+					agents, _ = FilterAgentByID(all, o.Agent)
+				}
+			}
+		}
+		if page, err = pageForAgents(b, agents, o.Agent != "", cfg.BrowserPortOrDefault()); err != nil {
+			return err
+		}
 	}
 	path, err := browser.Shot(page, state.DefaultDir(), time.Now())
 	if err != nil {
