@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"image/png"
 	"strings"
 	"testing"
 	"time"
@@ -128,5 +129,37 @@ func TestRunPickCancelDoesNotSend(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "취소됨") {
 		t.Errorf("출력에 취소 안내 없음: %q", out.String())
+	}
+}
+
+// 요소 스크린샷은 스크롤된 위치·DPR과 무관하게 그 요소를 담아야 한다.
+// (rod el.Screenshot은 전체 캡처를 CSS 좌표로 잘라 DPR 2에서 엉뚱한 영역이 나왔다.)
+func TestElementShotCapturesScrolledElement(t *testing.T) {
+	p := headlessPage(t, `<div style="height:1500px"></div>
+		<div id="t" style="width:200px;height:80px;background:red"></div>
+		<div style="height:1500px"></div>`)
+	// 레티나 재현 — DPR 1에서는 rod 크롭도 우연히 맞아 버그가 안 드러난다
+	if err := (proto.EmulationSetDeviceMetricsOverride{Width: 800, Height: 600, DeviceScaleFactor: 2}).Call(p); err != nil {
+		t.Fatal(err)
+	}
+	el, err := p.Element("#t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := ElementShot(p, el)
+	if len(bin) == 0 {
+		t.Fatal("스크린샷 없음")
+	}
+	img, err := png.Decode(bytes.NewReader(bin))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := img.Bounds()
+	if b.Dx() < 200 || b.Dy() < 80 {
+		t.Fatalf("크기 %dx%d — 요소(200x80)보다 작다", b.Dx(), b.Dy())
+	}
+	r, g, bl, _ := img.At(b.Dx()/2, b.Dy()/2).RGBA()
+	if r>>8 < 200 || g>>8 > 50 || bl>>8 > 50 {
+		t.Errorf("가운데 픽셀이 빨강이 아님: %d %d %d — 다른 영역을 잘랐다", r>>8, g>>8, bl>>8)
 	}
 }

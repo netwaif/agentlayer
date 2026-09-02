@@ -87,6 +87,36 @@ func ActivePage(b *rod.Browser) (*rod.Page, error) {
 	return pages[0], nil
 }
 
+// ElementShot은 요소를 문서 좌표 clip으로 캡처한다(실패 시 nil — 스크린샷은 보조 정보).
+// rod의 el.Screenshot은 전체 캡처를 CSS 좌표로 잘라 DPR 2(레티나)에서 엉뚱한 영역이
+// 나온다. Page.captureScreenshot의 clip은 문서 좌표(뷰포트 좌표 + 스크롤)이고
+// scale 1이면 기기 픽셀 해상도로 나온다 — 실측(2026-09-02).
+func ElementShot(page *rod.Page, el *rod.Element) []byte {
+	_ = el.ScrollIntoView()
+	shape, err := el.Shape()
+	if err != nil || shape.Box() == nil {
+		return nil
+	}
+	box := shape.Box()
+	sc, err := page.Eval(`() => [window.scrollX, window.scrollY]`)
+	if err != nil {
+		return nil
+	}
+	arr := sc.Value.Arr()
+	if len(arr) != 2 {
+		return nil
+	}
+	bin, err := page.Screenshot(false, &proto.PageCaptureScreenshot{
+		Format: proto.PageCaptureScreenshotFormatPng,
+		Clip: &proto.PageViewport{X: box.X + arr[0].Num(), Y: box.Y + arr[1].Num(),
+			Width: box.Width, Height: box.Height, Scale: 1},
+	})
+	if err != nil {
+		return nil
+	}
+	return bin
+}
+
 // ErrPickCancelled은 오버레이에서 Esc/빈 입력으로 취소한 신호 — 호출자가 연속 지목
 // 루프를 접고 관제탑으로 돌아가는 근거. 에러가 아니라 정상 종료다.
 var ErrPickCancelled = errors.New("지목 취소")
@@ -164,7 +194,7 @@ func RunPick(page *rod.Page, agents []*state.Agent, lsof RunLsof, stateDir strin
 	if len(html) > 4000 {
 		html = html[:4000] + "\n<!-- 절단됨 -->"
 	}
-	shot, _ := el.Screenshot(proto.PageCaptureScreenshotFormatPng, 0)
+	shot := ElementShot(page, el)
 	info, err := page.Info()
 	if err != nil {
 		return err
