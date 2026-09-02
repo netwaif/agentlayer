@@ -145,6 +145,9 @@ func browserPick(out io.Writer, args []string) error {
 	send := func(paneID, text string) error { return tm.SendText(paneID, text) }
 	// 터미널 esc/q/Ctrl-C로도 돌아갈 수 있게 — 관제탑 b 키에서 들어온 사용자가
 	// 브라우저를 안 건드리고 취소할 길이 이것뿐이다.
+	if f, ok := out.(*os.File); ok && term.IsTerminal(f.Fd()) {
+		fmt.Fprint(out, "\x1b[2J\x1b[H") // 관제탑 팝업에서 넘어오면 잔상 위에 찍히지 않게 화면부터 비운다
+	}
 	quit, restore := watchQuitKeys(os.Stdin)
 	defer restore()
 	for { // 연속 지목 — 오버레이 Esc·터미널 esc/q·Ctrl-C로 종료
@@ -216,7 +219,7 @@ func watchQuitKeys(in *os.File) (<-chan struct{}, func()) {
 	if !term.IsTerminal(fd) {
 		return quit, func() {}
 	}
-	st, err := term.MakeRaw(fd)
+	restore, err := makeCbreak(fd) // raw가 아니라 cbreak — 출력 줄바꿈은 살린다
 	if err != nil {
 		return quit, func() {}
 	}
@@ -233,7 +236,7 @@ func watchQuitKeys(in *os.File) (<-chan struct{}, func()) {
 			}
 		}
 	}()
-	return quit, func() { _ = term.Restore(fd, st) }
+	return quit, restore
 }
 
 // shotOpts는 shot의 인자. --send는 에이전트 pane, --notify는 알림 웹훅(폰 Discord).
