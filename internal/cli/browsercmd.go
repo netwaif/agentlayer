@@ -54,6 +54,8 @@ func RunBrowser(out io.Writer, args []string) error {
 		return browserOpen(out, args)
 	case "mcp-serve":
 		return browserMCPServe()
+	case "autopreview":
+		return browserAutoPreview(out)
 	default:
 		return fmt.Errorf("모르는 browser 서브커맨드 %q — 'agentlayer help' 참고", sub)
 	}
@@ -510,6 +512,78 @@ func browserMCPServe() error {
 	}
 	argv := MCPServeArgv(npx, cfg.BrowserPortOrDefault())
 	return syscall.Exec(argv[0], argv, usage.ExtendedEnv()) // npx 셔뱅이 node를 PATH에서 찾는다
+}
+
+// browserAutoPreview: agentlayer browser autopreview — hook이 전이마다 백그라운드로
+// 부른다. 살아 있는 에이전트 폴더 아래 새 dev 서버를 전용 브라우저에 한 번 연다.
+// 브라우저는 새 서버가 있을 때만 건드린다(Connect가 Chrome을 띄우므로).
+func browserAutoPreview(out io.Writer) error {
+	cfg := config.Load()
+	if !cfg.PreviewAutoEnabled() {
+		return nil
+	}
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return err
+	}
+	agents, err := st.List()
+	if err != nil {
+		return err
+	}
+	paths := map[string]string{}
+	for _, a := range agents {
+		if a.CWD != "" && a.State != state.StateDead {
+			paths[a.CWD] = ""
+		}
+	}
+	if len(paths) == 0 {
+		return nil
+	}
+	port := cfg.BrowserPortOrDefault()
+	scan := func(p map[string]string) []browser.DevServer {
+		var out []browser.DevServer
+		for _, s := range browser.DevServers(browser.ExecLsof, p) {
+			if s.Port != port { // 전용 Chrome 자신 제외
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	var b *rod.Browser
+	connect := func() *rod.Browser {
+		if b == nil {
+			b, _ = browser.Connect(state.DefaultDir(), port)
+		}
+		return b
+	}
+	hasTab := func(p int) bool {
+		br := connect()
+		if br == nil {
+			return false
+		}
+		pages, err := br.Pages()
+		if err != nil {
+			return false
+		}
+		for _, pg := range pages {
+			if info, err := pg.Info(); err == nil &&
+				(strings.Contains(info.URL, fmt.Sprintf("localhost:%d", p)) || strings.Contains(info.URL, fmt.Sprintf("127.0.0.1:%d", p))) {
+				return true
+			}
+		}
+		return false
+	}
+	open := func(s browser.DevServer) error {
+		br := connect()
+		if br == nil {
+			return fmt.Errorf("브라우저 연결 실패")
+		}
+		return browser.OpenPreview(br, s)
+	}
+	for _, s := range browser.AutoPreview(state.DefaultDir(), paths, scan, hasTab, open, time.Now()) {
+		fmt.Fprintf(out, "🌐 http://localhost:%d 열림 (%s)\n", s.Port, s.CWD)
+	}
+	return nil
 }
 
 // MCPCommands는 claude·codex·gemini에 chrome-devtools-mcp를 전용 브라우저

@@ -422,18 +422,25 @@ func runHook(args []string) error {
 	})
 	// 전이가 실제로 있었으면 카드 즉시 갱신을 백그라운드로 발사한다.
 	// hook은 에이전트를 막으면 안 되므로 기다리지 않는다(detached).
-	defer func() {
-		if !transitioned || cfg.DiscordWebhookURL == "" {
-			return
-		}
+	spawn := func(args ...string) {
 		self, err := os.Executable()
 		if err != nil {
 			return
 		}
-		cmd := exec.Command(self, "card", "--event")
+		cmd := exec.Command(self, args...)
 		cmd.Stdout, cmd.Stderr, cmd.Stdin = nil, nil, nil
 		if cmd.Start() == nil {
 			_ = cmd.Process.Release()
+		}
+	}
+	defer func() {
+		if transitioned && cfg.DiscordWebhookURL != "" {
+			spawn("card", "--event")
+		}
+		// 에이전트가 dev 서버를 띄웠으면 몇 초 안에 hook이 오므로 여기서 자동 프리뷰.
+		// 관제탑이 닫혀 있어도 동작한다. 스캔은 5초 스로틀(autopreview 내부).
+		if cfg.PreviewAutoEnabled() {
+			spawn("browser", "autopreview")
 		}
 	}()
 	switch agent {
