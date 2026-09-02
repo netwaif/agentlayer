@@ -161,10 +161,13 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
 - pick 산출물(요소 컨텍스트 `.md` + 스크린샷 `.png`)과 shot·errors 덤프는
   `~/.local/state/agentlayer/picks/`에 저장된다
 - **터미널 링크를 전용 브라우저로**: 기본은 ⌘-클릭이 실사용 브라우저로 간다.
-  iTerm2 → Settings → Profiles → Advanced → Semantic History를
-  "Run command…"로 두고 `agentlayer browser open \1`을 넣으면 링크가 전용
-  브라우저에 열린다(에이전트가 보는 화면 = 사람이 클릭한 화면). 시스템
-  브라우저로 열고 싶을 땐 우클릭 → Open URL
+  iTerm2 → Settings → Profiles → (쓰는 프로필) → Advanced → Smart Selection
+  "Edit…" → `+`로 규칙 추가: Regex `https?://[^\s"'<>)]+`, Precision Very High,
+  Actions에 "Run Command" / Parameter `~/.local/bin/agentlayer browser open "\0"`.
+  Smart Selection 규칙에 액션이 있으면 ⌘-클릭이 첫 액션을 실행하므로 링크가
+  전용 브라우저에 열린다(에이전트가 보는 화면 = 사람이 클릭한 화면). 시스템
+  브라우저로 열고 싶을 땐 우클릭 → Open URL. (Semantic History는 파일 경로
+  전용이라 URL에는 안 걸린다)
 - **SSH 원격에서 쓸 때**: 에이전트(MCP)는 Mac의 전용 브라우저를 그대로
   조작한다(Mac이 GUI 로그인 상태면 됨). 사람이 화면을 보는 방법은 두 가지 —
   ① `agentlayer browser shot --notify`로 스크린샷을 알림 웹훅(폰 Discord)으로
