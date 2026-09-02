@@ -29,10 +29,11 @@ orchestration 스킬(init이 설치)에 "브라우저" 절 추가: chrome-devtoo
 내장 브라우저 스킬(codex control-in-app-browser) 금지, localhost 주소는 링크로 찍을 것
 (사용자가 ⌘-클릭), 사용자가 원격이면 `agentlayer browser shot --notify`.
 
-## 4. iTerm2 링크 라우팅 (옵션)
-init이 iTerm2 plist에서 "Agent browser" Smart Selection 규칙 유무를 감지해, 없으면
-수동 절차를 출력한다. 자동 주입은 iTerm2가 실행 중이면 덮어써질 위험이 있어
-`agentlayer init --iterm2`(iTerm2 종료 상태에서만, plist 백업) 옵션으로 분리한다.
+## 4. iTerm2 링크 라우팅
+init이 `defaults read com.googlecode.iterm2 "New Bookmarks"`에서 `agentlayer browser open`
+액션 유무를 감지해, 없으면 수동 절차(Smart Selection 규칙 4단계)를 출력한다.
+자동 주입은 iTerm2가 실행 중이면 plist를 되써 덮이므로 **하지 않는다**(2026-09-02 결정).
+필요해지면 `agentlayer init --iterm2`(iTerm2 종료 확인 + plist 백업)로 별도 추가.
 
 ## 범위 밖
 Playwright MCP 등록, 프로필 다중화, 원격 스트리밍.

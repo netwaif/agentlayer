@@ -354,6 +354,11 @@ func runInit(args []string) error {
 		return err
 	}
 	fmt.Println()
+	// iTerm2 링크 라우팅 — 자동 주입은 iTerm2가 되쓰기하므로 감지+안내만
+	if _, err := os.Stat("/Applications/iTerm.app"); err == nil {
+		cli.PrintITerm2LinkGuide(os.Stdout, binPath, cli.ITerm2LinkRuleInstalled(cli.ReadITerm2Bookmarks()))
+		fmt.Println()
+	}
 	// prefix 'a' 충돌 검사: list-keys가 성공하면 이미 바인딩된 것
 	conflict := exec.Command(tmuxx.Bin(), "list-keys", "-T", "prefix", "a").Run() == nil
 	cli.PrintTmuxBinding(os.Stdout, conflict, binPath)
