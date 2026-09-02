@@ -71,8 +71,20 @@ git -C <worktree> diff --stat        # 필요하면 diff 본문까지
 - 정리는 `agentlayer wt clean <이름>` — 미커밋·미병합이 있으면 거부되는 보존 우선 설계다. 거부되면 이유를 사용자에게 보여주고 지시를 기다린다.
 - 폐기하는 브랜치도 사용자 확인 전에는 지우지 않는다.
 
+## 6. 브라우저 — 전용 브라우저 하나를 셋이 나눠 쓴다
+
+에이전트 전용 Chrome(로그인 세션 보존, `agentlayer init`이 chrome-devtools MCP로 연결)이 있다. 브라우저가 필요한 일은 전부 이 경로다.
+
+- **도구는 chrome-devtools MCP**(`list_pages`·`new_page`·`navigate_page`·`click`·`fill`·`evaluate_script`·`get_console_message`·`get_network_request`). 브라우저가 안 떠 있어도 MCP 서버(`agentlayer browser mcp-serve`)가 띄우므로 기동 명령은 없다.
+- **자기 탭에서만 작업한다** — 시작할 때 `new_page`로 탭을 만들고 그 pageId만 쓴다. 다른 에이전트(claude·codex·gemini)가 같은 브라우저를 쓰고 있으므로 남의 탭을 이동·닫지 않는다.
+- 내장 브라우저 스킬(`browser:control-in-app-browser` 등 앱 자체 런타임)은 쓰지 않는다 — 그건 이 브라우저를 모른다.
+- worker가 dev 서버를 띄우면 `http://localhost:<포트>`를 한 줄로 찍는다. 사용자는 관제탑 `p`(프리뷰)나 터미널 링크 ⌘-클릭으로 같은 브라우저에서 본다.
+- 사용자가 화면을 봐야 하는데 원격(SSH)이면 `agentlayer browser shot --notify`로 스크린샷을 알림 웹훅(폰 Discord)에 보낸다.
+- 사용자가 관제탑 `b`로 지목한 요소는 "셀렉터·컨텍스트 md·png 경로"가 한 줄로 들어온다 — md를 읽고 고친 뒤 같은 탭을 리로드해 스스로 확인한다.
+
 ## 하지 말 것
 
 - **별도 tmux 서버(-L/-S) 금지** — 상태 저장소가 공유라 pane ID가 충돌해 다른 세션 레코드를 오염시킨다.
 - 화면 파싱으로 완료 판정 금지 — 완료는 `agentlayer status`의 상태로만 판단한다.
 - 자동 머지 금지, base 브랜치 직접 수정 금지, worker의 승인 프롬프트 임의 승인 금지.
+- 브라우저는 남의 탭 조작 금지, 앱 내장 브라우저 런타임 사용 금지 — chrome-devtools MCP·자기 탭만.

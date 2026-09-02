@@ -73,3 +73,12 @@ func TestInstallOrchestrationSkillDryRun(t *testing.T) {
 		t.Error("dry-run은 파일을 만들면 안 됨")
 	}
 }
+
+// 브라우저 절: 에이전트가 내장 브라우저 스킬로 새지 않고 chrome-devtools MCP를 자기 탭에서 쓰게 한다.
+func TestOrchestrationSkillHasBrowserSection(t *testing.T) {
+	for _, want := range []string{"## 6. 브라우저", "chrome-devtools", "자기 탭", "control-in-app-browser", "shot --notify"} {
+		if !strings.Contains(string(orchestrationSkill), want) {
+			t.Errorf("스킬 본문에 %q 없음", want)
+		}
+	}
+}
