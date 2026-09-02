@@ -120,8 +120,12 @@ func Connect(stateDir string, port int) (*rod.Browser, error) {
 	if !ok {
 		return nil, fmt.Errorf("Chrome을 찾을 수 없습니다 — Google Chrome 또는 Chromium 설치 필요")
 	}
+	profile := filepath.Join(stateDir, "browser-profile")
+	if err := EnsureProfileTheme(profile); err != nil {
+		return nil, err
+	}
 	ws, err = launcher.New().Bin(bin).
-		UserDataDir(filepath.Join(stateDir, "browser-profile")).
+		UserDataDir(profile).
 		Headless(launchHeadless).
 		Leakless(false). // CLI가 끝나도 브라우저는 살아야 한다
 		RemoteDebuggingPort(port).

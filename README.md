@@ -150,7 +150,10 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   그 서버를 전용 브라우저 창(⎇브랜치 제목)으로 연다. 위 명령들은 이 키들이
   뒤에서 부르는 배관이다
 - 전용 프로필 `~/.local/state/agentlayer/browser-profile`로 뜬다 —
-  로그인 세션은 이 프로필에 보존되고, 실사용 Chrome과 격리된다
+  로그인 세션은 이 프로필에 보존되고, 실사용 Chrome과 격리된다.
+  **툴바가 주황(라이트)** 이면 에이전트 브라우저다 — 기동 시 프로필에 식별
+  테마·프로필 이름(AgentLayer)을 심어 실사용 Chrome과 한눈에 구분된다.
+  Customize Chrome에서 색을 바꾸면 그 선택을 존중한다
 - CDP 디버깅 포트는 고정(`browser_port`, 기본 9222)이라 재부팅 뒤에도
   기록 없이 같은 브라우저를 찾아 attach한다. 포트를 다른 프로세스가
   물고 있으면 명시적으로 실패한다 — config에서 포트를 바꾸면 된다
