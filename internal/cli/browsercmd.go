@@ -559,6 +559,24 @@ func browserMCPServe() error {
 	return syscall.Exec(argv[0], argv, usage.ExtendedEnv()) // npx 셔뱅이 node를 PATH에서 찾는다
 }
 
+// PreviewPaths는 산 에이전트 폴더 → 브랜치 맵을 만든다. worktree 폴더는 wt 메타의
+// 브랜치를 달아 자동 프리뷰 창 제목에 ⎇브랜치가 붙게 한다(관제탑 p와 같은 규칙).
+func PreviewPaths(agents []*state.Agent, metas []*wt.Meta) map[string]string {
+	branches := map[string]string{}
+	for _, m := range metas {
+		if m != nil && m.Path != "" {
+			branches[m.Path] = m.Branch
+		}
+	}
+	paths := map[string]string{}
+	for _, a := range agents {
+		if a != nil && a.CWD != "" && a.State != state.StateDead {
+			paths[a.CWD] = branches[a.CWD]
+		}
+	}
+	return paths
+}
+
 // browserAutoPreview: agentlayer browser autopreview — hook이 전이마다 백그라운드로
 // 부른다. 살아 있는 에이전트 폴더 아래 새 dev 서버를 전용 브라우저에 한 번 연다.
 // 브라우저는 새 서버가 있을 때만 건드린다(Connect가 Chrome을 띄우므로).
@@ -575,12 +593,8 @@ func browserAutoPreview(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	paths := map[string]string{}
-	for _, a := range agents {
-		if a.CWD != "" && a.State != state.StateDead {
-			paths[a.CWD] = ""
-		}
-	}
+	metas, _ := wt.ListMetas(state.DefaultDir())
+	paths := PreviewPaths(agents, metas)
 	if len(paths) == 0 {
 		return nil
 	}
