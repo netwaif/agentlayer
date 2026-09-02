@@ -227,6 +227,23 @@ func (t Tmux) NewWindow(name, dir, command string) error {
 	return err
 }
 
+// NewWindowPane은 NewWindow와 같되 만들어진 pane ID를 돌려준다 — 기동 직후 화면 감시용.
+func (t Tmux) NewWindowPane(name, dir, command string) (string, error) {
+	args := []string{"new-window", "-n", name, "-c", dir, "-P", "-F", "#{pane_id}"}
+	if command != "" {
+		args = append(args, command)
+	}
+	out, err := t.run(args...)
+	return strings.TrimSpace(out), err
+}
+
+// SendEnter는 Enter 키 하나만 보낸다 — 에이전트 기동 시 뜨는 "이 폴더를 신뢰합니까?"
+// 질문의 기본 선택(예)을 확정하는 용도.
+func (t Tmux) SendEnter(paneID string) error {
+	_, err := t.run("send-keys", "-t", paneID, "Enter")
+	return err
+}
+
 // HasSession은 정확히 그 이름의 세션이 있는지 ("="접두 = 완전 일치 매칭).
 func (t Tmux) HasSession(name string) bool {
 	_, err := t.run("has-session", "-t", "="+name)

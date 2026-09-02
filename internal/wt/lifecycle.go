@@ -36,6 +36,9 @@ type NewOptions struct {
 	TestCmd  string
 	Tmux     tmuxx.Tmux
 	NoWindow bool // tmux window 생성 생략 (테스트·수동 모드)
+	// AcceptPrompts는 window 생성 직후 pane ID로 불린다 — 기동 시 신뢰 질문 자동 승인
+	// 감시자를 분리 실행하는 주입점(nil이면 생략).
+	AcceptPrompts func(paneID string)
 }
 
 // New는 태스크 하나를 시작한다:
@@ -81,20 +84,26 @@ func New(stateDir string, o NewOptions) (*Meta, error) {
 		return nil, err
 	}
 	if !o.NoWindow {
-		if err := openWindow(o.Tmux, o.Task, path, commandFor(o.Agent)); err != nil {
+		paneID, err := openWindow(o.Tmux, o.Task, path, commandFor(o.Agent))
+		if err != nil {
 			// worktree는 남긴다 — 사용자가 수동으로 쓸 수 있고, 잔해는 wt list에 보인다
 			return m, fmt.Errorf("worktree는 만들었지만 tmux window 생성 실패: %w", err)
+		}
+		// 기동 직후 "이 폴더를 신뢰합니까?" 질문을 대신 넘겨 주는 감시자 — 분리 실행이라
+		// wt new는 바로 돌아오고, 질문이 안 뜨는 CLI면 아무 일도 안 한다.
+		if paneID != "" && o.AcceptPrompts != nil {
+			o.AcceptPrompts(paneID)
 		}
 	}
 	return m, nil
 }
 
-// openWindow는 현재 세션에 태스크 window를 만들고 에이전트를 실행한다.
-func openWindow(tm tmuxx.Tmux, task, path, command string) error {
+// openWindow는 현재 세션에 태스크 window를 만들고 에이전트를 실행한다. pane ID를 돌려준다.
+func openWindow(tm tmuxx.Tmux, task, path, command string) (string, error) {
 	if !tmuxx.InsideTmux() {
-		return fmt.Errorf("tmux 밖입니다 — tmux 안에서 실행하세요")
+		return "", fmt.Errorf("tmux 밖입니다 — tmux 안에서 실행하세요")
 	}
-	return tm.NewWindow(task, path, command)
+	return tm.NewWindowPane(task, path, command)
 }
 
 // CleanRefusal은 정리를 거부한 이유.

@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
@@ -45,7 +47,7 @@ func RunWT(w io.Writer, stateDir string, st *state.Store, tm tmuxx.Tmux, args []
 		if err != nil {
 			return err
 		}
-		m, err := wt.New(stateDir, wt.NewOptions{Task: task, Repo: *repo, Base: *base,
+		m, err := wt.New(stateDir, wt.NewOptions{Task: task, Repo: *repo, Base: *base, AcceptPrompts: spawnAcceptPrompts,
 			Agent: *agent, TestCmd: *test, Tmux: tm})
 		if err != nil {
 			return err
@@ -140,6 +142,16 @@ func RunWT(w io.Writer, stateDir string, st *state.Store, tm tmuxx.Tmux, args []
 		fmt.Fprintf(w, "코멘트 %d건을 에이전트에게 보냈습니다.\n", n)
 		return nil
 
+	case "accept-prompts": // 내부용 — wt new가 분리 실행하는 기동 질문 감시자
+		if len(rest) != 1 {
+			return fmt.Errorf("사용법: agentlayer wt accept-prompts <pane-id>")
+		}
+		tm := tmuxx.Tmux{}
+		if n := wt.AcceptStartupPrompts(tm.CapturePane, tm.SendEnter, rest[0], 40*time.Second, 500*time.Millisecond, time.Sleep); n > 0 {
+			fmt.Fprintf(w, "기동 질문 자동 승인 %d회 (%s)\n", n, rest[0])
+		}
+		return nil
+
 	case "merge":
 		fs := flag.NewFlagSet("wt merge", flag.ContinueOnError)
 		yes := fs.Bool("yes", false, "확인 없이 진행")
@@ -199,4 +211,17 @@ func parseTaskAndFlags(fs *flag.FlagSet, args []string) (string, error) {
 		return "", fmt.Errorf("태스크 이름이 필요합니다")
 	}
 	return task, nil
+}
+
+// spawnAcceptPrompts는 worker pane의 기동 질문(폴더 신뢰) 감시자를 분리 프로세스로 띄운다.
+func spawnAcceptPrompts(paneID string) {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(exe, "wt", "accept-prompts", paneID)
+	cmd.Stdout, cmd.Stderr, cmd.Stdin = nil, nil, nil
+	if cmd.Start() == nil {
+		_ = cmd.Process.Release()
+	}
 }
