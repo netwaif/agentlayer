@@ -678,56 +678,23 @@ func TestPopupCursorRestoredOnFirstRefresh(t *testing.T) {
 	}
 }
 
-// ── 자동 프리뷰: 새 dev 서버가 처음 보이면 탭이 없을 때 한 번만 연다 ────
+// ── dev 서버 감지는 뱃지만 갱신한다 — 관제탑이 스스로 브라우저를 띄우거나 앞으로
+// 끌어오면 안 된다(팝업을 열 때마다 브라우저가 튀어나오던 버그, 2026-09-02).
+// 자동 열기는 hook 경로(browser autopreview)가 정본이다.
 
-func autoPreviewFixture(t *testing.T, hasTab bool) (Model, *[]int) {
-	t.Helper()
+func TestDevServersMsgOnlyUpdatesBadge(t *testing.T) {
 	m := fixtureModel(t)
 	m.agents[0].CWD = "/w/app"
-	m.autoPreview = true
-	opened := &[]int{}
-	m.openPreview = func(s []browser.DevServer) error {
-		for _, x := range s {
-			*opened = append(*opened, x.Port)
-		}
-		return nil
-	}
-	m.hasTab = func(port int) bool { return hasTab }
-	return m, opened
-}
-
-func runCmd(t *testing.T, m Model, msg tea.Msg) Model {
-	t.Helper()
-	next, cmd := m.Update(msg)
+	called := false
+	m.openPreview = func(s []browser.DevServer) error { called = true; return nil }
+	next, cmd := m.Update(devServersMsg{{Port: 3000, CWD: "/w/app"}})
 	if cmd != nil {
-		if out := cmd(); out != nil {
-			next, _ = next.(Model).Update(out)
-		}
+		t.Error("dev 서버 감지가 명령을 내면 안 됨(브라우저 접속 금지)")
 	}
-	return next.(Model)
-}
-
-func TestAutoPreviewOpensNewServerOnce(t *testing.T) {
-	m, opened := autoPreviewFixture(t, false)
-	srv := devServersMsg{{Port: 3000, CWD: "/w/app"}, {Port: 9999, CWD: "/elsewhere"}}
-	m = runCmd(t, m, srv)
-	m = runCmd(t, m, srv) // 같은 서버 재감지 — 다시 열지 않는다
-	if len(*opened) != 1 || (*opened)[0] != 3000 {
-		t.Errorf("에이전트 폴더 서버만 한 번 열어야 함: %v", *opened)
+	if called {
+		t.Error("openPreview가 불리면 안 됨")
 	}
-}
-
-func TestAutoPreviewSkipsWhenTabExistsOrDisabled(t *testing.T) {
-	m, opened := autoPreviewFixture(t, true)
-	m = runCmd(t, m, devServersMsg{{Port: 3000, CWD: "/w/app"}})
-	if len(*opened) != 0 {
-		t.Errorf("탭이 이미 있으면 열지 않음: %v", *opened)
+	if got := next.(Model).devServers; len(got) != 1 || got[0].Port != 3000 {
+		t.Errorf("뱃지용 목록은 갱신돼야 함: %v", got)
 	}
-	m2, opened2 := autoPreviewFixture(t, false)
-	m2.autoPreview = false
-	runCmd(t, m2, devServersMsg{{Port: 3000, CWD: "/w/app"}})
-	if len(*opened2) != 0 {
-		t.Errorf("옵션 꺼짐이면 열지 않음: %v", *opened2)
-	}
-	_ = m
 }
