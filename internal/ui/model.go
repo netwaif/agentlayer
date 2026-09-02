@@ -177,7 +177,7 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 		},
 		coachRunner: usage.CoachRunner,
 		devScan: func(paths map[string]string) []browser.DevServer {
-			return browser.DevServers(browser.ExecLsof, paths)
+			return browser.FilterHTML(browser.DevServers(browser.ExecLsof, paths), nil)
 		},
 		openPreview: func(servers []browser.DevServer) error {
 			b, err := browser.Connect(state.DefaultDir(), cfg.BrowserPortOrDefault())

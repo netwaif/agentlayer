@@ -3,8 +3,10 @@ package browser
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
@@ -92,6 +94,47 @@ func OpenPreview(b *rod.Browser, s DevServer) error {
 	if s.Branch == "" {
 		return nil // worktree가 아닌 일반 폴더 — 제목은 그대로
 	}
-	_, err = page.Eval(`(b) => { document.title = '⎇' + b + ' — ' + document.title }`, s.Branch)
+	return MarkBranch(page, s.Branch)
+}
+
+// IsHTMLServer는 포트가 진짜 웹 화면(dev 서버)인지 HTTP로 확인한다 — text/html이고 4xx/5xx가
+// 아니어야 한다. 에이전트 CLI(agy 등)가 여는 내부 포트는 404 text/plain이라 걸러진다
+// (실측 2026-09-03: gemini worker의 51871이 프리뷰로 열렸다).
+func IsHTMLServer(port int) bool {
+	c := &http.Client{Timeout: 1500 * time.Millisecond}
+	resp, err := c.Get(fmt.Sprintf("http://127.0.0.1:%d/", port))
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode < 400 && strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/html")
+}
+
+// FilterHTML은 dev 서버 후보 중 IsHTMLServer(또는 주입한 probe)를 통과한 것만 남긴다.
+func FilterHTML(servers []DevServer, probe func(port int) bool) []DevServer {
+	if probe == nil {
+		probe = IsHTMLServer
+	}
+	var out []DevServer
+	for _, s := range servers {
+		if probe(s.Port) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// MarkBranch는 탭 제목에 ⎇브랜치를 붙이고, 리로드·이동 뒤에도 유지되게 새 문서마다
+// 다시 붙이는 스크립트를 심는다(Page.addScriptToEvaluateOnNewDocument — 탭 수명 동안 유효).
+func MarkBranch(page *rod.Page, branch string) error {
+	if branch == "" {
+		return nil
+	}
+	fn := fmt.Sprintf(`() => { const b = %q; const mark = () => { if (!document.title.startsWith('⎇')) document.title = '⎇' + b + ' — ' + document.title; };
+		if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mark); else mark(); }`, branch)
+	if _, err := (proto.PageAddScriptToEvaluateOnNewDocument{Source: "(" + fn + ")()"}).Call(page); err != nil {
+		return err
+	}
+	_, err := page.Eval(fn) // rod Eval은 함수식을 받는다
 	return err
 }

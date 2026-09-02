@@ -695,12 +695,17 @@ func browserAutoPreview(out io.Writer) error {
 		return nil
 	}
 	port := cfg.BrowserPortOrDefault()
+	branchByPort := map[int]string{}
 	scan := func(p map[string]string) []browser.DevServer {
 		var out []browser.DevServer
 		for _, s := range browser.DevServers(browser.ExecLsof, p) {
 			if s.Port != port { // 전용 Chrome 자신 제외
 				out = append(out, s)
 			}
+		}
+		out = browser.FilterHTML(out, nil) // 에이전트 CLI 내부 포트(404·text/plain) 제외
+		for _, s := range out {
+			branchByPort[s.Port] = s.Branch
 		}
 		return out
 	}
@@ -723,7 +728,8 @@ func browserAutoPreview(out io.Writer) error {
 		for _, pg := range pages {
 			if info, err := pg.Info(); err == nil &&
 				(strings.Contains(info.URL, fmt.Sprintf("localhost:%d", p)) || strings.Contains(info.URL, fmt.Sprintf("127.0.0.1:%d", p))) {
-				_, _ = pg.Activate() // 이미 열린 탭이면 앞으로 가져와 "떴다"는 신호를 준다
+				_ = browser.MarkBranch(pg, branchByPort[p]) // worker가 직접 연 탭이어도 ⎇ 표시
+				_, _ = pg.Activate()                        // 이미 열린 탭이면 앞으로 가져와 "떴다"는 신호를 준다
 				return true
 			}
 		}

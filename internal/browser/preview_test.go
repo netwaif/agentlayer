@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
@@ -164,5 +165,34 @@ func TestOpenPreviewLabelsTitle(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("포트 %d 페이지가 열려야 함", port)
+	}
+}
+
+func TestFilterHTMLDropsNonHTML(t *testing.T) {
+	in := []DevServer{{Port: 8101}, {Port: 51871}, {Port: 8102}}
+	got := FilterHTML(in, func(port int) bool { return port != 51871 })
+	if len(got) != 2 || got[0].Port != 8101 || got[1].Port != 8102 {
+		t.Errorf("HTML 아닌 포트는 빠져야 함: %v", got)
+	}
+}
+
+// ⎇ 제목은 리로드 뒤에도 남아야 한다 — worker가 자기 탭을 리로드해도 구분이 유지되게.
+func TestMarkBranchSurvivesReload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<title>앱</title><h1>x</h1>`))
+	}))
+	defer srv.Close()
+	p := headlessPage(t, `<p>init</p>`)
+	p.MustNavigate(srv.URL).MustWaitLoad()
+	if err := MarkBranch(p, "agent/hero"); err != nil {
+		t.Fatal(err)
+	}
+	if ti := p.MustInfo().Title; !strings.HasPrefix(ti, "⎇agent/hero") {
+		t.Fatalf("즉시 붙어야 함: %q", ti)
+	}
+	p.Timeout(15 * time.Second).MustNavigate(srv.URL).MustWaitLoad()
+	if ti := p.MustEval(`() => document.title`).Str(); !strings.HasPrefix(ti, "⎇agent/hero") {
+		t.Errorf("다시 로드한 뒤에도 남아야 함: %q", ti)
 	}
 }
