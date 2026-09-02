@@ -1,6 +1,6 @@
 ---
 name: orchestration
-description: AgentLayer로 멀티 에이전트 오케스트레이션. worker N개(claude·codex·gemini)를 각각 git worktree+tmux window에 띄워 태스크를 병렬로 dispatch하고, 완료를 기다렸다가 결과를 취합·비교한다. "worker 2개 만들어서 같은 태스크 시켜줘", "claude랑 codex한테 A/B로 시켜봐", "서로 다른 태스크 나눠서 병렬로", "/orchestration" 등으로 트리거. 에이전트 브라우저의 로그인 쿠키 관리("x.com 로그인 쿠키 가져와줘", "에이전트 브라우저에 뭐 들어 있어?", "x.com 쿠키 지워줘")도 이 스킬이 처리한다. 머지는 기본적으로 사용자 몫이다.
+description: AgentLayer로 멀티 에이전트 오케스트레이션. worker N개(claude·codex·gemini)를 각각 git worktree+tmux window에 띄워 태스크를 병렬로 dispatch하고, 완료를 기다렸다가 결과를 취합·비교한다. "worker 2개 만들어서 같은 태스크 시켜줘", "claude랑 codex한테 A/B로 시켜봐", "서로 다른 태스크 나눠서 병렬로", "/orchestration" 등으로 트리거. 에이전트 브라우저 관련 요청("브라우저에서 지목할게", "스크린샷 확인해봐", "x.com 로그인 쿠키 가져와줘", "에이전트 브라우저에 뭐 들어 있어?", "x.com 쿠키 지워줘")도 이 스킬이 처리한다. 머지는 기본적으로 사용자 몫이다.
 ---
 
 # AgentLayer Orchestration — 코디네이터 지침
@@ -81,6 +81,7 @@ git -C <worktree> diff --stat        # 필요하면 diff 본문까지
 - worker가 dev 서버를 띄우면 `http://localhost:<포트>`를 한 줄로 찍는다. 사용자는 관제탑 `p`(프리뷰)나 터미널 링크 ⌘-클릭으로 같은 브라우저에서 본다.
 - 사용자가 화면을 봐야 하는데 원격(SSH)이면 `agentlayer browser shot --notify`로 스크린샷을 알림 웹훅(폰 Discord)에 보낸다.
 - 사용자가 관제탑 `b`로 지목한 요소는 "셀렉터·컨텍스트 md·png 경로"가 한 줄로 들어온다 — md를 읽고 고친 뒤 같은 탭을 리로드해 스스로 확인한다.
+- **지목·스크린샷도 말로 시킬 수 있다** — 사용자가 "브라우저에서 지목할게"라고 하면 `agentlayer browser pick --once`를 실행한다(Bash timeout 5분 — 사용자가 클릭하고 지시를 적을 때까지 기다린다). 먼저 "에이전트 브라우저에서 요소를 클릭하고 뜨는 입력창에 지시를 적어 주세요"라고 안내한다. 사용자가 Enter를 치면 stdout에 `브라우저 요소 수정 요청: "…" — 맥락 파일을 읽고 반영해줘: <md 경로>` 한 줄이 나온다 → md를 읽고 그 요소만 고친 뒤 자기 탭을 리로드해 확인한다. "스크린샷 확인해봐"는 `agentlayer browser shot [url]`이 찍은 png 경로를 Read로 보고 판단한다(chrome-devtools `take_screenshot`도 된다). 관제탑 `b`/`s`는 여러 에이전트 중 대상을 고를 때 쓰는 같은 기능이다.
 - **로그인 쿠키는 사용자가 말로 시키고 에이전트가 명령을 대신 친다** — "OO 로그인 쿠키 가져와줘" → `agentlayer browser cookies import <도메인>` (실사용 Chrome에서 그 도메인 쿠키만 읽어 에이전트 브라우저에 넣는다. macOS Keychain 팝업이 뜨니 사용자에게 "항상 허용"을 누르라고 먼저 말한다), "에이전트 브라우저에 뭐 들어 있어?" → `cookies list` (호스트별 개수) / `cookies list <도메인>` (이름·만료, 값은 안 나오므로 출력을 그대로 보여줘도 된다), "OO 쿠키 지워줘" → `cookies clear <도메인>` (에이전트 브라우저에서만 지운다). 실사용 Chrome은 import 때 읽기만 하고 절대 바꾸지 않는다.
 
 ## 하지 말 것

@@ -92,3 +92,10 @@ func Candidates(agents []*state.Agent, pageURL string, run RunLsof) []*state.Age
 	}
 	return best
 }
+
+// SelfAgents는 `pick --once`용 후보 하나 — 명령을 실행한 에이전트 자신이 stdout으로
+// 결과를 받으므로 라우팅이 필요 없다. 오버레이 드롭다운에 "이 세션"으로 보인다.
+func SelfAgents() []*state.Agent {
+	return []*state.Agent{{ID: "self", Kind: "이 세션", State: state.StateWorking,
+		Tmux: state.TmuxRef{Session: "지금 대화 중인 에이전트"}}}
+}

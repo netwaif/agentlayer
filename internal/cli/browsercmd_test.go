@@ -219,15 +219,21 @@ func TestRunBrowserMCPPrintsCommands(t *testing.T) {
 }
 
 func TestParsePickArgsAgent(t *testing.T) {
-	id, err := parsePickArgs([]string{"--agent", "claude-7"})
-	if err != nil || id != "claude-7" {
-		t.Fatalf("got %q %v", id, err)
+	id, once, err := parsePickArgs([]string{"--agent", "claude-7"})
+	if err != nil || id != "claude-7" || once {
+		t.Fatalf("got %q %v %v", id, once, err)
 	}
-	if id, err := parsePickArgs(nil); err != nil || id != "" {
-		t.Fatalf("인자 없음: %q %v", id, err)
+	if id, once, err := parsePickArgs(nil); err != nil || id != "" || once {
+		t.Fatalf("인자 없음: %q %v %v", id, once, err)
 	}
-	if _, err := parsePickArgs([]string{"extra"}); err == nil {
+	if _, _, err := parsePickArgs([]string{"extra"}); err == nil {
 		t.Error("잉여 인자는 에러")
+	}
+	if _, once, err := parsePickArgs([]string{"--once"}); err != nil || !once {
+		t.Errorf("--once: %v %v", once, err)
+	}
+	if _, _, err := parsePickArgs([]string{"--once", "--agent", "x"}); err == nil {
+		t.Error("--once와 --agent 동시 지정은 에러")
 	}
 }
 

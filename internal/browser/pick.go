@@ -128,6 +128,8 @@ type pickSubmit struct {
 }
 
 // RunPick은 검사 모드 → 클릭 대기 → 오버레이 입력 → 저장·전송 한 사이클.
+// send가 nil이면 pane 전송 대신 요청 한 줄을 out에 그대로 쓴다(에이전트가 자기 Bash로
+// `pick --once`를 실행해 결과를 받는 경로).
 func RunPick(page *rod.Page, agents []*state.Agent, lsof RunLsof, stateDir string,
 	send func(paneID, text string) error, out io.Writer) error {
 
@@ -268,6 +270,10 @@ func RunPick(page *rod.Page, agents []*state.Agent, lsof RunLsof, stateDir strin
 		return err
 	}
 	line := PromptLine(sub.Text, md, png)
+	if send == nil { // --once: 명령을 실행한 에이전트가 stdout으로 직접 받는다
+		fmt.Fprintln(out, line)
+		return nil
+	}
 	if err := send(target.Tmux.PaneID, line); err != nil {
 		return err
 	}

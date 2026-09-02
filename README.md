@@ -140,6 +140,7 @@ agentlayer wt clean auth-api                    # 보존 우선 정리
 ```bash
 agentlayer browser                 # 전용 브라우저 기동 (떠 있으면 기존 인스턴스에 attach)
 agentlayer browser pick [--agent <id>]   # 활성 탭에서 요소 클릭 → 오버레이에 지시 입력 → 담당 에이전트 pane으로 한 줄 전송 (연속 지목, Ctrl-C 종료)
+agentlayer browser pick --once           # 한 번 지목하고 요청 한 줄을 stdout으로 — 에이전트가 "브라우저에서 지목할게"를 받아 직접 실행하는 경로
 agentlayer browser open <url>      # 전용 브라우저에 탭 열기 (터미널 링크 클릭을 여기로 보내는 진입점)
 agentlayer browser shot [url] [--send] [--notify] [--agent <id>]   # 전체 페이지 스크린샷 — 경로 출력, --send면 담당 에이전트 pane, --notify면 알림 웹훅(폰 Discord)으로 이미지 전송
 agentlayer browser errors [--send]       # 콘솔 에러·JS 예외를 Enter까지 수집해 덤프(stdout+파일), --send면 pane 전송
@@ -150,6 +151,10 @@ agentlayer browser cookies clear <도메인...>    # 전용 프로필에서 지�
 agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mcp를 이 브라우저로 붙이는 설치 명령 출력
 ```
 
+- **말로 시켜도 된다**: 지금 대화 중인 세션이 대상이면 관제탑을 열 필요 없이
+  "브라우저에서 지목할게"·"스크린샷 확인해봐"라고 하면 된다. 스킬(`agentlayer init`이
+  설치)이 `pick --once`·`shot`을 대신 실행하고 결과를 읽는다. 관제탑 키는 여러
+  에이전트 중 대상을 고를 때 쓴다
 - **관제탑에서 키 하나로**: 에이전트 행을 고르고 `b`(요소 지목)·`s`(활성 탭
   캡처)를 누르면 그 에이전트 pane으로 바로 간다(후보 선택 없음). 에이전트
   폴더 아래에서 dev 서버가 listen 중이면 행 끝에 `🌐:3000` 뱃지가 붙는다. 처음

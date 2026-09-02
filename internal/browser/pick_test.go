@@ -163,3 +163,46 @@ func TestElementShotCapturesScrolledElement(t *testing.T) {
 		t.Errorf("가운데 픽셀이 빨강이 아님: %d %d %d — 다른 영역을 잘랐다", r>>8, g>>8, bl>>8)
 	}
 }
+
+// --once(send nil): 제출 한 줄이 pane이 아니라 out에 그대로 나와야 한다 —
+// 에이전트가 "브라우저에서 지목할게"를 받아 자기 Bash로 실행하는 경로.
+func TestRunPickOnceWritesLineToOut(t *testing.T) {
+	p := headlessPage(t, `<button id="b">저장</button>`)
+	pt := p.MustElement("#b").MustShape().OnePointInside()
+	var out bytes.Buffer
+	dir := t.TempDir()
+	errCh := make(chan error, 1)
+	go func() { errCh <- RunPick(p, SelfAgents(), noLsof, dir, nil, &out) }()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		if res, err := p.Eval(`() => !!document.getElementById('agentlayer-overlay')`); err == nil && res.Value.Bool() {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("오버레이가 뜨지 않음")
+		}
+		_ = p.Mouse.MoveTo(*pt)
+		_ = p.Mouse.Click(proto.InputMouseButtonLeft, 1)
+		time.Sleep(100 * time.Millisecond)
+	}
+	p.MustEval(`() => {
+		const root = document.getElementById('agentlayer-overlay').shadowRoot;
+		root.querySelector('input').value = '파랗게';
+		root.querySelector('input').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter'}));
+	}`)
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("once 모드 실패: %v\n%s", err, out.String())
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("제출 후에도 RunPick이 반환하지 않음")
+	}
+	got := out.String()
+	if !strings.Contains(got, "브라우저 요소 수정 요청: \"파랗게\"") || !strings.Contains(got, dir) {
+		t.Errorf("요청 한 줄(지시+md 경로)이 out에 있어야 함: %q", got)
+	}
+	if strings.Contains(got, "에게 전송") {
+		t.Errorf("once 모드는 pane 전송 문구가 없어야 함: %q", got)
+	}
+}

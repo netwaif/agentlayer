@@ -71,17 +71,21 @@ func browserLaunch(out io.Writer) error {
 }
 
 // parsePickArgs는 pick의 --agent(대상 고정)를 파싱한다. 위치 인자는 없다.
-func parsePickArgs(args []string) (string, error) {
+func parsePickArgs(args []string) (agentID string, once bool, err error) {
 	fs := flag.NewFlagSet("pick", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	agent := fs.String("agent", "", "전송 대상 에이전트 ID 고정 (후보 선택 생략)")
+	onceF := fs.Bool("once", false, "한 번만 지목하고 결과 한 줄을 stdout으로 (에이전트가 직접 실행)")
 	if err := fs.Parse(args); err != nil {
-		return "", err
+		return "", false, err
 	}
 	if fs.NArg() > 0 {
-		return "", fmt.Errorf("잉여 인자 %q — 사용법: agentlayer browser pick [--agent <id>]", fs.Args())
+		return "", false, fmt.Errorf("잉여 인자 %q — 사용법: agentlayer browser pick [--agent <id>] [--once]", fs.Args())
 	}
-	return *agent, nil
+	if *onceF && *agent != "" {
+		return "", false, fmt.Errorf("--once는 --agent와 같이 쓸 수 없습니다 (결과는 실행한 쪽이 받는다)")
+	}
+	return *agent, *onceF, nil
 }
 
 // FilterAgentByID는 ID가 일치하는 에이전트 하나만 담은 목록. 관제탑에서 행을
@@ -99,15 +103,26 @@ func FilterAgentByID(agents []*state.Agent, id string) ([]*state.Agent, error) {
 // RunPick이 탭 닫힘·페이지 이탈 시 에러를 반환하므로 무한 블록은 없다.
 // --agent가 있으면 그 에이전트만 후보라 오버레이 선택이 곧바로 확정된다.
 func browserPick(out io.Writer, args []string) error {
-	agentID, err := parsePickArgs(args)
-	if err != nil {
-		return err
-	}
-	st, err := state.NewStore(state.DefaultDir())
+	agentID, once, err := parsePickArgs(args)
 	if err != nil {
 		return err
 	}
 	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
+	if err != nil {
+		return err
+	}
+	if once { // 에이전트가 자기 Bash로 실행 — pane 전송 없이 한 줄을 stdout으로, 한 번만
+		page, err := browser.ActivePage(b)
+		if err != nil {
+			return err
+		}
+		err = browser.RunPick(page, browser.SelfAgents(), browser.ExecLsof, state.DefaultDir(), nil, out)
+		if errors.Is(err, browser.ErrPickCancelled) {
+			return fmt.Errorf("사용자가 지목을 취소했습니다")
+		}
+		return err
+	}
+	st, err := state.NewStore(state.DefaultDir())
 	if err != nil {
 		return err
 	}
