@@ -77,8 +77,11 @@ func DevServers(run RunLsof, wtPaths map[string]string) []DevServer {
 
 // OpenPreview는 dev 서버를 새 창으로 열고 제목에 ⎇브랜치를 새긴다.
 func OpenPreview(b *rod.Browser, s DevServer) error {
+	// worktree(⎇브랜치) 프리뷰는 같은 창의 탭으로 — 창 3개가 화면을 덮으면 터미널까지 가려
+	// 촬영·비교가 오히려 어렵다(2026-09-02 사용자 판단). 탭 제목의 ⎇로 구분하고, 관제탑
+	// b/s는 그 worker의 탭을 앞으로 가져온다. 일반 폴더의 첫 프리뷰만 새 창.
 	page, err := b.Page(proto.TargetCreateTarget{
-		URL: fmt.Sprintf("http://localhost:%d", s.Port), NewWindow: true,
+		URL: fmt.Sprintf("http://localhost:%d", s.Port), NewWindow: s.Branch == "",
 	})
 	if err != nil {
 		return err
@@ -89,65 +92,6 @@ func OpenPreview(b *rod.Browser, s DevServer) error {
 	if s.Branch == "" {
 		return nil // worktree가 아닌 일반 폴더 — 제목은 그대로
 	}
-	if _, err = page.Eval(`(b) => { document.title = '⎇' + b + ' — ' + document.title }`, s.Branch); err != nil {
-		return err
-	}
-	tilePreviewWindow(b, page)
-	return nil
-}
-
-// previewCols는 ⎇브랜치 프리뷰 창을 가로로 몇 칸에 나눠 배치할지 — A/B 비교는 보통 2~3개.
-const previewCols = 3
-
-// TileBounds는 n번째(0부터) 프리뷰 창의 위치·크기. 가로 previewCols칸, 넘치면 다음 줄.
-func TileBounds(availLeft, availTop, availW, availH, n, cols int) (left, top, w, h int) {
-	if cols < 1 {
-		cols = 1
-	}
-	w = availW / cols
-	rows := 1
-	if n >= cols {
-		rows = 2
-	}
-	h = availH / rows
-	left = availLeft + (n%cols)*w
-	top = availTop + (n/cols)*h
-	return
-}
-
-// tilePreviewWindow는 ⎇ 제목이 붙은 다른 프리뷰 창 수를 세어 새 창을 빈 칸에 놓는다 —
-// worker 3개가 띄운 서버가 겹치지 않고 나란히 뜨게(사람이 창을 옮기지 않아도 비교 가능).
-// 실패는 조용히 무시(배치는 보조 기능).
-func tilePreviewWindow(b *rod.Browser, page *rod.Page) {
-	win, err := proto.BrowserGetWindowForTarget{TargetID: page.TargetID}.Call(b)
-	if err != nil {
-		return
-	}
-	others := map[proto.BrowserWindowID]bool{}
-	if pages, err := b.Pages(); err == nil {
-		for _, p := range pages {
-			if p.TargetID == page.TargetID {
-				continue
-			}
-			info, err := p.Info()
-			if err != nil || !strings.HasPrefix(info.Title, "⎇") {
-				continue
-			}
-			if w, err := (proto.BrowserGetWindowForTarget{TargetID: p.TargetID}).Call(b); err == nil && w.WindowID != win.WindowID {
-				others[w.WindowID] = true
-			}
-		}
-	}
-	res, err := page.Eval(`() => [screen.availLeft, screen.availTop, screen.availWidth, screen.availHeight]`)
-	if err != nil {
-		return
-	}
-	a := res.Value.Arr()
-	if len(a) != 4 {
-		return
-	}
-	left, top, w, h := TileBounds(a[0].Int(), a[1].Int(), a[2].Int(), a[3].Int(), len(others), previewCols)
-	_ = proto.BrowserSetWindowBounds{WindowID: win.WindowID, Bounds: &proto.BrowserBounds{
-		Left: &left, Top: &top, Width: &w, Height: &h, WindowState: proto.BrowserWindowStateNormal,
-	}}.Call(b)
+	_, err = page.Eval(`(b) => { document.title = '⎇' + b + ' — ' + document.title }`, s.Branch)
+	return err
 }
