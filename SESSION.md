@@ -15,16 +15,16 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**GitHub 릴리즈 = v1.2.5**(시청자 설치본). **로컬 main은 origin 대비 18커밋 앞섬(미푸시)**, 그 위 브랜치 `browser-mcp`(b1ae112, main 미머지, 24커밋) — 브라우저 "명령 0개"(init MCP 자동등록·mcp-serve·관제탑 b/s/p·스킬 절·iTerm2 감지) + 팝업 리사이즈 재오픈 + hook 자동 프리뷰(preview_auto) + 테마(다크 grayscale) + pick 복귀/요소 캡처 레티나 수정 + cookies 프로필 자동 선택까지 구현·실검증. 로컬 make install = b1ae112. **영상 제작 단계 진입**: 시연 4종(A·B·C·E) 계획 `docs/demos/2026-09-02-browser-video-demos.md`, 시연 저장소 `~/ai-folder/demo/browser-demo`, x.com 쿠키 가져오기 완료(로그인 확인). 워킹트리 클린. 사용자 환경: 전용 Chrome 9222, 3사 MCP 등록, iTerm2 Smart Selection 규칙, `~/.tmux.conf` bind+client-resized 훅(백업 `~/.tmux.conf.bak-20260902-110420`).
+**GitHub 릴리즈 = v1.2.5**. 로컬 main은 origin 대비 18커밋 앞섬(미푸시), 그 위 브랜치 `browser-mcp` 3b54684(main 미머지, 43커밋). 2026-09-02~03 촬영 중 버그 창구로 19커밋 추가: cookies clear/list·스킬 경로(쿠키·지목·스크린샷·머지·폰 전송을 말로)·`pick --once`·ActivePage 내부탭 제외·관제탑 자동프리뷰 제거·hook ⎇제목·Capturing 잠금 정리·크래시 탭 복원 끔·mcp-serve 지연 기동(프록시)·worktree 프리뷰는 탭(⎇, 리로드 유지)·dev 서버 HTTP 판정·관제탑 b/s는 그 에이전트 탭. 로컬 make install = 3b54684, `agentlayer init` 재실행됨(스킬 갱신). **촬영 상태**: A 성공(`~/ai-folder/youtube/AgentBrowser/footage/A-기본루프.mov`), B 실패 후 상태 정리 완료(worktree·브랜치·메타·tmux 창·8101 서버·잡탭·seen·DEAD 레코드 12개 삭제) → B 재촬영 대기. 순서표 정본 = 타워 세션 아티팩트(https://claude.ai/code/artifact/64b97f91-d0ae-4539-b14e-589fcf67efa2). demo-a(8100 서버, master 29499ba 주황 CTA 커밋됨) 살아 있음.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **촬영 중 버그 창구** — 사용자가 증상 붙여넣으면 `browser-mcp` 브랜치에서 수정 → `make install` 즉시 반영. 시연 문서 `docs/demos/2026-09-02-browser-video-demos.md` 기준(영상 컨트롤 타워 세션은 별도)
-2. 촬영 끝나면 `browser-mcp` → main 머지 → push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영(릴리즈 후). 릴리즈 단위 = 브라우저 전부(5종+cookies+open/notify+MCP 자동등록+관제탑 키+팝업 재오픈+자동 프리뷰)
-3. 촬영 뒤 정리: 전용 Chrome 프로필의 x.com 쿠키는 그대로 둠(사용자 판단), `~/.local/state/agentlayer/preview-seen.json`·`picks/` 정리 선택
+1. **B 재촬영 버그 창구** — 타워 세션(agentbrowser-11, `~/ai-folder/youtube/AgentBrowser`)이 순서표 관리, 이 세션은 코드. B 전제(타워에 전달됨): demo-b 새로 띄움 / B1 프롬프트를 "worker는 편집+커밋만, 서버는 코디네이터가 worktree 3개에 8101·8102·8103으로 띄움"으로(codex 샌드박스는 백그라운드 서버를 못 남김·worker가 자기 탭을 열면 중복 탭) / gemini(agy) worker는 폴더 신뢰 창을 사람이 눌러야 함(미해결, ~/.antigravity에 설정 못 찾음)
+2. 촬영 끝나면 `browser-mcp` → main 머지 → push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영. 릴리즈 노트에 오늘 19커밋 포함
+3. 촬영 뒤 정리: x.com 쿠키는 `cookies clear x.com`(순서표 E 마지막 컷), `~/.local/state/agentlayer/picks/` 정리 선택, `~/.local/state/agentlayer/worktrees/demo.review.diff`·search-* 메타(memo 데모) 정리 선택
 4. 대시보드 채널 옛 핑 메시지 Discord 수동 삭제(567c2c9)
-5. 보류 아이디어: Termius용 좁은 폭 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정, provider 게이지 텍스트화, 브라우저 프로필 다중화, iTerm2 규칙 자동 주입 `init --iterm2`, 원격 스트리밍(범위 밖), autopreview 포트 범위 제외 옵션(실사용 피드백 뒤)
+5. 보류 아이디어: agy 폴더 신뢰 자동화, `agentlayer status --prune`(DEAD 즉시 삭제 명령, 지금은 24h 보존), Termius 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정, provider 게이지 텍스트화, 브라우저 프로필 다중화, `init --iterm2`, autopreview 포트 제외 옵션
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -124,6 +124,12 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-02 pick 복귀 경로: 터미널 esc/q/Ctrl-C(raw stdin 감시) + 오버레이 취소 시 루프 종료(ErrPickCancelled)
 - 2026-09-02 cookies import는 Chrome 프로필 자동 선택(도메인 쿠키 최다, 동률 last_used, --profile 지정). 이 Mac의 Default는 다른 계정, 사용자 계정은 Profile 1(netwaif)
 - 2026-09-02 영상 시연 선정: A 기본 루프·B 3사 A/B(orchestration)·C 디스코드 원격(shot --notify)·E x.com 로그인 소식 수집. D(코덱스 비포/애프터)는 매뉴얼 내용이라 제외
+- 2026-09-02 cookies clear/list 추가(사용자: 실사용에도 필요). 용어 합의: "에이전트 브라우저"(browser-profile Chrome) vs "실사용 브라우저". import=실사용→에이전트 복사(읽기만), list/clear=에이전트만
+- 2026-09-02 쿠키·지목·스크린샷·머지·폰 전송은 관제탑 키가 아니라 **스킬 경로**(말로 시키면 에이전트가 명령 실행). `pick --once`(RunPick send=nil→stdout, SelfAgents 스텁). 관제탑 b/s는 여러 에이전트 중 고를 때만. 시연 A4(스크린샷 확인) 컷은 A3와 중복이라 삭제
+- 2026-09-02 관제탑 쪽 자동 프리뷰 제거 — 팝업이 매번 새 프로세스라 인메모리 seen이 비어 hasTab→Connect·Activate로 브라우저가 튀어나옴. hook 경로만 정본. hook은 wt 메타로 ⎇브랜치 결합(PreviewPaths)
+- 2026-09-02 ActivePage: chrome://newtab 등 내부 탭 제외, 포커스>보임>첫 웹 탭. 촬영 중 pick이 빈 새 탭에 검사 모드 건 사고
+- 2026-09-02 모니터 안 꺼짐 원인 = MCP(puppeteer) 스크린샷이 남기는 Chrome "Capturing" NoDisplaySleep 잠금(실측 7h14m). 같은 페이지 캡처 완료 시 풀림 → hook이 감지해 탭마다 1×1 캡처(ReleaseCaptures, 30s 스로틀). 브라우저 튀어나옴 원인 = mcp-serve가 세션 시작마다 Chrome 기동 → stdio 프록시로 첫 tools/call에서만 기동(chrome-devtools-mcp 지연 연결 실측) + pkill 뒤 크래시 탭 복원(exit_type Normal·restore_on_startup 5)
+- 2026-09-03 worktree 프리뷰 창 3개 타일 배치(f63604d)는 사용자 판단으로 철회(터미널 덮음) → 같은 창의 탭(⎇ 제목, 리로드 유지 MarkBranch). B 실패 원인 3개: codex 샌드박스가 백그라운드 서버 못 남김(탭 없음), claude worker가 자기 탭(127.0.0.1:8101)을 열어 프리뷰 탭과 중복, gemini(agy) 내부 포트 51871이 dev 서버로 잡힘 → HTTP 판정(text/html·<400) 추가. B1은 코디네이터가 서버를 띄우는 구성으로 변경 권고
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -229,3 +235,14 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - `docs/demos/2026-09-02-browser-video-demos.md` 시연 4종 계획(프롬프트·키·기대 화면·리스크)
 - 외부: `~/ai-folder/demo/browser-demo/`(index.html·CLAUDE.md·SESSION.md, git master e1e2756) 시연 저장소
 - 시스템 상태 추가: `~/.tmux.conf` bind-key a에 -e AGENTLAYER_POPUP=1 + set-hook client-resized(백업 .bak-20260902-110420), `~/.local/state/agentlayer/preview-seen.json`·`popup.json`(팝업 열려 있을 때만), 전용 프로필 x.com 로그인 쿠키 16개(Profile 1에서), 브랜치 `browser-mcp` b1ae112
+- `internal/browser/cookies.go` selectCookies·borrowPage·ClearCookies·FormatCookieList·ListCookies, cookies_test.go(+4; TestClearCookiesIntegration headless)
+- `internal/browser/pick.go` ActivePage(포커스>보임>웹)·IsWebURL·RunPick(send nil→stdout), `route.go` SelfAgents, pick_test.go(+3)
+- `internal/browser/capturelock.go` ParseCaptureLocks·ChromePID·RunPmsetAssertions·HasCaptureLock·ReleaseCaptures·ThrottleOK, capturelock_test.go(3)
+- `internal/browser/theme.go` ensurePrefsTheme에 exit_type Normal·exited_cleanly·session.restore_on_startup=5, theme_test.go(+1); `instance.go` IsUp
+- `internal/browser/preview.go` OpenPreview(NewWindow = Branch=="")·IsHTMLServer·FilterHTML·MarkBranch(addScriptToEvaluateOnNewDocument), preview_test.go(+2)
+- `internal/cli/browsercmd.go` browserCookiesClear/List·parsePickArgs(--once)·browserPick once 분기·pageForAgents(--agent면 그 에이전트 dev 서버 탭)·browserMCPServe 프록시(IsMCPToolCall, 첫 tools/call에 Connect)·browserAutoPreview(PreviewPaths·FilterHTML·branchByPort·MarkBranch·Capturing 정리), previewpaths_test.go, browsercmd_test.go(+2)
+- `internal/cli/orchestration_skill.md` 6절: 지목·스크린샷·폰 전송·쿠키 문단, 5절: worker 명시 시 `wt merge --yes`; description 트리거 6개; orchskill_test.go
+- `internal/ui/model.go` autoPreview·seenServers·hasTab·autoPreviewCmd 삭제, devScan에 FilterHTML; model_test.go TestDevServersMsgOnlyUpdatesBadge
+- `README.md` cookies list/clear·말로 시키기·pick --once·Capturing 정리 문단
+- 외부: `~/ai-folder/youtube/AgentBrowser/handoff-agentlayer-browser-2026-09-02.md`(핸드오프, CLI 정본은 README), 순서표 아티팩트 64b97f91, footage/A-기본루프.mov
+- 시스템 상태: `~/.claude/skills/orchestration/SKILL.md` 갱신(init), `~/.local/state/agentlayer/capture-janitor.throttle`, browser-profile Preferences exit_type Normal, agents/ DEAD 12개 삭제(2026-09-03), 브랜치 `browser-mcp` 3b54684
