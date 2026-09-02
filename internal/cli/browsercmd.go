@@ -36,7 +36,7 @@ func RunBrowser(out io.Writer, args []string) error {
 	case "":
 		return browserLaunch(out)
 	case "pick":
-		return browserPick(out)
+		return browserPick(out, args)
 	case "shot":
 		return browserShot(out, args)
 	case "errors":
@@ -65,9 +65,39 @@ func browserLaunch(out io.Writer) error {
 	return nil
 }
 
+// parsePickArgs는 pick의 --agent(대상 고정)를 파싱한다. 위치 인자는 없다.
+func parsePickArgs(args []string) (string, error) {
+	fs := flag.NewFlagSet("pick", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	agent := fs.String("agent", "", "전송 대상 에이전트 ID 고정 (후보 선택 생략)")
+	if err := fs.Parse(args); err != nil {
+		return "", err
+	}
+	if fs.NArg() > 0 {
+		return "", fmt.Errorf("잉여 인자 %q — 사용법: agentlayer browser pick [--agent <id>]", fs.Args())
+	}
+	return *agent, nil
+}
+
+// FilterAgentByID는 ID가 일치하는 에이전트 하나만 담은 목록. 관제탑에서 행을
+// 고르고 b/s를 눌렀을 때 라우팅·후보 선택을 건너뛰는 용도.
+func FilterAgentByID(agents []*state.Agent, id string) ([]*state.Agent, error) {
+	for _, a := range agents {
+		if a.ID == id {
+			return []*state.Agent{a}, nil
+		}
+	}
+	return nil, fmt.Errorf("에이전트 %q가 없습니다 (agentlayer status 확인)", id)
+}
+
 // browserPick은 활성 탭에서 요소 지목 사이클을 연속으로 돈다.
 // RunPick이 탭 닫힘·페이지 이탈 시 에러를 반환하므로 무한 블록은 없다.
-func browserPick(out io.Writer) error {
+// --agent가 있으면 그 에이전트만 후보라 오버레이 선택이 곧바로 확정된다.
+func browserPick(out io.Writer, args []string) error {
+	agentID, err := parsePickArgs(args)
+	if err != nil {
+		return err
+	}
 	st, err := state.NewStore(state.DefaultDir())
 	if err != nil {
 		return err
@@ -79,6 +109,11 @@ func browserPick(out io.Writer) error {
 	agents, err := st.List()
 	if err != nil {
 		return err
+	}
+	if agentID != "" {
+		if agents, err = FilterAgentByID(agents, agentID); err != nil {
+			return err
+		}
 	}
 	if len(agents) == 0 {
 		return fmt.Errorf("등록된 에이전트가 없습니다 (agentlayer status 확인)")
@@ -96,14 +131,12 @@ func browserPick(out io.Writer) error {
 	}
 }
 
-// parseShotArgs는 shot의 url·--send를 인자 위치와 무관하게 파싱한다.
-// Go flag는 첫 비플래그 인자에서 멈추므로 `shot <url> --send`가 --send를
-// 조용히 삼키지 않게, 위치 인자를 걷어내며 끝까지 재파싱한다.
 // shotOpts는 shot의 인자. --send는 에이전트 pane, --notify는 알림 웹훅(폰 Discord).
 type shotOpts struct {
 	URL    string
 	Send   bool
 	Notify bool
+	Agent  string // --send 대상 고정 (관제탑 s 키)
 }
 
 func parseShotArgs(args []string) (shotOpts, error) {
@@ -112,6 +145,7 @@ func parseShotArgs(args []string) (shotOpts, error) {
 	var o shotOpts
 	fs.BoolVar(&o.Send, "send", false, "에이전트 pane으로 경로 전송")
 	fs.BoolVar(&o.Notify, "notify", false, "알림 웹훅으로 이미지 전송")
+	fs.StringVar(&o.Agent, "agent", "", "--send 대상 에이전트 ID 고정")
 	var rest []string
 	for {
 		if err := fs.Parse(args); err != nil {
@@ -174,7 +208,7 @@ func chooseAgent(cands []*state.Agent, in io.Reader, out io.Writer) (*state.Agen
 // sendToAgent는 shot/errors 공통의 --send 꼬리 — 레지스트리에서 페이지 URL로
 // 후보를 좁히고(복수면 chooseAgent 선택) 한 줄을 pane으로 보낸다.
 // makeLine은 페이지 URL을 받아 전송할 한 줄을 만든다.
-func sendToAgent(out io.Writer, in io.Reader, page *rod.Page, makeLine func(pageURL string) string) error {
+func sendToAgent(out io.Writer, in io.Reader, page *rod.Page, agentID string, makeLine func(pageURL string) string) error {
 	st, err := state.NewStore(state.DefaultDir())
 	if err != nil {
 		return err
@@ -187,7 +221,14 @@ func sendToAgent(out io.Writer, in io.Reader, page *rod.Page, makeLine func(page
 	if err != nil {
 		return err
 	}
-	cands := browser.Candidates(agents, info.URL, browser.ExecLsof)
+	var cands []*state.Agent
+	if agentID != "" {
+		if cands, err = FilterAgentByID(agents, agentID); err != nil {
+			return err
+		}
+	} else {
+		cands = browser.Candidates(agents, info.URL, browser.ExecLsof)
+	}
 	if len(cands) == 0 {
 		return fmt.Errorf("전송할 에이전트가 없습니다 (agentlayer status 확인)")
 	}
@@ -239,7 +280,7 @@ func browserErrors(out io.Writer, args []string) error {
 	if !send {
 		return nil
 	}
-	return sendToAgent(out, os.Stdin, page, func(pageURL string) string {
+	return sendToAgent(out, os.Stdin, page, "", func(pageURL string) string {
 		return fmt.Sprintf("콘솔 에러 로그 확인해줘: %s (페이지: %s)", path, pageURL)
 	})
 }
@@ -349,7 +390,7 @@ func browserShot(out io.Writer, args []string) error {
 	if !o.Send {
 		return nil
 	}
-	return sendToAgent(out, os.Stdin, page, func(pageURL string) string {
+	return sendToAgent(out, os.Stdin, page, o.Agent, func(pageURL string) string {
 		return fmt.Sprintf("브라우저 스크린샷 확인해줘: %s (페이지: %s)", path, pageURL)
 	})
 }

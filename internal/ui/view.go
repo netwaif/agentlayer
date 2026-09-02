@@ -516,6 +516,9 @@ func (m Model) viewBody() string {
 			if badge := m.ctxBadgePlain(a); badge != "" {
 				rest += " " + badge
 			}
+			if dev := m.devBadge(a); dev != "" {
+				rest += " " + dev
+			}
 			used := 2 + runewidth.StringWidth(st) + runewidth.StringWidth(rest)
 			width := m.width
 			if width < used+1 {
@@ -540,6 +543,9 @@ func (m Model) viewBody() string {
 		}
 		if badge := m.ctxBadge(a); badge != "" {
 			line += " " + badge
+		}
+		if dev := m.devBadge(a); dev != "" {
+			line += " " + styleTitle.Render(dev)
 		}
 		rows = append(rows, line)
 	}
@@ -608,7 +614,8 @@ func helpLine(items ...[2]string) string {
 	if len(items) == 0 {
 		items = [][2]string{
 			{"j/k", "이동"}, {"enter", "점프+읽음"}, {"o", "읽음"}, {"i", "상세"},
-			{"g", "git"}, {"u", "사용량"}, {"W", "전체기상"}, {"C", "전체마감"},
+			{"g", "git"}, {"b", "지목"}, {"s", "캡처"}, {"p", "프리뷰"},
+			{"u", "사용량"}, {"W", "전체기상"}, {"C", "전체마감"},
 			{"B", "전체지시"}, {"r", "새로고침"}, {"q", "종료"},
 		}
 	}

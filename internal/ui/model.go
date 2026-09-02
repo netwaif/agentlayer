@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/netwaif/agentlayer/internal/browser"
 	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/scan"
@@ -62,6 +65,23 @@ type jumpDoneMsg struct{ err error }
 // gitDoneMsg는 lazygit에서 돌아온 뒤 새로고침 신호.
 type gitDoneMsg struct{ err error }
 
+// browserDoneMsg는 browser pick/shot(ExecProcess)에서 돌아온 신호.
+type browserDoneMsg struct{ err error }
+
+// devTickMsg는 dev 서버 스캔 틱(10s) — lsof 전수 스캔이라 목록 폴링보다 느리게.
+type devTickMsg time.Time
+
+// devServersMsg는 스캔 결과.
+type devServersMsg []browser.DevServer
+
+// noticeMsg는 비동기 작업의 한 줄 안내(에러면 err).
+type noticeMsg struct {
+	text string
+	err  error
+}
+
+const devScanInterval = 10 * time.Second
+
 // attachDoneMsg는 tmux attach(밖에서 enter)에서 detach로 돌아온 신호.
 type attachDoneMsg struct{ err error }
 
@@ -73,34 +93,39 @@ type previewMsg struct {
 
 // Model은 TUI 상태.
 type Model struct {
-	store         *state.Store
-	tm            tmuxx.Tmux
-	agents        []*state.Agent
-	cursor        int
-	now           time.Time
-	width         int
-	height        int
-	err           error
-	showUsage     bool            // u 키: 사용량 전용 뷰
-	showInfo      bool            // i 키: 선택 에이전트 상세 카드
-	infoText      string          // 상세 카드 렌더 결과
-	pendingCmd    string          // "wake"|"close"|"resume"|"broadcast": y 확인 대기 중
-	pendingResume *state.Agent    // pendingCmd=="resume"일 때 대상
-	broadcastText string          // pendingCmd=="broadcast"일 때 보낼 메시지
-	inputMode     bool            // B 키: 전체지시 메시지 입력 중
-	input         textinput.Model // 입력 위젯 (커서 이동·중간 편집·붙여넣기)
-	notice        string          // 하단 안내줄 (에러 아님)
-	insideTmux    bool            // false면 enter가 점프 대신 attach (tmux 밖 ssh 실행 등)
-	preview         string        // 선택 pane 화면 미리보기
+	store           *state.Store
+	tm              tmuxx.Tmux
+	agents          []*state.Agent
+	cursor          int
+	now             time.Time
+	width           int
+	height          int
+	err             error
+	showUsage       bool            // u 키: 사용량 전용 뷰
+	showInfo        bool            // i 키: 선택 에이전트 상세 카드
+	infoText        string          // 상세 카드 렌더 결과
+	pendingCmd      string          // "wake"|"close"|"resume"|"broadcast": y 확인 대기 중
+	pendingResume   *state.Agent    // pendingCmd=="resume"일 때 대상
+	broadcastText   string          // pendingCmd=="broadcast"일 때 보낼 메시지
+	inputMode       bool            // B 키: 전체지시 메시지 입력 중
+	input           textinput.Model // 입력 위젯 (커서 이동·중간 편집·붙여넣기)
+	notice          string          // 하단 안내줄 (에러 아님)
+	insideTmux      bool            // false면 enter가 점프 대신 attach (tmux 밖 ssh 실행 등)
+	preview         string          // 선택 pane 화면 미리보기
 	previewPane     string
 	previewInterval time.Duration // config preview_interval (기본 1s)
-	usagePay      *usage.Payload
-	ctx           map[string]usage.CtxInfo // 에이전트 ID → 모델·ctx%
-	wtBranch      map[string]string        // worktree 경로 → 브랜치
-	discordWired  map[string]bool          // CWD → Discord 연결 (⌁)
-	starterTasks  []starter.Task           // MultiAgent 활성 작업
-	defModels     map[string]string        // CLI별 기본 모델 설정
+	usagePay        *usage.Payload
+	ctx             map[string]usage.CtxInfo // 에이전트 ID → 모델·ctx%
+	wtBranch        map[string]string        // worktree 경로 → 브랜치
+	discordWired    map[string]bool          // CWD → Discord 연결 (⌁)
+	starterTasks    []starter.Task           // MultiAgent 활성 작업
+	defModels       map[string]string        // CLI별 기본 모델 설정
+	devServers      []browser.DevServer      // 에이전트 폴더 아래 listen 중인 dev 서버 (🌐 뱃지·p)
+	browserPort     int                      // 전용 Chrome CDP 포트 — dev 서버 목록에서 제외
 	// 주입점 (테스트용)
+	devScan       func(paths map[string]string) []browser.DevServer        // dev 서버 스캔
+	openPreview   func(servers []browser.DevServer) error                  // p: 프리뷰 창 열기
+	browserCmd    func(args ...string) tea.Cmd                             // b/s: agentlayer browser … 실행
 	spawnWindow   func(session, name, dir, command string) (string, error) // resume 창 생성
 	activeSession func() string                                            // 활성 클라이언트의 세션
 	hasSession    func(name string) bool                                   // 세션 생존 (완전일치)
@@ -127,15 +152,39 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 	return Model{store: st, tm: tm, now: time.Now(),
 		input:           ti,
 		previewInterval: cfg.PreviewTick(),
-		insideTmux:    os.Getenv("TMUX") != "",
-		spawnWindow:   tm.SpawnShellWindow,
-		activeSession: tm.ActiveSession,
-		hasSession:    tm.HasSession,
-		jumpPane:      tm.JumpToSessionPane,
+		browserPort:     cfg.BrowserPortOrDefault(),
+		insideTmux:      os.Getenv("TMUX") != "",
+		spawnWindow:     tm.SpawnShellWindow,
+		activeSession:   tm.ActiveSession,
+		hasSession:      tm.HasSession,
+		jumpPane:        tm.JumpToSessionPane,
 		sendAll: func(message string, handoffOnly bool) (int, int, error) {
 			return cli.SendAll(st, tm, message, handoffOnly)
 		},
 		coachRunner: usage.CoachRunner,
+		devScan: func(paths map[string]string) []browser.DevServer {
+			return browser.DevServers(browser.ExecLsof, paths)
+		},
+		openPreview: func(servers []browser.DevServer) error {
+			b, err := browser.Connect(state.DefaultDir(), cfg.BrowserPortOrDefault())
+			if err != nil {
+				return err
+			}
+			for _, s := range servers {
+				if err := browser.OpenPreview(b, s); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+		browserCmd: func(args ...string) tea.Cmd {
+			bin, err := os.Executable()
+			if err != nil {
+				bin = "agentlayer"
+			}
+			c := exec.Command(bin, append([]string{"browser"}, args[1:]...)...)
+			return tea.ExecProcess(c, func(err error) tea.Msg { return browserDoneMsg{err: err} })
+		},
 		snapshotDir: usage.SnapshotsDir(),
 		codexRoot:   usage.CodexSessionsRoot(),
 		geminiDir:   usage.GeminiDir(),
@@ -145,7 +194,60 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(m.refreshCmd(), tickCmd(), m.previewTickCmd(), m.ctxCmd(),
-		m.usageCacheCmd(), m.usageCmd(), usageTickCmd())
+		m.usageCacheCmd(), m.usageCmd(), usageTickCmd(), m.devScanCmd(), devTickCmd())
+}
+
+func devTickCmd() tea.Cmd {
+	return tea.Tick(devScanInterval, func(t time.Time) tea.Msg { return devTickMsg(t) })
+}
+
+// devScanCmd는 에이전트 폴더(+worktree 브랜치)를 기준으로 dev 서버를 찾는다.
+func (m Model) devScanCmd() tea.Cmd {
+	paths := map[string]string{}
+	for _, a := range m.agents {
+		if a.CWD != "" {
+			paths[a.CWD] = m.wtBranch[a.CWD]
+		}
+	}
+	scan := m.devScan
+	return func() tea.Msg {
+		if len(paths) == 0 || scan == nil {
+			return devServersMsg(nil)
+		}
+		return devServersMsg(scan(paths))
+	}
+}
+
+// serversFor는 에이전트 폴더 아래에서 listen 중인 dev 서버(포트 오름차순).
+func (m Model) serversFor(a *state.Agent) []browser.DevServer {
+	if a == nil || a.CWD == "" {
+		return nil
+	}
+	root := strings.TrimSuffix(a.CWD, "/")
+	var out []browser.DevServer
+	for _, s := range m.devServers {
+		if s.Port == m.browserPort {
+			continue // 전용 Chrome 자신
+		}
+		if s.CWD == root || strings.HasPrefix(s.CWD, root+"/") {
+			out = append(out, s)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
+	return out
+}
+
+// devBadge는 행 끝의 🌐:3000,:5173 뱃지 텍스트. 없으면 "".
+func (m Model) devBadge(a *state.Agent) string {
+	servers := m.serversFor(a)
+	if len(servers) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(servers))
+	for _, s := range servers {
+		parts = append(parts, ":"+strconv.Itoa(s.Port))
+	}
+	return "🌐" + strings.Join(parts, ",")
 }
 
 func (m Model) previewTickCmd() tea.Cmd {
@@ -379,6 +481,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.refreshCmd()
 
+	case browserDoneMsg:
+		// pick은 Ctrl-C로 끝나는 게 정상 흐름 — 에러로 띄우지 않는다
+		return m, m.refreshCmd()
+
+	case devTickMsg:
+		return m, tea.Batch(m.devScanCmd(), devTickCmd())
+
+	case devServersMsg:
+		m.devServers = []browser.DevServer(msg)
+		return m, nil
+
+	case noticeMsg:
+		if msg.err != nil {
+			m.err = msg.err
+		} else {
+			m.err = nil
+			m.notice = msg.text
+		}
+		return m, nil
+
 	case attachDoneMsg:
 		// detach로 복귀 — TUI는 계속, 상태만 새로고침
 		if msg.err != nil {
@@ -506,6 +628,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.ExecProcess(c, func(err error) tea.Msg { return gitDoneMsg{err: err} })
 			}
 			return m, nil
+		case "b": // 브라우저 요소 지목 → 선택 에이전트 pane으로 (후보 선택 없음)
+			if a := m.selected(); a != nil {
+				m.err = nil
+				return m, m.browserCmd("browser", "pick", "--agent", a.ID)
+			}
+			return m, nil
+		case "s": // 활성 탭 스크린샷 → 선택 에이전트 pane으로
+			if a := m.selected(); a != nil {
+				m.err = nil
+				return m, m.browserCmd("browser", "shot", "--send", "--agent", a.ID)
+			}
+			return m, nil
+		case "p": // 선택 에이전트 폴더의 dev 서버를 전용 브라우저 창으로
+			a := m.selected()
+			servers := m.serversFor(a)
+			if len(servers) == 0 {
+				m.notice = "이 에이전트 폴더에서 실행 중인 dev 서버가 없습니다 (10초마다 재탐색)"
+				return m, nil
+			}
+			open := m.openPreview
+			return m, func() tea.Msg {
+				if err := open(servers); err != nil {
+					return noticeMsg{err: err}
+				}
+				return noticeMsg{text: "프리뷰 열림: " + m.devBadge(a)}
+			}
 		case "i":
 			if m.showInfo {
 				m.showInfo = false

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/netwaif/agentlayer/internal/browser"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/usage"
@@ -559,5 +560,94 @@ func TestUsageCacheCmdNoCache(t *testing.T) {
 	msg, ok := m.usageCacheCmd()().(usageMsg)
 	if !ok || msg.payload != nil {
 		t.Fatal("캐시 없으면 nil payload usageMsg (기존 미수집 표시 유지)")
+	}
+}
+
+// ── 브라우저 키 (b 지목 · s 캡처 · p 프리뷰) ──────────────────────────
+
+func TestDevServerBadgeShownForAgentDir(t *testing.T) {
+	m := fixtureModel(t)
+	m.agents[0].CWD = "/w/app"
+	m.devServers = []browser.DevServer{{Port: 3000, CWD: "/w/app"}, {Port: 5173, CWD: "/w/app/web"}, {Port: 9999, CWD: "/elsewhere"}}
+	v := m.View()
+	if !strings.Contains(v, "🌐:3000,:5173") {
+		t.Errorf("dev 서버 뱃지가 있어야 함:\n%s", v)
+	}
+	if strings.Contains(v, ":9999") {
+		t.Errorf("다른 폴더 서버는 표시하면 안 됨:\n%s", v)
+	}
+}
+
+func TestPreviewKeyOpensSelectedAgentServers(t *testing.T) {
+	m := fixtureModel(t)
+	m.agents[0].CWD = "/w/app"
+	m.devServers = []browser.DevServer{{Port: 3000, CWD: "/w/app"}, {Port: 9999, CWD: "/elsewhere"}}
+	var got []browser.DevServer
+	m.openPreview = func(s []browser.DevServer) error { got = s; return nil }
+	next, cmd := m.Update(key("p"))
+	if cmd != nil {
+		if msg := cmd(); msg != nil {
+			next, _ = next.(Model).Update(msg)
+		}
+	}
+	if len(got) != 1 || got[0].Port != 3000 {
+		t.Fatalf("선택 에이전트 서버만 열어야 함: %v", got)
+	}
+	if n := next.(Model).notice; !strings.Contains(n, "3000") {
+		t.Errorf("열림 안내 없음: %q", n)
+	}
+}
+
+func TestPreviewKeyWithoutServerNotices(t *testing.T) {
+	m := fixtureModel(t)
+	m.agents[0].CWD = "/w/app"
+	called := false
+	m.openPreview = func(s []browser.DevServer) error { called = true; return nil }
+	next, _ := m.Update(key("p"))
+	if called {
+		t.Error("서버 없으면 열지 않아야 함")
+	}
+	if n := next.(Model).notice; !strings.Contains(n, "dev 서버") {
+		t.Errorf("안내 없음: %q", n)
+	}
+}
+
+func TestPickKeyRunsBrowserPickForSelected(t *testing.T) {
+	m := fixtureModel(t)
+	var got []string
+	m.browserCmd = func(args ...string) tea.Cmd { got = args; return nil }
+	m.Update(key("b"))
+	if strings.Join(got, " ") != "browser pick --agent claude-7" {
+		t.Errorf("args = %v", got)
+	}
+}
+
+func TestShotKeyRunsShotSendForSelected(t *testing.T) {
+	m := fixtureModel(t)
+	var got []string
+	m.browserCmd = func(args ...string) tea.Cmd { got = args; return nil }
+	m.Update(key("s"))
+	if strings.Join(got, " ") != "browser shot --send --agent claude-7" {
+		t.Errorf("args = %v", got)
+	}
+}
+
+func TestHelpLineListsBrowserKeys(t *testing.T) {
+	v := fixtureModel(t).View()
+	for _, k := range []string{"지목", "캡처", "프리뷰"} {
+		if !strings.Contains(v, k) {
+			t.Errorf("도움말에 %q 없음", k)
+		}
+	}
+}
+
+// 전용 Chrome의 CDP 포트는 dev 서버가 아니다 — Chrome cwd가 에이전트 폴더면 오탐된다.
+func TestDevServerBadgeExcludesBrowserPort(t *testing.T) {
+	m := fixtureModel(t)
+	m.agents[0].CWD = "/w/app"
+	m.browserPort = 9222
+	m.devServers = []browser.DevServer{{Port: 9222, CWD: "/w/app"}, {Port: 3000, CWD: "/w/app"}}
+	if v := m.View(); strings.Contains(v, ":9222") || !strings.Contains(v, "🌐:3000") {
+		t.Errorf("9222 제외·3000 표시여야 함:\n%s", v)
 	}
 }

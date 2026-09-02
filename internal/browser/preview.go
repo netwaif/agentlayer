@@ -86,6 +86,9 @@ func OpenPreview(b *rod.Browser, s DevServer) error {
 	if err := page.WaitLoad(); err != nil {
 		return err
 	}
+	if s.Branch == "" {
+		return nil // worktree가 아닌 일반 폴더 — 제목은 그대로
+	}
 	_, err = page.Eval(`(b) => { document.title = '⎇' + b + ' — ' + document.title }`, s.Branch)
 	return err
 }

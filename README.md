@@ -48,7 +48,7 @@ agentlayer는 tmux 설정을 자동으로 수정하지 않는다.
 ## 사용
 
 ```bash
-agentlayer            # TUI 관제탑 (j/k 이동, enter 점프+읽음, o 읽음, u 사용량 뷰, r 새로고침, q 종료)
+agentlayer            # TUI 관제탑 (j/k 이동, enter 점프+읽음, o 읽음, b 지목, s 캡처, p 프리뷰, u 사용량 뷰, r 새로고침, q 종료)
 agentlayer status     # plain 표 — SSH·스크립트용
 agentlayer status --json
 agentlayer card       # Discord 상태 카드 업서트 (주기 실행용) / --out은 JSON만
@@ -135,15 +135,20 @@ agentlayer wt clean auth-api                    # 보존 우선 정리
 
 ```bash
 agentlayer browser                 # 전용 브라우저 기동 (떠 있으면 기존 인스턴스에 attach)
-agentlayer browser pick            # 활성 탭에서 요소 클릭 → 오버레이에 지시 입력 → 담당 에이전트 pane으로 한 줄 전송 (연속 지목, Ctrl-C 종료)
+agentlayer browser pick [--agent <id>]   # 활성 탭에서 요소 클릭 → 오버레이에 지시 입력 → 담당 에이전트 pane으로 한 줄 전송 (연속 지목, Ctrl-C 종료)
 agentlayer browser open <url>      # 전용 브라우저에 탭 열기 (터미널 링크 클릭을 여기로 보내는 진입점)
-agentlayer browser shot [url] [--send] [--notify]   # 전체 페이지 스크린샷 — 경로 출력, --send면 담당 에이전트 pane, --notify면 알림 웹훅(폰 Discord)으로 이미지 전송
+agentlayer browser shot [url] [--send] [--notify] [--agent <id>]   # 전체 페이지 스크린샷 — 경로 출력, --send면 담당 에이전트 pane, --notify면 알림 웹훅(폰 Discord)으로 이미지 전송
 agentlayer browser errors [--send]       # 콘솔 에러·JS 예외를 Enter까지 수집해 덤프(stdout+파일), --send면 pane 전송
 agentlayer browser preview [포트...]     # worktree dev 서버(또는 지정 포트)를 브랜치 라벨(⎇) 창으로 열기
 agentlayer browser cookies import <도메인...>  # 실사용 크롬의 지정 도메인 쿠키만 골라 전용 프로필로 가져오기 (macOS)
 agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mcp를 이 브라우저로 붙이는 설치 명령 출력
 ```
 
+- **관제탑에서 키 하나로**: 에이전트 행을 고르고 `b`(요소 지목)·`s`(활성 탭
+  캡처)를 누르면 그 에이전트 pane으로 바로 간다(후보 선택 없음). 에이전트
+  폴더 아래에서 dev 서버가 listen 중이면 행 끝에 `🌐:3000` 뱃지가 붙고 `p`가
+  그 서버를 전용 브라우저 창(⎇브랜치 제목)으로 연다. 위 명령들은 이 키들이
+  뒤에서 부르는 배관이다
 - 전용 프로필 `~/.local/state/agentlayer/browser-profile`로 뜬다 —
   로그인 세션은 이 프로필에 보존되고, 실사용 Chrome과 격리된다
 - CDP 디버깅 포트는 고정(`browser_port`, 기본 9222)이라 재부팅 뒤에도

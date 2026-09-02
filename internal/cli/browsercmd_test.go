@@ -217,3 +217,34 @@ func TestRunBrowserMCPPrintsCommands(t *testing.T) {
 		}
 	}
 }
+
+func TestParsePickArgsAgent(t *testing.T) {
+	id, err := parsePickArgs([]string{"--agent", "claude-7"})
+	if err != nil || id != "claude-7" {
+		t.Fatalf("got %q %v", id, err)
+	}
+	if id, err := parsePickArgs(nil); err != nil || id != "" {
+		t.Fatalf("인자 없음: %q %v", id, err)
+	}
+	if _, err := parsePickArgs([]string{"extra"}); err == nil {
+		t.Error("잉여 인자는 에러")
+	}
+}
+
+func TestParseShotArgsAgent(t *testing.T) {
+	o, err := parseShotArgs([]string{"--send", "--agent", "codex-2"})
+	if err != nil || o.Agent != "codex-2" || !o.Send {
+		t.Fatalf("got %+v %v", o, err)
+	}
+}
+
+func TestFilterAgentByID(t *testing.T) {
+	agents := []*state.Agent{{ID: "a"}, {ID: "b"}}
+	got, err := FilterAgentByID(agents, "b")
+	if err != nil || len(got) != 1 || got[0].ID != "b" {
+		t.Fatalf("got %v %v", got, err)
+	}
+	if _, err := FilterAgentByID(agents, "zzz"); err == nil || !strings.Contains(err.Error(), "zzz") {
+		t.Errorf("없는 ID는 ID를 품은 에러: %v", err)
+	}
+}
