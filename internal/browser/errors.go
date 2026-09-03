@@ -15,6 +15,22 @@ import (
 // 로그(Log.entryAdded — 네트워크 404·CORS·mixed content 등)를 모은다.
 // 온디맨드 — 상주 감시가 아니다.
 func CollectErrors(page *rod.Page, until <-chan struct{}) []string {
+	return collectErrors(page, until, nil)
+}
+
+// CollectErrorsReload는 구독을 건 뒤 페이지를 리로드하고 d 동안 모은다 —
+// 에이전트가 비대화형(stdin이 터미널이 아님)으로 부르는 경로. Enter를 기다리는
+// CollectErrors는 파이프 stdin에서 즉시 EOF라 아무것도 못 모은다(2026-09-03 실측).
+func CollectErrorsReload(page *rod.Page, d time.Duration) []string {
+	until := make(chan struct{})
+	return collectErrors(page, until, func() {
+		_ = page.Reload()
+		go func() { time.Sleep(d); close(until) }()
+	})
+}
+
+// collectErrors는 구독이 안착한 직후 onSubscribed를 부른다(리로드 트리거용).
+func collectErrors(page *rod.Page, until <-chan struct{}, onSubscribed func()) []string {
 	// EachEvent는 호출 시점에 동기로 구독한다 — cancel로 이벤트 채널을 닫아
 	// wait()를 풀고 구독 누수를 막는다 (pick.go의 abort 패턴과 동일).
 	ctx, cancel := context.WithCancel(page.GetContext())
@@ -54,13 +70,20 @@ func CollectErrors(page *rod.Page, until <-chan struct{}) []string {
 			if e.Entry.Level != proto.LogLogEntryLevelError && e.Entry.Level != proto.LogLogEntryLevelWarning {
 				return
 			}
-			add("[log." + string(e.Entry.Level) + "] " + e.Entry.Text)
+			s := "[log." + string(e.Entry.Level) + "] " + e.Entry.Text
+			if e.Entry.URL != "" {
+				s += " — " + e.Entry.URL // 404가 어느 파일인지 문구만으론 안 보인다
+			}
+			add(s)
 		},
 	)
 	// wait()가 이벤트를 소비한다 — until 신호 후 cancel로 종료시키고,
 	// 콜백 실행이 끝난 것을 확인한 뒤에 결과를 확정한다 (경합 방지).
 	consumed := make(chan struct{})
 	go func() { wait(); close(consumed) }()
+	if onSubscribed != nil {
+		onSubscribed()
+	}
 	<-until
 	cancel()
 	<-consumed

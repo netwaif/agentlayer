@@ -114,3 +114,15 @@ func TestConnectPagesFollowWindowSizeIntegration(t *testing.T) {
 		t.Errorf("innerWidth = %v, want %d (기기 에뮬레이션에 묶임)", got[0], width)
 	}
 }
+
+func TestCheckPortFreeIsNil(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	if err := CheckPort(port); err != nil {
+		t.Fatalf("빈 포트는 nil이어야 함: %v", err)
+	}
+}

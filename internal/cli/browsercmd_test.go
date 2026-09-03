@@ -63,24 +63,28 @@ func TestParseErrorsArgs(t *testing.T) {
 	}{
 		{"인자 없음", nil, false, false},
 		{"--send", []string{"--send"}, true, false},
+		{"--reload", []string{"--reload"}, false, false},
 		{"잉여 인자는 에러", []string{"뭔가"}, false, true},
 		{"잉여 인자 뒤 --send도 에러", []string{"뭔가", "--send"}, false, true},
 		{"모르는 플래그는 에러", []string{"--bogus"}, false, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			send, err := parseErrorsArgs(c.args)
+			o, err := parseErrorsArgs(c.args)
 			if c.wantErr {
 				if err == nil {
-					t.Fatalf("에러여야 함: send=%v", send)
+					t.Fatalf("에러여야 함: %+v", o)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
-			if send != c.send {
-				t.Errorf("got send=%v, want %v", send, c.send)
+			if o.Send != c.send {
+				t.Errorf("got send=%v, want %v", o.Send, c.send)
+			}
+			if o.Reload != (len(c.args) > 0 && c.args[0] == "--reload") {
+				t.Errorf("reload 파싱: %+v", o)
 			}
 		})
 	}

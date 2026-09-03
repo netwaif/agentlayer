@@ -135,6 +135,15 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-03 gemini worker(agy)만 git add/commit마다 도구 승인을 물음(B1이 worker 커밋을 시키면서 드러남; claude는 auto 모드, codex는 trusted). wt new가 agy `--dangerously-skip-permissions`/gemini `--yolo`로 기동, config `worker_auto_approve`(기본 true). agy 신뢰는 `~/.gemini/antigravity-cli/settings.json` trustedWorkspaces(정확 경로)에 기록됨
 - 2026-09-03 B 재촬영 실패 원인 = 코디네이터가 저장소 루트에서 `python3 -m http.server --directory <worktree>`로 띄워 cwd가 루트 → 브랜치 미판정 → ⎇ 없는 새 창. DevServers가 명령 인자(ProcArgs)로도 worktree를 찾고 후보 중 가장 깊은 경로 하나만 쓴다. 스킬에 "서버는 worktree를 cwd로" 명시. 고친 뒤 같은 서버로 ⎇ 탭 3개 실확인 → B 촬영 성공
 
+- 2026-09-03 codex 상태가 작업 중에도 DONE으로 보인 원인 = notify(agent-turn-complete)만 있고 WORK 전이가 없었음(촬영 스크린샷 실측). `~/.codex/hooks.json`에 SessionStart·UserPromptSubmit·PostToolUse·PermissionRequest·Stop → `agentlayer hook codex --event <e>`(stdin JSON, RunCodexEvent) 등록을 init에 추가. codex는 새 훅을 `/hooks` 신뢰 확인 전엔 실행 안 함(trusted_hash 역산 실패 — sha256(cmd)·JSON 직렬화 후보 12종 불일치). 살아 있는 TUI는 재시작해야 hooks.json·AGENTS.md를 읽음
+- 2026-09-03 codex "에이전트 브라우저 못 찾음" 원인 = chrome-devtools MCP는 붙어 있었으나 ChatGPT 앱 내장 인앱 브라우저 스킬(node_repl `agent.browsers.list()`→[])을 선택. 사용자 실측: "chrome-devtools 이용해"라고 말하면 씀 → init이 `~/.codex/AGENTS.md`에 마커 블록(agentlayer:browser)으로 지침 설치(InstallCodexAgents)
+- 2026-09-03 mcp-serve가 세션 시작 즉시 Chrome을 띄우던 버그(browserMCPServe 첫 줄 Connect) → CheckPort로 교체. 봇 4개 부팅과 동시에 Chrome 기동되던 실측이 근거
+- 2026-09-03 스킬 스크린샷 문단: 디스코드 지시면 `shot <url>` stdout 경로를 그 채널 답글 files로 첨부, --notify는 SSH 등 첨부 수단 없을 때만(타워 요청: 폰 한 화면 왕복)
+- 2026-09-03 **내 샌드박스 판단이 틀렸음(타워 실측으로 정정)**: 코덱스 브리지 `-s workspace-write`에서 cwd(`~/ai-folder/codex-discord-workspace`) 밖 `~/ai-folder/demo/browser-demo/index.html` 수정이 됐고, 스크린샷도 프라이밍 없이 채널에 첨부됨. 추정 원인(미검증): `approval_policy=on-request` + `approvals_reviewer="guardian_subagent"`라 샌드박스 밖 쓰기가 승인 요청→가디언 서브에이전트 자동 승인→비샌드박스 재실행. `[projects."…/browser-demo"]` 신뢰 폴더도 후보. 결과: CODEX_WORKDIR 변경 불필요, C는 (나) 두 하네스 구성(C0 관제탑·C1 클로드 서버·C2 코덱스 열기+사진·C3 코덱스 수정)
+
+- 2026-09-03 코덱스가 MCP 스크린샷을 base64로 우회한 원인 = chrome-devtools-mcp가 filePath를 클라이언트 roots(roots/list) 안에서만 허용하는데 codex는 roots 능력을 선언하지 않아 OS 임시 폴더만 허용. mcp-serve 프록시가 보정(`internal/cli/mcproots.go`): 클라이언트에 roots 능력 없으면 initialize에 끼워 넣고 roots/list를 cwd(file://)로 대신 답함, 능력 있어도 빈 목록·error면 cwd 채움. 가짜 클라이언트 E2E: cwd 저장 성공·밖은 여전히 거부. 살아 있는 codex-live는 재시작(재부팅) 뒤 적용
+- 2026-09-03 `agentlayer browser errors --reload` 추가 — 기존 errors는 Enter 대기라 에이전트 Bash에서 즉시 EOF로 아무것도 못 모았음(실측). 리로드 후 5초 수집, 404 줄에 URL 부착. 스킬·codex AGENTS 블록에 '증상만 말하면 콘솔·네트워크 직접 읽고 전부 짚기' 문단, AGENTS 블록에 cookies list/import/clear 안내 추가
+- 2026-09-03 broadcast가 codex TUI에 제출 안 되던 원인 = `tmuxx.SendText`가 텍스트 직후 Enter를 붙여 보내 codex가 Enter를 삼킴(문장이 입력줄에 남음, Enter만 따로 보내니 제출됨). SendText에 `SendEnterDelay`(300ms+길이 비례, 최대 1s) 삽입 — codex-discord 브리지 pasteToPane과 같은 처방. `broadcast --yes --except …`로 codex-live 단독 전송해 'ok' 회신 실측
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->

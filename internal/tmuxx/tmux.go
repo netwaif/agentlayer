@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // tmux 팝업·hook은 최소 PATH(/usr/bin:/bin…)로 실행되는 일이 많아
@@ -272,12 +273,25 @@ func (t Tmux) NewWindowIn(session, name, dir string) (string, error) {
 
 // SendText는 pane에 텍스트를 입력하고 Enter를 보낸다.
 // 에이전트 입력창에 지시를 넣는 용도 — 임의 키 시퀀스는 보내지 않는다.
+// 텍스트와 Enter 사이에 잠깐 쉰다: codex TUI는 텍스트 직후에 오는 Enter를 삼켜
+// 문장이 입력줄에 남고 제출이 안 된다(2026-09-03 broadcast 실측 — Enter만 따로
+// 보내니 제출됨). codex-discord 브리지도 같은 이유로 붙여넣기 뒤 200ms+ 쉬고 Enter.
 func (t Tmux) SendText(paneID, text string) error {
 	if _, err := t.run("send-keys", "-t", paneID, "-l", text); err != nil {
 		return err
 	}
+	time.Sleep(SendEnterDelay(len(text)))
 	_, err := t.run("send-keys", "-t", paneID, "Enter")
 	return err
+}
+
+// SendEnterDelay는 텍스트 길이에 비례한 대기(300ms + 글자 50개당 1ms, 최대 1s).
+func SendEnterDelay(n int) time.Duration {
+	d := 300*time.Millisecond + time.Duration(n/50)*time.Millisecond
+	if d > time.Second {
+		d = time.Second
+	}
+	return d
 }
 
 // CapturePane은 pane 화면의 마지막 lines줄을 평문으로 가져온다.

@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -276,18 +277,28 @@ func parseShotArgs(args []string) (shotOpts, error) {
 
 // parseErrorsArgs는 errors의 --send를 파싱한다 — 위치 인자는 없으므로
 // 비플래그 인자가 남으면 잉여로 에러 처리한다.
-func parseErrorsArgs(args []string) (send bool, err error) {
+func parseErrorsArgs(args []string) (o errorsOpts, err error) {
 	fs := flag.NewFlagSet("errors", flag.ContinueOnError)
 	fs.SetOutput(io.Discard) // usage 자동 출력 억제 — 반환 에러로 충분
-	sendFlag := fs.Bool("send", false, "에이전트 pane으로 경로 전송")
+	fs.BoolVar(&o.Send, "send", false, "에이전트 pane으로 경로 전송")
+	fs.BoolVar(&o.Reload, "reload", false, "활성 탭을 리로드하고 5초 동안 수집 (Enter 대기 없음 — 에이전트용)")
 	if err := fs.Parse(args); err != nil {
-		return false, err
+		return errorsOpts{}, err
 	}
 	if fs.NArg() > 0 {
-		return false, fmt.Errorf("잉여 인자 %q — 사용법: agentlayer browser errors [--send]", fs.Args())
+		return errorsOpts{}, fmt.Errorf("잉여 인자 %q — 사용법: agentlayer browser errors [--send] [--reload]", fs.Args())
 	}
-	return *sendFlag, nil
+	return o, nil
 }
+
+// errorsOpts는 errors의 인자. --reload는 사람 없이 리로드→수집(에이전트 경로).
+type errorsOpts struct {
+	Send   bool
+	Reload bool
+}
+
+// errorsReloadWindow는 --reload가 리로드 뒤 에러를 모으는 시간.
+const errorsReloadWindow = 5 * time.Second
 
 // chooseAgent는 전송 대상을 확정한다 — 후보 1명이면 즉시, 복수면 번호
 // 목록(kind·세션명)을 출력하고 in에서 번호를 읽어 선택한다(스펙 라우팅
@@ -354,7 +365,7 @@ func sendToAgent(out io.Writer, in io.Reader, page *rod.Page, agentID string, ma
 // browserErrors는 활성 탭의 콘솔 에러·JS 예외를 Enter까지 온디맨드 수집해
 // 덤프(stdout+파일)하고, --send면 shot과 같은 라우팅으로 한 줄 보낸다.
 func browserErrors(out io.Writer, args []string) error {
-	send, err := parseErrorsArgs(args)
+	o, err := parseErrorsArgs(args)
 	if err != nil {
 		return err
 	}
@@ -366,13 +377,19 @@ func browserErrors(out io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(out, "수집 시작 — 버그를 재현한 뒤 Enter…")
-	until := make(chan struct{})
-	go func() {
-		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
-		close(until)
-	}()
-	lines := browser.CollectErrors(page, until)
+	var lines []string
+	if o.Reload {
+		fmt.Fprintf(out, "리로드 후 %s 동안 수집…\n", errorsReloadWindow)
+		lines = browser.CollectErrorsReload(page, errorsReloadWindow)
+	} else {
+		fmt.Fprintln(out, "수집 시작 — 버그를 재현한 뒤 Enter…")
+		until := make(chan struct{})
+		go func() {
+			_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
+			close(until)
+		}()
+		lines = browser.CollectErrors(page, until)
+	}
 	// 저장 실패해도 수집분이 유실되지 않게 라인부터 stdout에 찍는다.
 	if len(lines) == 0 {
 		fmt.Fprintln(out, "(수집된 에러 없음)")
@@ -385,7 +402,7 @@ func browserErrors(out io.Writer, args []string) error {
 		return err
 	}
 	fmt.Fprintln(out, path)
-	if !send {
+	if !o.Send {
 		return nil
 	}
 	return sendToAgent(out, os.Stdin, page, "", func(pageURL string) string {
@@ -602,11 +619,13 @@ func browserCookiesClear(out io.Writer, domains []string) error {
 	return browser.ClearCookies(b, domains, out)
 }
 
-// browserMCPServe: MCP 클라이언트가 서버 명령으로 띄운다. Chrome을 보장한 뒤
-// chrome-devtools-mcp로 프로세스를 갈아끼워 stdio를 그대로 넘긴다.
+// browserMCPServe: MCP 클라이언트가 서버 명령으로 띄운다. chrome-devtools-mcp를 자식으로
+// 띄우고 stdio를 그대로 넘긴다. Chrome은 첫 tools/call 때 띄운다(아래 루프).
 func browserMCPServe() error {
 	cfg := config.Load()
-	if _, err := browser.Connect(state.DefaultDir(), cfg.BrowserPortOrDefault()); err != nil {
+	// 여기서 Connect하면 세션이 뜰 때마다 Chrome이 켜진다(2026-09-03 실측: 봇 4개가
+	// 부팅과 동시에 Chrome을 띄움). 포트 충돌만 미리 확인하고 기동은 첫 tools/call에 맡긴다.
+	if err := browser.CheckPort(cfg.BrowserPortOrDefault()); err != nil {
 		return err
 	}
 	npx := usage.LookupTool("npx")
@@ -617,8 +636,12 @@ func browserMCPServe() error {
 	argv := MCPServeArgv(npx, port)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Env = usage.ExtendedEnv() // npx 셔뱅이 node를 PATH에서 찾는다
-	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	cmd.Stderr = os.Stderr
 	in, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	srvOut, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
@@ -628,6 +651,35 @@ func browserMCPServe() error {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	go func() { <-sig; _ = cmd.Process.Signal(syscall.SIGTERM) }()
+	// roots 보정(mcproots.go): 서버 stdin에는 두 고루틴이 쓰므로 직렬화한다.
+	cwd, _ := os.Getwd()
+	roots := newMCPRoots(cwd)
+	var wmu sync.Mutex
+	writeServer := func(b []byte) error {
+		wmu.Lock()
+		defer wmu.Unlock()
+		_, err := in.Write(b)
+		return err
+	}
+	// 서버→클라이언트: roots/list만 가로채고 나머지는 그대로 stdout으로.
+	go func() {
+		sr := bufio.NewReaderSize(srvOut, 1<<20)
+		for {
+			line, rerr := sr.ReadBytes('\n')
+			if len(line) > 0 {
+				reply, fwd := roots.FromServer(line)
+				if reply != nil {
+					_ = writeServer(reply)
+				}
+				if fwd != nil {
+					_, _ = os.Stdout.Write(fwd)
+				}
+			}
+			if rerr != nil {
+				return
+			}
+		}
+	}()
 	// 클라이언트→서버 메시지를 그대로 넘기되, 도구 호출(tools/call)이 처음 지나갈 때
 	// Chrome이 없으면 띄운다. initialize·tools/list만 하는 세션 시작 때는 안 띄운다 —
 	// 세션이 뜰 때마다 브라우저가 튀어나오던 문제(2026-09-02).
@@ -638,7 +690,7 @@ func browserMCPServe() error {
 			if IsMCPToolCall(line) && !browser.IsUp(port) {
 				_, _ = browser.Connect(state.DefaultDir(), port) // 기동만; 클라이언트는 세션 동안 유지
 			}
-			if _, werr := in.Write(line); werr != nil {
+			if werr := writeServer(roots.FromClient(line)); werr != nil {
 				break
 			}
 		}

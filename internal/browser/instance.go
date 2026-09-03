@@ -59,6 +59,9 @@ const probeTimeout = 2 * time.Second
 // IsUp은 CDP 포트가 살아 있는지(기동 없이 확인만).
 func IsUp(port int) bool { _, ok, _ := probePort(port); return ok }
 
+// CheckPort는 Chrome을 띄우지 않고 포트만 본다 — 다른 프로세스(CDP 아님)가 잡고 있으면 에러.
+func CheckPort(port int) error { _, _, err := probePort(port); return err }
+
 func probePort(port int) (string, bool, error) {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 	conn, err := net.DialTimeout("tcp", addr, probeTimeout)

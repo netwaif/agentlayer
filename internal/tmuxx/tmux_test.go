@@ -175,3 +175,15 @@ func TestSpawnShellWindowIntegration(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+func TestSendEnterDelayBounds(t *testing.T) {
+	if d := SendEnterDelay(0); d != 300*time.Millisecond {
+		t.Errorf("빈 텍스트 300ms: %v", d)
+	}
+	if d := SendEnterDelay(5000); d != 400*time.Millisecond {
+		t.Errorf("5000자 → 400ms: %v", d)
+	}
+	if d := SendEnterDelay(1_000_000); d != time.Second {
+		t.Errorf("상한 1s: %v", d)
+	}
+}

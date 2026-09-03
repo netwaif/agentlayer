@@ -76,7 +76,7 @@ func TestInstallOrchestrationSkillDryRun(t *testing.T) {
 
 // 브라우저 절: 에이전트가 내장 브라우저 스킬로 새지 않고 chrome-devtools MCP를 자기 탭에서 쓰게 한다.
 func TestOrchestrationSkillHasBrowserSection(t *testing.T) {
-	for _, want := range []string{"## 6. 브라우저", "chrome-devtools", "자기 탭", "control-in-app-browser", "shot <url> --notify", "cookies import", "cookies list", "cookies clear", "항상 허용", "pick --once", "브라우저에서 지목할게", "스크린샷 확인해봐", "폰으로 보내줘", "wt merge <이름> --yes"} {
+	for _, want := range []string{"## 6. 브라우저", "chrome-devtools", "자기 탭", "control-in-app-browser", "shot <url>`", "`files`", "--notify", "browser errors --reload", "list_console_messages", "cookies import", "cookies list", "cookies clear", "항상 허용", "pick --once", "브라우저에서 지목할게", "스크린샷 확인해봐", "폰으로 보내줘", "wt merge <이름> --yes"} {
 		if !strings.Contains(string(orchestrationSkill), want) {
 			t.Errorf("스킬 본문에 %q 없음", want)
 		}

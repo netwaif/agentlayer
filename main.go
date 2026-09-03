@@ -338,6 +338,16 @@ func runInit(args []string) error {
 		if err := cli.InstallCodexNotify(os.Stdout, codexConfig, binPath, *dryRun); err != nil {
 			return err
 		}
+		codexHooks := filepath.Join(home, ".codex", "hooks.json")
+		fmt.Println("Codex hook 등록:", codexHooks)
+		if err := cli.InstallCodexHooks(os.Stdout, codexHooks, binPath, *dryRun); err != nil {
+			return err
+		}
+		codexAgents := filepath.Join(home, ".codex", "AGENTS.md")
+		fmt.Println("Codex 브라우저 지침:", codexAgents)
+		if err := cli.InstallCodexAgents(os.Stdout, codexAgents, *dryRun); err != nil {
+			return err
+		}
 		fmt.Println()
 	}
 	// agy(Antigravity CLI)가 설치된 경우에만 — 전역 훅 파일에 등록
@@ -449,7 +459,14 @@ func runHook(args []string) error {
 			fmt.Fprintln(os.Stderr, "agentlayer hook:", err)
 		}
 	case "codex":
-		if err := hookcmd.RunCodex(st, fs.Args(), os.Getenv, time.Now()); err != nil {
+		// --event가 있으면 hooks.json 경로(stdin JSON), 없으면 notify 경로(argv JSON)
+		var err error
+		if *event != "" {
+			err = hookcmd.RunCodexEvent(st, *event, os.Stdin, os.Getenv, time.Now())
+		} else {
+			err = hookcmd.RunCodex(st, fs.Args(), os.Getenv, time.Now())
+		}
+		if err != nil {
 			fmt.Fprintln(os.Stderr, "agentlayer hook:", err)
 		}
 	case "gemini":

@@ -131,3 +131,24 @@ func TestSaveErrorsEmpty(t *testing.T) {
 		t.Errorf("빈 수집 안내가 없다: %q", string(b))
 	}
 }
+
+// --reload 경로: 구독 뒤 리로드해 로드 시점 예외·404를 사람 개입 없이 모은다.
+func TestCollectErrorsReloadCapturesLoadTimeErrors(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			_, _ = w.Write([]byte(`<body><script>fetch('./stat.json'); document.querySelector('.nope').x = 1</script></body>`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	p := headlessPage(t, `<body></body>`)
+	p.MustNavigate(srv.URL).MustWaitLoad()
+	lines := CollectErrorsReload(p, 1500*time.Millisecond)
+	joined := strings.Join(lines, "\n")
+	for _, want := range []string{"TypeError", "404", "/stat.json"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("%q 수집돼야: %s", want, joined)
+		}
+	}
+}
