@@ -146,6 +146,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-03 `agentlayer browser errors --reload` 추가 — 기존 errors는 Enter 대기라 에이전트 Bash에서 즉시 EOF로 아무것도 못 모았음(실측). 리로드 후 5초 수집, 404 줄에 URL 부착. 스킬·codex AGENTS 블록에 '증상만 말하면 콘솔·네트워크 직접 읽고 전부 짚기' 문단, AGENTS 블록에 cookies list/import/clear 안내 추가
 - 2026-09-03 broadcast가 codex TUI에 제출 안 되던 원인 = `tmuxx.SendText`가 텍스트 직후 Enter를 붙여 보내 codex가 Enter를 삼킴(문장이 입력줄에 남음, Enter만 따로 보내니 제출됨). SendText에 `SendEnterDelay`(300ms+길이 비례, 최대 1s) 삽입 — codex-discord 브리지 pasteToPane과 같은 처방. `broadcast --yes --except …`로 codex-live 단독 전송해 'ok' 회신 실측
 - 2026-09-03 codex `/hooks` 화면 실측: 살아 있는 TUI도 바뀐 hooks.json을 즉시 인식("5 hooks need review"), `t`로 전부 신뢰 → Active 5/5, config.toml [hooks.state]에 항목별 trusted_hash 추가. 해시 역산 2차(28개 후보: 명령·훅 JSON·그룹 JSON·TOML 등) 실패 — 자동 신뢰는 보류. 신뢰 뒤 broadcast로 codex-live에 프롬프트 → 관제탑 WORK→DONE 실측
+- 2026-09-03 매뉴얼 원본 `~/ai-folder/youtube/AgentLoops/agentlayer/tasks/agentlayer-video-prep/artifacts/manual/agentlayer-manual.txt`에 Codex /hooks 신뢰 단계(2장 init 절)·hooks.json 5이벤트·AGENTS.md 브라우저 블록(5장 Codex 절) 추가(.bak-codexhooks-*). PDF 빌드·배포는 안 함 — v1.3.0 릴리즈 때 `/deploy-manual agentlayer`로(VERSION 1.2.0 → 올릴 것)
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
