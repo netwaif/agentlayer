@@ -15,12 +15,12 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**GitHub 릴리즈 = v1.2.5**. 로컬 main은 origin 대비 18커밋 앞섬(미푸시), 그 위 브랜치 `browser-mcp` 9da15d9(main 미머지, main 대비 44커밋). 2026-09-03 C 촬영 버그 창구로 한 커밋(9da15d9)에 6건: mcp-serve 즉시 Chrome 기동 제거·codex hooks(WORK/WAIT)·codex AGENTS.md 브라우저 블록·MCP roots 보정·`errors --reload`·SendText Enter 지연. 로컬 make install = 9da15d9, `agentlayer init` 재실행됨(~/.codex/hooks.json·AGENTS.md·스킬 갱신). **촬영 상태**: A·B 완료, C(코덱스 단독, 심은 버그 콘솔 디버깅)·E(x.com 로그인, 2컷) 남음. 순서표 정본 = `~/ai-folder/youtube/AgentBrowser/shooting-checklist.html`(타워 세션 agentbrowser-43). 살아 있는 봇·codex-live는 옛 mcp-serve/훅 — 재부팅 뒤 적용, codex `/hooks` 허용 1회 필요. 8100 서버 떠 있음(demo 저장소, 심은 버그 미커밋 — 타워에 커밋 권고). 워킹트리 클린.
+**GitHub 릴리즈 = v1.2.5**. 로컬 main은 origin 대비 18커밋 앞섬(미푸시), 그 위 브랜치 `browser-mcp` 9da15d9(main 미머지, main 대비 44커밋). 2026-09-03 C 촬영 버그 창구로 한 커밋(9da15d9)에 6건: mcp-serve 즉시 Chrome 기동 제거·codex hooks(WORK/WAIT)·codex AGENTS.md 브라우저 블록·MCP roots 보정·`errors --reload`·SendText Enter 지연. 로컬 make install = 9da15d9, `agentlayer init` 재실행됨(~/.codex/hooks.json·AGENTS.md·스킬 갱신). **촬영 상태**: A·B 완료, C(코덱스 단독, 심은 버그 콘솔 디버깅)·E(x.com 로그인, 2컷) 남음. 순서표 정본 = `~/ai-folder/youtube/AgentBrowser/shooting-checklist.html`(타워 세션 agentbrowser-43). codex-live에서 `/hooks` → t(trust all)로 agentlayer 훅 5개 신뢰 완료·WORK→DONE 실측(2026-09-03 11:0x). 살아 있는 봇·codex-live의 mcp-serve(roots 보정)는 재부팅 뒤 적용. 8100 서버 떠 있음(demo 저장소, 심은 버그 미커밋 — 타워에 커밋 권고). 워킹트리 클린.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **C·E 촬영 버그 창구** — 타워 세션(agentbrowser-43)이 순서표, 이 세션은 코드. 촬영 전제: 재부팅 → codex-live에서 `/hooks` agentlayer 허용 → 폰 리허설 → 마지막에 `pkill -f browser-profile`. C1 문장에 "에이전트 브라우저로"를 넣어야 codex가 curl로 새지 않음. 심은 버그(index.html·stats.json)는 커밋해 둬야 C2 뒤 checkout으로 재촬영 가능
+1. **C·E 촬영 버그 창구** — 타워 세션(agentbrowser-43)이 순서표, 이 세션은 코드. 촬영 전제: 재부팅(훅 신뢰는 이미 끝남) → 폰 리허설 → 마지막에 `pkill -f browser-profile`. C1 문장에 "에이전트 브라우저로"를 넣어야 codex가 curl로 새지 않음. 심은 버그(index.html·stats.json)는 커밋해 둬야 C2 뒤 checkout으로 재촬영 가능
 2. 촬영 끝나면 `browser-mcp` → main 머지 → push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영. 릴리즈 노트: cookies list/clear·pick --once·스킬 말로 시키기·Capturing 잠금 정리·mcp-serve 지연 기동·⎇ 탭·기동 신뢰 자동 승인·worker_auto_approve·codex hooks·MCP roots·errors --reload·SendText 지연
 3. 후속 후보: codex 훅 trusted_hash 자동 기록(해시 방식 미상 — 역산 실패), gemini(agy) AGENTS/GEMINI.md 브라우저 블록, `errors --reload` 대기 시간 옵션, favicon 404 소음 처리(스킬에 "favicon 404는 무시" 한 줄)
 4. 촬영 뒤 정리: `~/.local/state/agentlayer/picks/`(shot·errors txt 다수), `worktrees/demo.review.diff`·search-* 메타, demo 저장소 `git reset --hard f1defa2`(버그 커밋 포함 되돌림), 8100 종료, worktree 3개(hero-bold-*) 정리
@@ -145,6 +145,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-03 코덱스가 MCP 스크린샷을 base64로 우회한 원인 = chrome-devtools-mcp가 filePath를 클라이언트 roots(roots/list) 안에서만 허용하는데 codex는 roots 능력을 선언하지 않아 OS 임시 폴더만 허용. mcp-serve 프록시가 보정(`internal/cli/mcproots.go`): 클라이언트에 roots 능력 없으면 initialize에 끼워 넣고 roots/list를 cwd(file://)로 대신 답함, 능력 있어도 빈 목록·error면 cwd 채움. 가짜 클라이언트 E2E: cwd 저장 성공·밖은 여전히 거부. 살아 있는 codex-live는 재시작(재부팅) 뒤 적용
 - 2026-09-03 `agentlayer browser errors --reload` 추가 — 기존 errors는 Enter 대기라 에이전트 Bash에서 즉시 EOF로 아무것도 못 모았음(실측). 리로드 후 5초 수집, 404 줄에 URL 부착. 스킬·codex AGENTS 블록에 '증상만 말하면 콘솔·네트워크 직접 읽고 전부 짚기' 문단, AGENTS 블록에 cookies list/import/clear 안내 추가
 - 2026-09-03 broadcast가 codex TUI에 제출 안 되던 원인 = `tmuxx.SendText`가 텍스트 직후 Enter를 붙여 보내 codex가 Enter를 삼킴(문장이 입력줄에 남음, Enter만 따로 보내니 제출됨). SendText에 `SendEnterDelay`(300ms+길이 비례, 최대 1s) 삽입 — codex-discord 브리지 pasteToPane과 같은 처방. `broadcast --yes --except …`로 codex-live 단독 전송해 'ok' 회신 실측
+- 2026-09-03 codex `/hooks` 화면 실측: 살아 있는 TUI도 바뀐 hooks.json을 즉시 인식("5 hooks need review"), `t`로 전부 신뢰 → Active 5/5, config.toml [hooks.state]에 항목별 trusted_hash 추가. 해시 역산 2차(28개 후보: 명령·훅 JSON·그룹 JSON·TOML 등) 실패 — 자동 신뢰는 보류. 신뢰 뒤 broadcast로 codex-live에 프롬프트 → 관제탑 WORK→DONE 실측
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
