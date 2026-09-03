@@ -15,16 +15,17 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**GitHub 릴리즈 = v1.2.5**. 로컬 main은 origin 대비 18커밋 앞섬(미푸시), 그 위 브랜치 `browser-mcp` a31aa1a(main 미머지, main 대비 42커밋). 2026-09-02~03 촬영 버그 창구로 22커밋(마지막 셋: pick cbreak·화면 비움 472543c, gemini worker 승인 생략 aa3a027, dev 서버→worktree 인자 판정 a31aa1a). 로컬 make install = a31aa1a, `agentlayer init` 재실행됨. **촬영 상태**: A·B 완료(`~/ai-folder/youtube/AgentBrowser/footage/A-기본루프.mov`, `B-3사AB.mov`), C(폰 원격)·E(x.com 로그인) 남음. B 잔해 정리 완료(worktree·브랜치·메타·worker 창·8101~8103·탭·seen·DEAD). demo-a와 8100 서버(pid 9362) 살아 있음, master 29499ba 클린. 순서표 정본 = 타워 세션 아티팩트(https://claude.ai/code/artifact/64b97f91-d0ae-4539-b14e-589fcf67efa2). 워킹트리 클린.
+**GitHub 릴리즈 = v1.2.5**. 로컬 main은 origin 대비 18커밋 앞섬(미푸시), 그 위 브랜치 `browser-mcp` 9da15d9(main 미머지, main 대비 44커밋). 2026-09-03 C 촬영 버그 창구로 한 커밋(9da15d9)에 6건: mcp-serve 즉시 Chrome 기동 제거·codex hooks(WORK/WAIT)·codex AGENTS.md 브라우저 블록·MCP roots 보정·`errors --reload`·SendText Enter 지연. 로컬 make install = 9da15d9, `agentlayer init` 재실행됨(~/.codex/hooks.json·AGENTS.md·스킬 갱신). **촬영 상태**: A·B 완료, C(코덱스 단독, 심은 버그 콘솔 디버깅)·E(x.com 로그인, 2컷) 남음. 순서표 정본 = `~/ai-folder/youtube/AgentBrowser/shooting-checklist.html`(타워 세션 agentbrowser-43). 살아 있는 봇·codex-live는 옛 mcp-serve/훅 — 재부팅 뒤 적용, codex `/hooks` 허용 1회 필요. 8100 서버 떠 있음(demo 저장소, 심은 버그 미커밋 — 타워에 커밋 권고). 워킹트리 클린.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **C·E 촬영 버그 창구** — 타워 세션(agentbrowser-11, `~/ai-folder/youtube/AgentBrowser`)이 순서표, 이 세션은 코드. C 전제: 디스코드 봇 세션(claude-discord·orchestrator)은 09:50 이전에 떠서 chrome-devtools MCP가 없음 → 촬영 전 재시작. E 전제: `cookies list x.com` 16개, E5 마지막에 "x.com 탭 닫고 x.com 쿠키 지워줘"
-2. 촬영 끝나면 `browser-mcp` → main 머지 → push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영. 릴리즈 노트에 촬영 중 22커밋 포함(cookies list/clear·pick --once·스킬 말로 시키기·Capturing 잠금 정리·mcp-serve 지연 기동·⎇ 탭·기동 신뢰 자동 승인·worker_auto_approve)
-3. 촬영 뒤 정리: `~/.local/state/agentlayer/picks/`, `worktrees/demo.review.diff`·search-* 메타(memo 데모) 정리 선택. 에이전트 브라우저 프로필 광고 쿠키 150여 개는 무해(원하면 프로필 폴더 삭제 후 import)
-4. 대시보드 채널 옛 핑 메시지 Discord 수동 삭제(567c2c9)
-5. 보류 아이디어: `agentlayer status --prune`(DEAD 즉시 삭제, 지금 24h 보존·촬영 중엔 파일 직접 삭제), agy 신뢰 질문 실화면 확인(감시자 40s Enter가 맞는 선택인지 — B에서 사람이 안 눌렀으면 OK), Termius 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정, provider 게이지 텍스트화, 브라우저 프로필 다중화, `init --iterm2`, autopreview 포트 제외 옵션
+1. **C·E 촬영 버그 창구** — 타워 세션(agentbrowser-43)이 순서표, 이 세션은 코드. 촬영 전제: 재부팅 → codex-live에서 `/hooks` agentlayer 허용 → 폰 리허설 → 마지막에 `pkill -f browser-profile`. C1 문장에 "에이전트 브라우저로"를 넣어야 codex가 curl로 새지 않음. 심은 버그(index.html·stats.json)는 커밋해 둬야 C2 뒤 checkout으로 재촬영 가능
+2. 촬영 끝나면 `browser-mcp` → main 머지 → push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영. 릴리즈 노트: cookies list/clear·pick --once·스킬 말로 시키기·Capturing 잠금 정리·mcp-serve 지연 기동·⎇ 탭·기동 신뢰 자동 승인·worker_auto_approve·codex hooks·MCP roots·errors --reload·SendText 지연
+3. 후속 후보: codex 훅 trusted_hash 자동 기록(해시 방식 미상 — 역산 실패), gemini(agy) AGENTS/GEMINI.md 브라우저 블록, `errors --reload` 대기 시간 옵션, favicon 404 소음 처리(스킬에 "favicon 404는 무시" 한 줄)
+4. 촬영 뒤 정리: `~/.local/state/agentlayer/picks/`(shot·errors txt 다수), `worktrees/demo.review.diff`·search-* 메타, demo 저장소 `git reset --hard f1defa2`(버그 커밋 포함 되돌림), 8100 종료, worktree 3개(hero-bold-*) 정리
+5. 대시보드 채널 옛 핑 메시지 Discord 수동 삭제(567c2c9)
+6. 보류 아이디어: `agentlayer status --prune`, agy 신뢰 질문 실화면 확인, Termius 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정, provider 게이지 텍스트화, 브라우저 프로필 다중화, `init --iterm2`, autopreview 포트 제외 옵션
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -264,3 +265,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - `internal/config/config.go` WorkerAutoApprove·WorkerAutoApproveEnabled, config_test.go; `internal/wt/lifecycle.go` commandFor(agent, auto)·geminiCommand·NewOptions.AutoApprove, lifecycle_test.go; `internal/cli/wtcmd.go` AutoApprove 배선; README worker_auto_approve
 - `internal/browser/preview.go` DevServers(ProcArgs 인자 매칭·최장 경로 1개)·ProcArgs, preview_test.go TestDevServersMatchesWorktreeByArgsAndPicksDeepest; `internal/cli/orchestration_skill.md` 4절 "서버는 worktree를 cwd로·코디네이터가 띄움"
 - 외부: footage/B-3사AB.mov. 브랜치 `browser-mcp` a31aa1a
+- `internal/cli/browsercmd.go` browserMCPServe(CheckPort·양방향 프록시·roots 보정)·errorsOpts·parseErrorsArgs(--reload)·errorsReloadWindow; `internal/cli/mcproots.go` mcpRoots·FromClient·FromServer, mcproots_test.go(4); `internal/browser/instance.go` CheckPort, port_test.go; `internal/browser/errors.go` CollectErrorsReload·collectErrors(onSubscribed)·404 URL 부착, errors_test.go TestCollectErrorsReloadCapturesLoadTimeErrors
+- `internal/hookcmd/codex.go` RunCodexEvent·codexHookPayload, codex_test.go TestRunCodexEventTransitions; `main.go` hook codex --event 분기, init에 InstallCodexHooks·InstallCodexAgents; `internal/cli/codexinit.go` InstallCodexHooks·isCodexAgentlayerGroup·codexHookEvents·InstallCodexAgents·codexAgentsBlock(마커 agentlayer:browser), codexinit_test.go(3)
+- `internal/tmuxx/tmux.go` SendText 대기·SendEnterDelay, tmux_test.go; `internal/cli/orchestration_skill.md` 6절 스크린샷(디스코드 reply files)·errors --reload 문단, orchskill_test.go
+- 시스템 상태 추가: `~/.codex/hooks.json`(agentlayer 5이벤트, .agentlayer.bak) — 신뢰 미허용 상태, `~/.codex/AGENTS.md` agentlayer:browser 블록(.agentlayer.bak), `~/.claude/skills/orchestration/SKILL.md` 갱신, picks/에 shot·errors 파일 다수. 브랜치 `browser-mcp` 9da15d9
