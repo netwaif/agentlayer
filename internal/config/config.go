@@ -26,7 +26,7 @@ type Config struct {
 	// TUI 미리보기 갱신 주기 (Go duration 문자열, 예 "500ms"·"2s"). 비면 1s.
 	PreviewInterval string `json:"preview_interval,omitempty"`
 	// 새 dev 서버가 감지되면 전용 브라우저에 자동으로 연다. 기본 켜짐.
-	// 같은 서버는 한 번만, 이미 탭이 있으면 안 연다.
+	// 같은 서버는 한 번만, 이미 탭이 있으면 안 열고, 브라우저가 떠 있을 때만.
 	PreviewAuto *bool `json:"preview_auto,omitempty"`
 	// wt new로 띄우는 worker를 승인 없이 돌린다(gemini/agy: --dangerously-skip-permissions,
 	// stock gemini: --yolo). claude·codex는 각자 설정(auto 모드·trusted)을 따르므로 손대지 않는다.

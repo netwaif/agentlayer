@@ -274,3 +274,33 @@ func ShortID(id string) string {
 	}
 	return id[:4] + "…" + id[len(id)-4:]
 }
+
+// TmuxSessionAgents는 이 세션 이름으로 tmux 세션을 직접 띄우는 plist 라벨들.
+// Collect의 LaunchAgents(폴더 언급까지 포함)보다 좁다 — restore가 "launchd가
+// 살릴 세션"을 가려낼 때 카드·모니터 plist를 구동 주체로 오인하지 않게.
+// 4자 미만 세션명은 Collect와 같은 이유(오탐)로 매칭하지 않는다.
+func TmuxSessionAgents(p Paths, session string) []string {
+	if len(session) < 4 {
+		return nil
+	}
+	sessionRe := regexp.MustCompile(`(^|[^A-Za-z0-9_-])` + regexp.QuoteMeta(session) + `($|[^A-Za-z0-9_-])`)
+	entries, err := os.ReadDir(p.LaunchAgentsDir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), ".plist") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(p.LaunchAgentsDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		s := string(b)
+		if strings.Contains(s, "tmux") && strings.Contains(s, "new-session") && sessionRe.MatchString(s) {
+			out = append(out, strings.TrimSuffix(e.Name(), ".plist"))
+		}
+	}
+	return out
+}

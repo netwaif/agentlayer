@@ -53,6 +53,9 @@ agentlayer status     # plain 표 — SSH·스크립트용
 agentlayer status --json
 agentlayer card       # Discord 상태 카드 업서트 (주기 실행용) / --out은 JSON만
 agentlayer resume     # 죽은 claude 대화 목록 / resume <id>로 구조
+agentlayer restore    # 재부팅 뒤 죽은 세션 배치 복원 — 체크리스트에서 골라 enter (space 토글, a 전체, q 취소)
+agentlayer restore --resume       # 대화까지 이어서 복원 (같은 체크리스트) / --yes는 체크 없이 전부 / --dry-run은 계획만
+agentlayer restore <id> ...       # ID 지정 복원. LaunchAgent 봇·이미 pane 있는 자리는 자동 제외 (봇은 ID 지정 시 강제)
 agentlayer wake-all   # 모든 claude·codex 세션에 "세션 이어서하자" 일괄 전송
 agentlayer close-all  # "세션 마감하자" 전송 → 전원 완료(DONE)까지 감시 → 요약
 agentlayer broadcast "<메시지>"   # 임의 메시지 일괄 전송 (--except로 제외, --yes로 무확인)
@@ -109,7 +112,9 @@ agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참
 - `preview_auto`(선택): 에이전트 폴더 아래에 새 dev 서버가 뜨면 전용 브라우저에
   자동으로 연다. 기본 `true`. 에이전트 hook(상태 전이)마다 백그라운드로 스캔하므로
   관제탑이 닫혀 있어도 동작한다(스캔 5초 스로틀). 같은 서버는 한 번만, 이미 탭이
-  있으면 안 열고, 서버를 내렸다 다시 띄우면 다시 연다. `false`면 뱃지만 붙고 `p`로 연다
+  있으면 안 열고(앞으로 끌어오지도 않음), 서버를 내렸다 다시 띄우면 다시 연다.
+  전용 브라우저가 떠 있을 때만 동작하며 닫아 둔 브라우저를 띄우지 않는다.
+  `false`면 뱃지만 붙고 `p`로 연다
 - `browser_port`(선택): 전용 브라우저 CDP 디버깅 포트. 기본 `9222`.
   MCP 설정이 이 주소를 고정으로 보므로 바꾸면 `agentlayer browser mcp`를 다시 등록
 

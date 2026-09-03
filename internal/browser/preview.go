@@ -3,6 +3,7 @@ package browser
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os/exec"
 	"strconv"
@@ -165,4 +166,15 @@ func MarkBranch(page *rod.Page, branch string) error {
 	}
 	_, err := page.Eval(fn) // rod Eval은 함수식을 받는다
 	return err
+}
+
+// PortOpen은 127.0.0.1:port에 TCP 연결이 되는지만 본다(프로토콜 불문).
+// 자동 프리뷰가 "서버가 정말 내려갔나"를 되물을 때 쓴다.
+func PortOpen(port int) bool {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }

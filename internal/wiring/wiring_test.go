@@ -161,3 +161,25 @@ func TestShortID(t *testing.T) {
 		t.Error("짧은 건 그대로")
 	}
 }
+
+// TmuxSessionAgents: tmux 세션을 직접 띄우는 plist만 — 폴더만 언급하는
+// 카드·모니터 plist는 세션 구동 주체가 아니므로 제외한다.
+func TestTmuxSessionAgents(t *testing.T) {
+	root := t.TempDir()
+	laDir := filepath.Join(root, "LaunchAgents")
+	os.MkdirAll(laDir, 0o755)
+	os.WriteFile(filepath.Join(laDir, "com.folder-bot.collab.plist"),
+		[]byte(`<string>/usr/local/bin/tmux</string><string>new-session</string><string>-s</string><string>collab-bot</string>`), 0o644)
+	os.WriteFile(filepath.Join(laDir, "com.netwaif.card.plist"),
+		[]byte(`<string>agentlayer card</string> collab-bot 언급만`), 0o644)
+	os.WriteFile(filepath.Join(laDir, "com.other.plist"),
+		[]byte(`<string>tmux</string><string>new-session</string><string>-s</string><string>other-bot</string>`), 0o644)
+	p := Paths{LaunchAgentsDir: laDir}
+	got := TmuxSessionAgents(p, "collab-bot")
+	if len(got) != 1 || got[0] != "com.folder-bot.collab" {
+		t.Fatalf("tmux 구동 plist 1개 기대: %v", got)
+	}
+	if got := TmuxSessionAgents(p, "ai"); len(got) != 0 {
+		t.Fatalf("4자 미만 세션명은 매칭 제외: %v", got)
+	}
+}

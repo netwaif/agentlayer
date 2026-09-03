@@ -750,6 +750,11 @@ func browserAutoPreview(out io.Writer) error {
 		return nil
 	}
 	port := cfg.BrowserPortOrDefault()
+	// 브라우저가 떠 있을 때만 — 닫아 둔 전용 브라우저를 hook이 다시 띄우지 않는다.
+	// 안 떠 있으면 기록도 남기지 않아, 나중에 브라우저를 열면 그때 한 번 연다.
+	if !browser.IsUp(port) {
+		return nil
+	}
 	branchByPort := map[int]string{}
 	scan := func(p map[string]string) []browser.DevServer {
 		var out []browser.DevServer
@@ -784,7 +789,7 @@ func browserAutoPreview(out io.Writer) error {
 			if info, err := pg.Info(); err == nil &&
 				(strings.Contains(info.URL, fmt.Sprintf("localhost:%d", p)) || strings.Contains(info.URL, fmt.Sprintf("127.0.0.1:%d", p))) {
 				_ = browser.MarkBranch(pg, branchByPort[p]) // worker가 직접 연 탭이어도 ⎇ 표시
-				_, _ = pg.Activate()                        // 이미 열린 탭이면 앞으로 가져와 "떴다"는 신호를 준다
+				// 앞으로 끌어오지 않는다 — hook마다 도는 백그라운드가 창을 띄우면 작업을 방해한다
 				return true
 			}
 		}
@@ -797,7 +802,7 @@ func browserAutoPreview(out io.Writer) error {
 		}
 		return browser.OpenPreview(br, s)
 	}
-	for _, s := range browser.AutoPreview(state.DefaultDir(), paths, scan, hasTab, open, time.Now()) {
+	for _, s := range browser.AutoPreview(state.DefaultDir(), paths, scan, hasTab, open, browser.PortOpen, time.Now()) {
 		fmt.Fprintf(out, "🌐 http://localhost:%d 열림 (%s)\n", s.Port, s.CWD)
 	}
 	// 에이전트 브라우저가 화면 잠자기 방지 잠금("Capturing")을 들고 있으면 풀어 준다.

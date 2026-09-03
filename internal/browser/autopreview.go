@@ -41,8 +41,11 @@ func savePreviewSeen(dir string, s previewSeen) {
 // hook 프로세스들 사이에서도 "한 번만"이 지켜진다. 사라진 서버는 기록에서 지워
 // 재시작하면 다시 열리고, 이미 탭이 있으면 열지 않되 본 것으로 친다(사용자가
 // 닫은 탭을 되살리지 않기 위해). 5초 안의 재호출은 스캔 없이 돌아간다.
+// portOpen은 스캔이 서버를 놓쳤을 때(HTML 확인 타임아웃 등) 포트가 정말 닫혔는지
+// 되묻는 용도 — 열려 있으면 기록을 잊지 않는다. 잊으면 다음 스캔에서 "새 서버"가
+// 되어 브라우저가 다시 앞으로 튀어나온다(2026-09-03 실측). nil이면 항상 닫힌 것으로 본다.
 func AutoPreview(dir string, paths map[string]string, scan func(map[string]string) []DevServer,
-	hasTab func(port int) bool, open func(DevServer) error, now time.Time) []DevServer {
+	hasTab func(port int) bool, open func(DevServer) error, portOpen func(port int) bool, now time.Time) []DevServer {
 
 	st := loadPreviewSeen(dir)
 	if now.Sub(st.LastScan) < autoPreviewThrottle {
@@ -66,10 +69,16 @@ func AutoPreview(dir string, paths map[string]string, scan func(map[string]strin
 			opened = append(opened, s)
 		}
 	}
-	// 이번 스캔 범위(paths) 안의 서버 중 사라진 것만 잊는다
+	// 이번 스캔 범위(paths) 안의 서버 중 사라진 것만 잊는다 — 포트가 아직 열려
+	// 있으면 스캔이 놓친 것이므로 잊지 않는다
 	for key := range st.Seen {
 		if alive[key] {
 			continue
+		}
+		if portOpen != nil {
+			if port, err := strconv.Atoi(key[strings.LastIndex(key, ":")+1:]); err == nil && portOpen(port) {
+				continue
+			}
 		}
 		for p := range paths {
 			p = strings.TrimSuffix(p, "/")
