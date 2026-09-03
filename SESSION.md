@@ -15,15 +15,15 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**GitHub 릴리즈 = v1.2.5**. 로컬 main은 origin 대비 18커밋 앞섬(미푸시), 그 위 브랜치 `browser-mcp` aa2fba9(main 미머지, main 대비 48커밋: 코드 9da15d9 + SESSION·매뉴얼 기록 커밋들). 2026-09-03 C 촬영 버그 창구로 한 커밋(9da15d9)에 6건: mcp-serve 즉시 Chrome 기동 제거·codex hooks(WORK/WAIT)·codex AGENTS.md 브라우저 블록·MCP roots 보정·`errors --reload`·SendText Enter 지연. 로컬 make install = 9da15d9, `agentlayer init` 재실행됨(~/.codex/hooks.json·AGENTS.md·스킬 갱신). **촬영 상태**: A·B 완료, C(코덱스 단독, 심은 버그 콘솔 디버깅)·E(x.com 로그인, 2컷) 남음. 순서표 정본 = `~/ai-folder/youtube/AgentBrowser/shooting-checklist.html`(타워 세션 agentbrowser-43). codex-live에서 `/hooks` → t(trust all)로 agentlayer 훅 5개 신뢰 완료·WORK→DONE 실측(2026-09-03 11:0x). 살아 있는 봇·codex-live의 mcp-serve(roots 보정)는 재부팅 뒤 적용. 8100 서버 떠 있음(demo 저장소, 심은 버그 미커밋 — 타워에 커밋 권고). 워킹트리 클린.
+**GitHub 릴리즈 = v1.2.5**. 로컬 main은 origin 대비 18커밋 앞섬(미푸시), 브랜치 `browser-mcp` 60f975f(main 미머지). 2026-09-03 저녁 커밋 60f975f 3건: restore 체크리스트(터미널에서 `restore`만 치면 space/a/enter/q, `--yes`·`--dry-run`·`<id>` 유지)·봇 중복 복원 방지(같은 자리 pane·LaunchAgent 관할 제외)·자동 프리뷰 튀어나옴 제거(Activate 삭제·PortOpen으로 seen 유지·브라우저 떠 있을 때만). make install = 60f975f. **촬영 A·B·C·E 전부 완료** — 타워 세션(agentbrowser-c7)이 대본 단계, 이 세션이 SSH inspect 실측 여부·Orca 대비 근거·가벼움 실측값을 전달함. obs-record 스킬 caffeinate 누수(모니터 안 꺼짐) 수정. 8080 python 데모 서버 떠 있음. 워킹트리 클린.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **C·E 촬영 버그 창구** — 타워 세션(agentbrowser-43)이 순서표, 이 세션은 코드. 촬영 전제: 재부팅(훅 신뢰는 이미 끝남) → 폰 리허설 → 마지막에 `pkill -f browser-profile`. C1 문장에 "에이전트 브라우저로"를 넣어야 codex가 curl로 새지 않음. 심은 버그(index.html·stats.json)는 커밋해 둬야 C2 뒤 checkout으로 재촬영 가능
-2. 촬영 끝나면 `browser-mcp` → main 머지 → push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영. 릴리즈 노트: cookies list/clear·pick --once·스킬 말로 시키기·Capturing 잠금 정리·mcp-serve 지연 기동·⎇ 탭·기동 신뢰 자동 승인·worker_auto_approve·codex hooks·MCP roots·errors --reload·SendText 지연
-3. 후속 후보: codex 훅 trusted_hash 자동 기록(해시 방식 미상 — 역산 실패), gemini(agy) AGENTS/GEMINI.md 브라우저 블록, `errors --reload` 대기 시간 옵션, favicon 404 소음 처리(스킬에 "favicon 404는 무시" 한 줄)
-4. 촬영 뒤 정리: `~/.local/state/agentlayer/picks/`(shot·errors txt 다수), `worktrees/demo.review.diff`·search-* 메타, demo 저장소 `git reset --hard f1defa2`(버그 커밋 포함 되돌림), 8100 종료, worktree 3개(hero-bold-*) 정리
+1. **v1.3.0 릴리즈**: `browser-mcp` → main 머지 → push → v1.3.0 태그 → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean`(SESSION.md 더티면 stash 먼저) → tap Casks 확인 → 디스코드 공지 → 매뉴얼 반영. 릴리즈 노트: cookies list/clear·pick --once·스킬 말로 시키기·Capturing 잠금 정리·mcp-serve 지연 기동·⎇ 탭·기동 신뢰 자동 승인·worker_auto_approve·codex hooks·MCP roots·errors --reload·SendText 지연·**restore 체크리스트·봇 중복 복원 방지·autopreview 튀어나옴 제거**. 매뉴얼 원본 재부팅 절차를 "봇 자동 기동 → `agentlayer restore`(체크리스트) → wake-all"로 갱신(--dry-run 먼저 문구 제거)
+2. 후속 후보: 관제탑 TUI에서 restore 체크리스트 키 노출(명령 0개 원칙), codex 훅 trusted_hash 자동 기록(해시 방식 미상), gemini(agy) AGENTS/GEMINI.md 브라우저 블록, `errors --reload` 대기 시간 옵션, favicon 404 소음 처리
+3. 촬영 뒤 정리: 8080 python 서버 종료, `~/.local/state/agentlayer/picks/`(shot·errors txt 다수), `worktrees/demo.review.diff`·search-* 메타, demo 저장소 `git reset --hard f1defa2`, worktree 3개(hero-bold-*) 정리, DEAD 레코드(demo-b 4개 등)는 24h 뒤 자동
+4. 모니터 또 안 꺼지면: `pmset -g assertions | grep -E "DisplaySleep|caffeinate"` — obs-record caffeinate면 스킬 재점검, Chrome "Capturing"이면 capture-janitor 점검
 5. 대시보드 채널 옛 핑 메시지 Discord 수동 삭제(567c2c9)
 6. 보류 아이디어: `agentlayer status --prune`, agy 신뢰 질문 실화면 확인, Termius 컴팩트 모드, MultiAgent 패널 날짜 필터, 미리보기 원본색(-e), Orca 대비 메모리 측정, provider 게이지 텍스트화, 브라우저 프로필 다중화, `init --iterm2`, autopreview 포트 제외 옵션
 
@@ -147,6 +147,12 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-03 broadcast가 codex TUI에 제출 안 되던 원인 = `tmuxx.SendText`가 텍스트 직후 Enter를 붙여 보내 codex가 Enter를 삼킴(문장이 입력줄에 남음, Enter만 따로 보내니 제출됨). SendText에 `SendEnterDelay`(300ms+길이 비례, 최대 1s) 삽입 — codex-discord 브리지 pasteToPane과 같은 처방. `broadcast --yes --except …`로 codex-live 단독 전송해 'ok' 회신 실측
 - 2026-09-03 codex `/hooks` 화면 실측: 살아 있는 TUI도 바뀐 hooks.json을 즉시 인식("5 hooks need review"), `t`로 전부 신뢰 → Active 5/5, config.toml [hooks.state]에 항목별 trusted_hash 추가. 해시 역산 2차(28개 후보: 명령·훅 JSON·그룹 JSON·TOML 등) 실패 — 자동 신뢰는 보류. 신뢰 뒤 broadcast로 codex-live에 프롬프트 → 관제탑 WORK→DONE 실측
 - 2026-09-03 매뉴얼 원본 `~/ai-folder/youtube/AgentLoops/agentlayer/tasks/agentlayer-video-prep/artifacts/manual/agentlayer-manual.txt`에 Codex /hooks 신뢰 단계(2장 init 절)·hooks.json 5이벤트·AGENTS.md 브라우저 블록(5장 Codex 절) 추가(.bak-codexhooks-*). PDF 빌드·배포는 안 함 — v1.3.0 릴리즈 때 `/deploy-manual agentlayer`로(VERSION 1.2.0 → 올릴 것)
+- 2026-09-03 restore 봇 2개씩 뜬 원인 확정: bot-up.sh가 봇을 락으로 직렬 기동 → 대기 중 pane 명령이 bash → 스캐너(DetectKind) 미감지 → 옛 DEAD 레코드가 복원 대상 → 봇 세션에 window 추가. 대응: PlanRestore에 RestoreEnv(SessionExists·PaneAt·LaunchAgents) 주입 — 같은 자리 pane은 ID 명시로도 못 넘고(물리 충돌), LaunchAgent 관할(wiring.TmuxSessionAgents: tmux+new-session+세션명 plist)은 ID 명시 시 강제 가능(정책). 2026-08-29 재부팅 절차 갱신: 봇 자동 기동 → `agentlayer restore`(체크리스트) → wake-all. `--dry-run`은 SSH/스크립트·건너뜀 사유 확인용으로만
+- 2026-09-03 선택 복원은 CLI 인자 나열이 아니라 체크리스트(사용자 "불편해 보이네. 체크박스로는 안되나?"). 기본 전부 체크라 enter만 치면 이전과 동일, `--yes`는 스크립트용, 파이프/비터미널은 화면 없이 전부. 주입점 restoreIsTerminal·runRestorePicker로 테스트
+- 2026-09-03 에이전트 브라우저 수시 튀어나옴 원인 3가지: ① autopreview hasTab의 pg.Activate() ② seen 망각 — HTML 확인(1.5초 타임아웃)으로 스캔이 놓치면 기록을 지워 다음 스캔에 "새 서버"(13:10부터 뜬 8080의 발견 시각이 15:35로 갱신된 실측) ③ Connect가 닫힌 Chrome 재기동. 셋 다 제거(Activate 삭제·PortOpen 되묻기·IsUp 게이트). shot/pick/errors의 Activate는 사람이 봐야 하는 동작이라 유지
+- 2026-09-03 모니터 안 꺼짐은 agentlayer 아님 — obs-record 스킬의 `caffeinate -dims`(13:31 기동, cleanup 누락으로 10시간 잔존). agentlayer 코드에 caffeinate 없음, Chrome Capturing 잠금도 없었음. 스킬 수정: 3시간 상한·stop에서 해제·서명 pkill로 고아 정리
+- 2026-09-03 타워(agentbrowser-c7)에 대본 근거 전달: SSH 터널+chrome://inspect는 **미실측**(9222가 127.0.0.1 바인딩인 것만 lsof 실측, LAN 직결 불가·터널만), 가벼움 실측값(바이너리 17,532,848B·직접 의존 9/간접 21·LOC 10,653+테스트 7,611·`status` 0.02s/최대 RSS 7.2MB·mcp-serve 4~8MB), Orca 비목표 목록은 스펙 2026-08-25·핸드오프 4.2, v1.3.0 미출시(대본에 날짜 적지 말 것)
+
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
@@ -271,3 +277,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - `internal/hookcmd/codex.go` RunCodexEvent·codexHookPayload, codex_test.go TestRunCodexEventTransitions; `main.go` hook codex --event 분기, init에 InstallCodexHooks·InstallCodexAgents; `internal/cli/codexinit.go` InstallCodexHooks·isCodexAgentlayerGroup·codexHookEvents·InstallCodexAgents·codexAgentsBlock(마커 agentlayer:browser), codexinit_test.go(3)
 - `internal/tmuxx/tmux.go` SendText 대기·SendEnterDelay, tmux_test.go; `internal/cli/orchestration_skill.md` 6절 스크린샷(디스코드 reply files)·errors --reload 문단, orchskill_test.go
 - 시스템 상태 추가: `~/.codex/hooks.json`(agentlayer 5이벤트, .agentlayer.bak) — 신뢰 미허용 상태, `~/.codex/AGENTS.md` agentlayer:browser 블록(.agentlayer.bak), `~/.claude/skills/orchestration/SKILL.md` 갱신, picks/에 shot·errors 파일 다수. 브랜치 `browser-mcp` 9da15d9
+- `internal/cli/restorecmd.go` RestoreEnv·RestoreOpts·PlanRestore(agents, env, opts)·restoreEnv(canon=EvalSymlinks)·`--yes`·interactive 분기·계획 줄 `[id]`; `internal/cli/restorepick.go` restorePicker(newRestorePicker·Update·View·Selected)·restoreIsTerminal·runRestorePicker 주입점; restorecmd_test.go(+4)·restorepick_test.go(7); `internal/wiring/wiring.go` TmuxSessionAgents, wiring_test.go(+1)
+- `internal/browser/autopreview.go` AutoPreview(…, portOpen, now) 시그니처 변경(포트 열려 있으면 seen 유지), autopreview_test.go(+1); `internal/browser/preview.go` PortOpen; `internal/cli/browsercmd.go` browserAutoPreview IsUp 게이트·hasTab Activate 제거; README 사용 블록 restore 3줄·preview_auto 문단; `internal/cli/helpcmd.go` restore 줄; `internal/config/config.go` 주석. 브랜치 `browser-mcp` 60f975f
+- 외부: `~/.claude/skills/obs-record/scripts/obsrec.py` CAFFEINATE_MAX_SEC(10800)·CAFFEINATE_ARGS·stop_caffeinate(pidfile+서명 pkill)·cmd_stop 모든 경로에서 해제·cmd_fallback finally(원본 `.bak-20260903`), SKILL.md 2·4단계 문구
+- 시스템 상태: make install = 60f975f; `caffeinate -dims` 종료(디스플레이 어설션 0); 8080 python 서버(demo 폴더, pid 64113) 떠 있음; 임시 tmux 세션 al-picktest·scratchpad state 정리됨
