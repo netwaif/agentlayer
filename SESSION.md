@@ -15,7 +15,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**GitHub 릴리즈 = v1.2.5**. 로컬 main은 origin 대비 18커밋 앞섬(미푸시), 그 위 브랜치 `browser-mcp` 9da15d9(main 미머지, main 대비 44커밋). 2026-09-03 C 촬영 버그 창구로 한 커밋(9da15d9)에 6건: mcp-serve 즉시 Chrome 기동 제거·codex hooks(WORK/WAIT)·codex AGENTS.md 브라우저 블록·MCP roots 보정·`errors --reload`·SendText Enter 지연. 로컬 make install = 9da15d9, `agentlayer init` 재실행됨(~/.codex/hooks.json·AGENTS.md·스킬 갱신). **촬영 상태**: A·B 완료, C(코덱스 단독, 심은 버그 콘솔 디버깅)·E(x.com 로그인, 2컷) 남음. 순서표 정본 = `~/ai-folder/youtube/AgentBrowser/shooting-checklist.html`(타워 세션 agentbrowser-43). codex-live에서 `/hooks` → t(trust all)로 agentlayer 훅 5개 신뢰 완료·WORK→DONE 실측(2026-09-03 11:0x). 살아 있는 봇·codex-live의 mcp-serve(roots 보정)는 재부팅 뒤 적용. 8100 서버 떠 있음(demo 저장소, 심은 버그 미커밋 — 타워에 커밋 권고). 워킹트리 클린.
+**GitHub 릴리즈 = v1.2.5**. 로컬 main은 origin 대비 18커밋 앞섬(미푸시), 그 위 브랜치 `browser-mcp` aa2fba9(main 미머지, main 대비 48커밋: 코드 9da15d9 + SESSION·매뉴얼 기록 커밋들). 2026-09-03 C 촬영 버그 창구로 한 커밋(9da15d9)에 6건: mcp-serve 즉시 Chrome 기동 제거·codex hooks(WORK/WAIT)·codex AGENTS.md 브라우저 블록·MCP roots 보정·`errors --reload`·SendText Enter 지연. 로컬 make install = 9da15d9, `agentlayer init` 재실행됨(~/.codex/hooks.json·AGENTS.md·스킬 갱신). **촬영 상태**: A·B 완료, C(코덱스 단독, 심은 버그 콘솔 디버깅)·E(x.com 로그인, 2컷) 남음. 순서표 정본 = `~/ai-folder/youtube/AgentBrowser/shooting-checklist.html`(타워 세션 agentbrowser-43). codex-live에서 `/hooks` → t(trust all)로 agentlayer 훅 5개 신뢰 완료·WORK→DONE 실측(2026-09-03 11:0x). 살아 있는 봇·codex-live의 mcp-serve(roots 보정)는 재부팅 뒤 적용. 8100 서버 떠 있음(demo 저장소, 심은 버그 미커밋 — 타워에 커밋 권고). 워킹트리 클린.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
