@@ -66,7 +66,7 @@ func Notify(cfg *config.Config, s Sender, a *state.Agent, prev, to state.AgentSt
 		return
 	}
 	t := title(a, to)
-	body := a.Task
+	body := a.Headline()
 	if body == "" {
 		body = a.CWD
 	}

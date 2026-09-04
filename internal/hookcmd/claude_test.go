@@ -110,16 +110,38 @@ func TestNotificationMessageBecomesTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	a, _ := st.Load(scan.IDForPane("claude", "%3"))
-	if a.Task != "Bash 명령 실행 승인이 필요합니다" {
-		t.Errorf("notification message가 Task로: %q", a.Task)
+	if a.Ask != "Bash 명령 실행 승인이 필요합니다" {
+		t.Errorf("notification message가 Ask로: %q", a.Ask)
 	}
-	// 후속 stop은 Task를 지우지 않는다
+	// Notification 문구는 "지금 기다리는 것"이다 — 턴이 끝나면(stop) 지운다.
+	// 안 지우면 DONE·dead 행이 영원히 "Claude needs your permission"을 단다(2026-09-04 실화면).
 	if err := RunClaude(st, "stop", strings.NewReader(`{"session_id":"s1"}`), env("%3"), t0.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	a, _ = st.Load(scan.IDForPane("claude", "%3"))
-	if a.Task == "" {
-		t.Error("기존 Task 유지돼야 함")
+	if a.Ask != "" {
+		t.Errorf("stop 뒤에는 Ask가 비어야 함: %q", a.Ask)
+	}
+}
+
+func TestPendingAskClearedWhenWorkResumes(t *testing.T) {
+	// 승인을 주면 post-tool-use(WORK)가, 새 지시를 주면 user-prompt-submit이 온다 — 둘 다 물음이 해소된 것.
+	for _, ev := range []string{"post-tool-use", "user-prompt-submit"} {
+		st := newStore(t)
+		ask := `{"session_id":"s1","message":"Claude needs your permission to use Bash"}`
+		if err := RunClaude(st, "notification", strings.NewReader(ask), env("%3"), t0); err != nil {
+			t.Fatal(err)
+		}
+		if err := RunClaude(st, ev, strings.NewReader(`{"session_id":"s1"}`), env("%3"), t0.Add(time.Minute)); err != nil {
+			t.Fatal(err)
+		}
+		a, _ := st.Load(scan.IDForPane("claude", "%3"))
+		if a.Ask != "" {
+			t.Errorf("%s 뒤에는 Ask가 비어야 함: %q", ev, a.Ask)
+		}
+		if a.State != state.StateWorking {
+			t.Errorf("%s → WORK: %s", ev, a.State)
+		}
 	}
 }
 
@@ -139,8 +161,8 @@ func TestIdleEchoRecoversMissedStop(t *testing.T) {
 	if a.State != state.StateWaiting {
 		t.Errorf("WORK 중 유휴 에코 → WAIT 복구: %s", a.State)
 	}
-	if a.Task != "" {
-		t.Errorf("유휴 에코가 Task를 덮으면 안 됨: %q", a.Task)
+	if a.Ask != "" || a.Task != "" {
+		t.Errorf("유휴 에코가 Ask·Task를 덮으면 안 됨: %q %q", a.Ask, a.Task)
 	}
 }
 
@@ -188,8 +210,8 @@ func TestIdleNotificationNeverWaitsFromIdle(t *testing.T) {
 	if a.State != state.StateIdle {
 		t.Errorf("유휴 에코는 IDLE 유지: %s", a.State)
 	}
-	if a.Task != "" {
-		t.Errorf("유휴 에코가 Task를 덮으면 안 됨: %q", a.Task)
+	if a.Ask != "" || a.Task != "" {
+		t.Errorf("유휴 에코가 Ask·Task를 덮으면 안 됨: %q %q", a.Ask, a.Task)
 	}
 }
 

@@ -498,7 +498,7 @@ func (m Model) viewBody() string {
 		if i == m.cursor {
 			cursorRow = len(rows)
 		}
-		task := runewidth.Truncate(a.Task, 28, "…")
+		task := runewidth.Truncate(a.Headline(), 28, "…")
 		if i == m.cursor {
 			// 선택 행: 화면 전체 폭 바. 조각마다 같은 배경을 입혀
 			// 상태 색은 살리면서 바가 중간에 끊기지 않게 한다.

@@ -84,7 +84,7 @@ func Status(w io.Writer, st *state.Store, jsonOut bool, now time.Time) error {
 	// runewidth 기반 수동 패딩으로 표시 폭을 맞춘다.
 	rows := [][]string{{"STATE", "AGENT", "SESSION", "TASK", "DIR", "SINCE"}}
 	for _, a := range agents {
-		task := a.Task
+		task := a.Headline()
 		if runewidth.StringWidth(task) > 40 {
 			task = runewidth.Truncate(task, 39, "…")
 		}

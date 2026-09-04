@@ -229,8 +229,8 @@ func agentsContainer(d CardData, now time.Time) map[string]any {
 		if !info.TS.IsZero() {
 			sub = append(sub, since(info.TS, now))
 		}
-		if a.Task != "" {
-			sub = append(sub, truncateRunes(a.Task, 40))
+		if h := a.Headline(); h != "" {
+			sub = append(sub, truncateRunes(h, 40))
 		}
 		if len(sub) > 0 {
 			lines = append(lines, "-# "+strings.Join(sub, " · "))

@@ -48,9 +48,13 @@ type TmuxRef struct {
 
 // Agent는 관제 대상 에이전트 하나의 정본 레코드.
 type Agent struct {
-	ID         string     `json:"id"`
-	Kind       string     `json:"kind"` // claude | codex | gemini
-	Task       string     `json:"task,omitempty"`
+	ID   string `json:"id"`
+	Kind string `json:"kind"` // claude | codex | gemini
+	Task string `json:"task,omitempty"`
+	// Ask는 지금 사람에게 묻고 있는 것(Claude Notification 문구). 승인·새 지시·턴 종료가
+	// 오면 해소된 것이니 hook이 지운다. Task(최근 작업)와 섞지 않는다 — 섞으면 DONE·dead
+	// 행이 영원히 "Claude needs your permission"을 단다.
+	Ask        string     `json:"ask,omitempty"`
 	State      AgentState `json:"state"`
 	Tmux       TmuxRef    `json:"tmux"`
 	CWD        string     `json:"cwd,omitempty"`
@@ -87,4 +91,12 @@ func (a *Agent) Transition(to AgentState, now time.Time) {
 // Stale은 WORKING인데 오래 갱신이 없어 hook 유실이 의심되면 true.
 func (a *Agent) Stale(now time.Time) bool {
 	return a.State == StateWorking && now.Sub(a.UpdatedAt) > staleAfter
+}
+
+// Headline은 화면·알림에 보일 한 줄 — 묻는 게 있으면 그것, 없으면 최근 작업.
+func (a *Agent) Headline() string {
+	if a.Ask != "" {
+		return a.Ask
+	}
+	return a.Task
 }

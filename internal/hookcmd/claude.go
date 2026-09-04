@@ -97,8 +97,12 @@ func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) 
 	if p.CWD != "" {
 		a.CWD = p.CWD
 	}
-	if p.Message != "" {
-		a.Task = p.Message
+	// Ask = 지금 묻고 있는 것(Notification 문구). 다른 이벤트가 오면 해소된 것이니 지운다.
+	// Task(최근 작업)는 hook이 건드리지 않는다.
+	if event == "notification" {
+		a.Ask = p.Message
+	} else {
+		a.Ask = ""
 	}
 	prev := a.State
 	a.Transition(to, now)

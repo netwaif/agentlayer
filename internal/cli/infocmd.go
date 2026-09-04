@@ -96,6 +96,9 @@ func RenderInfo(w io.Writer, d InfoData, now time.Time) {
 	} else {
 		fmt.Fprintln(w, "  세션 ID    미기록 (hook 이벤트가 오면 채워짐)")
 	}
+	if a.Ask != "" {
+		fmt.Fprintf(w, "  묻는 중    %s\n", a.Ask)
+	}
 	if a.Task != "" {
 		fmt.Fprintf(w, "  최근 작업  %s\n", a.Task)
 	}
