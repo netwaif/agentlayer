@@ -122,24 +122,45 @@ func Connect(stateDir string, port int) (*rod.Browser, error) {
 	if alive {
 		return attach(stateDir, ws)
 	}
-	bin, ok := launcher.LookPath()
-	if !ok {
-		return nil, fmt.Errorf("Chrome을 찾을 수 없습니다 — Google Chrome 또는 Chromium 설치 필요")
+	bin, err := EnsureEngine(stateDir, os.Stderr)
+	if err != nil {
+		// 엔진(Chrome for Testing)을 못 구하면 시스템 Chrome — 단, Dock의 Chrome 클릭이
+		// 이 브라우저로 흡수되는 문제가 남는다(engine.go 주석).
+		fmt.Fprintf(os.Stderr, "에이전트 브라우저 엔진 준비 실패(%v) — 시스템 Chrome으로 대체합니다\n", err)
+		sys, ok := launcher.LookPath()
+		if !ok {
+			return nil, fmt.Errorf("Chrome을 찾을 수 없습니다 — Google Chrome 또는 Chromium 설치 필요")
+		}
+		bin = sys
 	}
 	profile := filepath.Join(stateDir, "browser-profile")
 	if err := EnsureProfileTheme(profile); err != nil {
 		return nil, err
 	}
-	ws, err = launcher.New().Bin(bin).
-		UserDataDir(profile).
-		Headless(launchHeadless).
-		Leakless(false). // CLI가 끝나도 브라우저는 살아야 한다
-		RemoteDebuggingPort(port).
-		Delete("no-startup-window"). // 기동 시 빈 창을 보여 "아무 일 없음"처럼 보이지 않게
-		Delete("enable-automation"). // "자동화된 테스트 소프트웨어에 의해 제어" 인포바 제거 — 사람이 같이 쓰는 브라우저
-		Launch()
+	ws, err = newLauncher(bin, profile, port).Launch()
 	if err != nil {
 		return nil, fmt.Errorf("Chrome 기동 실패: %w", err)
 	}
 	return attach(stateDir, ws)
+}
+
+// newLauncher는 전용 브라우저 기동 플래그. 사람이 같이 쓰는 창이라 자동화 티를 걷어낸다.
+func newLauncher(bin, profile string, port int) *launcher.Launcher {
+	return launcher.New().Bin(bin).
+		UserDataDir(profile).
+		Headless(launchHeadless).
+		Leakless(false). // CLI가 끝나도 브라우저는 살아야 한다
+		RemoteDebuggingPort(port).
+		Delete("no-startup-window").                      // 기동 시 빈 창을 보여 "아무 일 없음"처럼 보이지 않게
+		Delete("enable-automation").                      // "자동화된 테스트 소프트웨어에 의해 제어" 인포바 제거
+		Delete("disable-site-isolation-trials").          // "지원되지 않는 기능 플래그" 경고 띠 제거
+		Set("disable-features", "Translate,TranslateUI"). // site-per-process 비활성(같은 경고)·번역 말풍선 제거
+		// Chrome for Testing은 "자동 테스트 전용입니다" 띠를 창마다 띄운다. 정책으로만 끌 수 있고
+		// (IsManaged), 유일한 예외가 infobar_utils.cc의 IsGpuTest() = --test-type=gpu (2026-09-04 실측).
+		Set("test-type", "gpu")
+}
+
+// launchArgs는 newLauncher가 만드는 명령줄 (테스트·진단용).
+func launchArgs(bin, profile string, port int) []string {
+	return newLauncher(bin, profile, port).FormatArgs()
 }

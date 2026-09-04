@@ -169,6 +169,14 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   보는 서버는 관제탑이 닫혀 있어도 hook이 자동으로 전용 브라우저 창(⎇브랜치
   제목)에 연다(`preview_auto`). `p`는 그 서버를 다시 연다. 위 명령들은 이 키들이
   뒤에서 부르는 배관이다
+- **엔진은 Chrome for Testing** — 구글이 자동화용으로 배포하는 정식 Chrome을
+  첫 기동 때 한 번 `~/.local/state/agentlayer/chrome-for-testing/`에 내려받는다
+  (약 200MB, 십수 초). 시스템 Chrome을 전용 프로필로 띄우면 macOS가 그 프로세스를
+  "Google Chrome"으로 등록해, Dock·Spotlight에서 Chrome을 열어도 실사용 크롬이
+  뜨지 않고 에이전트 브라우저에 창만 추가된다. 번들 ID가 다른 Chrome for Testing은
+  별개 앱이라 섞이지 않는다. 코덱은 실Chrome과 같고 Widevine DRM만 없다.
+  내려받기에 실패하면 시스템 Chrome으로 대체한다(위 Dock 문제는 남음). 엔진을
+  새 버전으로 바꾸려면 그 폴더를 지우면 다음 기동 때 다시 받는다
 - 전용 프로필 `~/.local/state/agentlayer/browser-profile`로 뜬다 —
   로그인 세션은 이 프로필에 보존되고, 실사용 Chrome과 격리된다.
   기동 시 프로필에 다크·중성 회색 테마(Claude Desktop 다크 톤)와 프로필 이름

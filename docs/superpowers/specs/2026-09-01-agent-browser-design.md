@@ -100,3 +100,15 @@ Chrome 없음·CDP attach 실패·lsof 불가는 명확한 안내 후 종료. �
 
 go.mod에 rod 추가만, goreleaser·brew 무변경. README browser 섹션.
 매뉴얼은 선반영 금지 원칙대로 릴리즈 후 반영.
+
+## 2026-09-04 정정: 엔진을 시스템 Chrome → Chrome for Testing으로
+
+"Chrome 탐색: 시스템 Chrome→Chromium" 결정을 뒤집는다. 시스템 Chrome을 전용 프로필로
+띄우면 macOS LaunchServices가 그 프로세스를 `com.google.Chrome`으로 등록해, 에이전트
+브라우저가 먼저 떠 있으면 Dock·Spotlight의 Chrome 클릭이 새 프로세스를 만들지 않고
+에이전트 브라우저에 창만 추가한다(실측: `open -a "Google Chrome"` → 프로세스 수 불변,
+`open -n`만 새 인스턴스). 래퍼 앱 3종(스크립트 exec·심볼릭 링크·실행 파일 복사+ad-hoc
+재서명)은 실행 경로 재식별 또는 렌더러 샌드박스(프레임워크 dlopen 차단)에 막혔다.
+Chrome for Testing(`com.google.chrome.for.testing`)은 별개 앱이라 섞이지 않고, 코덱은
+실Chrome과 같다(Widevine만 없음). 첫 기동 때 `stateDir/chrome-for-testing/`에 내려받고
+(약 200MB), 실패 시 시스템 Chrome 폴백. 구현 `internal/browser/engine.go`.
