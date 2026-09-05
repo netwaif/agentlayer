@@ -142,6 +142,11 @@ agentlayer wt clean auth-api                    # 보존 우선 정리
 - **보존 우선 정리** — 미커밋·untracked·미병합 커밋이 하나라도 있으면 clean 거부
 - worktree는 `<repo>/.agentlayer/worktrees/<task>`에, 메타는 상태 디렉터리에 기록
 
+- **말로 시키는 오케스트레이션**: 코디네이터 세션에 "claude랑 codex한테 A/B로
+  시켜봐"라고 하면 `orchestration` 스킬(`agentlayer init`이 설치)이 `wt new` →
+  2단 dispatch → `status` 폴링 → 취합 절차를 대신 밟는다. 머지는 사용자가 고른다.
+  worker의 브라우저 일은 `agent-browser` 스킬 규칙(자기 탭·chrome-devtools MCP)을 따른다
+
 ## 에이전트 전용 브라우저
 
 에이전트가 만든 웹 화면을 사람이 직접 보고, 본 것(요소 지목·스크린샷·콘솔
@@ -162,9 +167,10 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
 ```
 
 - **말로 시켜도 된다**: 지금 대화 중인 세션이 대상이면 관제탑을 열 필요 없이
-  "브라우저에서 지목할게"·"스크린샷 확인해봐"라고 하면 된다. 스킬(`agentlayer init`이
-  설치)이 `pick --once`·`shot`을 대신 실행하고 결과를 읽는다. 관제탑 키는 여러
-  에이전트 중 대상을 고를 때 쓴다
+  "브라우저에서 지목할게"·"스크린샷 확인해봐"·"콘솔 에러 확인해봐"·"x.com 쿠키
+  가져와줘"라고 하면 된다. `agent-browser` 스킬(`agentlayer init`이 `~/.claude/skills`에
+  설치)이 `pick --once`·`shot`·`errors --reload`·`cookies`를 대신 실행하고 결과를
+  읽는다. 관제탑 키는 여러 에이전트 중 대상을 고를 때 쓴다
 - **관제탑에서 키 하나로**: 에이전트 행을 고르고 `b`(요소 지목)·`s`(활성 탭
   캡처)를 누르면 그 에이전트 pane으로 바로 간다(후보 선택 없음). 에이전트
   폴더 아래에서 dev 서버가 listen 중이면 행 끝에 `🌐:3000` 뱃지가 붙는다. 처음

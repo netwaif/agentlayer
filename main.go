@@ -385,10 +385,10 @@ func runInit(args []string) error {
 		}
 	}
 	fmt.Println()
-	// /orchestration 스킬 — 바이너리 동봉본을 ~/.claude/skills에 설치
+	// 스킬(orchestration·agent-browser) — 바이너리 동봉본을 ~/.claude/skills에 설치
 	skillsDir := filepath.Join(home, ".claude", "skills")
-	fmt.Println("orchestration 스킬 설치:", skillsDir)
-	if err := cli.InstallOrchestrationSkill(os.Stdout, skillsDir, *dryRun); err != nil {
+	fmt.Println("스킬 설치:", skillsDir)
+	if err := cli.InstallSkills(os.Stdout, skillsDir, *dryRun); err != nil {
 		return err
 	}
 	fmt.Println()
