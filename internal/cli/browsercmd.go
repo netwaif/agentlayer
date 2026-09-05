@@ -654,6 +654,11 @@ func browserMCPServe() error {
 	// roots 보정(mcproots.go): 서버 stdin에는 두 고루틴이 쓰므로 직렬화한다.
 	cwd, _ := os.Getwd()
 	roots := newMCPRoots(cwd)
+	// FX(browser/fx.go): 조작 도구의 호출~응답 구간을 페이지에 알려 AI 커서·글로우를 켠다.
+	// rod 연결은 첫 신호 때 맺고 죽으면 다시 맺는다(사용자가 브라우저를 닫았다 여는 경우).
+	fx := newFxSignaler(cfg.BrowserFxEnabled(), func() (*rod.Browser, error) {
+		return browser.Connect(state.DefaultDir(), port)
+	})
 	var wmu sync.Mutex
 	writeServer := func(b []byte) error {
 		wmu.Lock()
@@ -674,6 +679,7 @@ func browserMCPServe() error {
 				if fwd != nil {
 					_, _ = os.Stdout.Write(fwd)
 				}
+				fx.OnServerLine(line)
 			}
 			if rerr != nil {
 				return
@@ -690,6 +696,7 @@ func browserMCPServe() error {
 			if IsMCPToolCall(line) && !browser.IsUp(port) {
 				_, _ = browser.Connect(state.DefaultDir(), port) // 기동만; 클라이언트는 세션 동안 유지
 			}
+			fx.OnClientLine(line) // 도구가 손대기 전에 신호가 먹어야 하므로 전달보다 앞
 			if werr := writeServer(roots.FromClient(line)); werr != nil {
 				break
 			}
@@ -700,6 +707,52 @@ func browserMCPServe() error {
 	}
 	_ = in.Close()
 	return cmd.Wait()
+}
+
+// fxSignaler는 FxTracker와 rod 연결을 묶어 mcp-serve 루프에서 한 줄씩 부른다.
+type fxSignaler struct {
+	enabled bool
+	connect func() (*rod.Browser, error)
+	tracker browser.FxTracker
+	mu      sync.Mutex
+	b       *rod.Browser
+}
+
+func newFxSignaler(enabled bool, connect func() (*rod.Browser, error)) *fxSignaler {
+	return &fxSignaler{enabled: enabled, connect: connect}
+}
+
+func (f *fxSignaler) OnClientLine(line []byte) {
+	if !f.enabled {
+		return
+	}
+	if tool, ok := f.tracker.Start(line); ok {
+		f.signal(tool, true)
+	}
+}
+
+func (f *fxSignaler) OnServerLine(line []byte) {
+	if !f.enabled {
+		return
+	}
+	if f.tracker.End(line) {
+		f.signal("", false)
+	}
+}
+
+func (f *fxSignaler) signal(tool string, on bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.b == nil {
+		b, err := f.connect()
+		if err != nil {
+			return
+		}
+		f.b = b
+	}
+	if err := browser.SignalFx(f.b, tool, on); err != nil {
+		f.b = nil // 연결이 죽었으면 다음 신호 때 다시 맺는다
+	}
 }
 
 // IsMCPToolCall은 MCP stdio(JSON-RPC 한 줄)가 tools/call인지 본다.

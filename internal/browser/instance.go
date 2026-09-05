@@ -137,7 +137,13 @@ func Connect(stateDir string, port int) (*rod.Browser, error) {
 	if err := EnsureProfileTheme(profile); err != nil {
 		return nil, err
 	}
-	ws, err = newLauncher(bin, profile, port).Launch()
+	// FX 확장(fx.go) — 못 풀어도 브라우저는 떠야 하므로 경고만.
+	fxDir, err := InstallFx(stateDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "FX 확장 설치 실패(%v) — 조작 효과 없이 기동합니다\n", err)
+		fxDir = ""
+	}
+	ws, err = newLauncher(bin, profile, port, fxDir).Launch()
 	if err != nil {
 		return nil, fmt.Errorf("Chrome 기동 실패: %w", err)
 	}
@@ -145,8 +151,9 @@ func Connect(stateDir string, port int) (*rod.Browser, error) {
 }
 
 // newLauncher는 전용 브라우저 기동 플래그. 사람이 같이 쓰는 창이라 자동화 티를 걷어낸다.
-func newLauncher(bin, profile string, port int) *launcher.Launcher {
-	return launcher.New().Bin(bin).
+// fxDir이 비어 있지 않으면 FX 확장(fx.go)을 함께 로드한다.
+func newLauncher(bin, profile string, port int, fxDir string) *launcher.Launcher {
+	l := launcher.New().Bin(bin).
 		UserDataDir(profile).
 		Headless(launchHeadless).
 		Leakless(false). // CLI가 끝나도 브라우저는 살아야 한다
@@ -158,9 +165,13 @@ func newLauncher(bin, profile string, port int) *launcher.Launcher {
 		// Chrome for Testing은 "자동 테스트 전용입니다" 띠를 창마다 띄운다. 정책으로만 끌 수 있고
 		// (IsManaged), 유일한 예외가 infobar_utils.cc의 IsGpuTest() = --test-type=gpu (2026-09-04 실측).
 		Set("test-type", "gpu")
+	if fxDir != "" {
+		l = l.Set("load-extension", fxDir)
+	}
+	return l
 }
 
 // launchArgs는 newLauncher가 만드는 명령줄 (테스트·진단용).
-func launchArgs(bin, profile string, port int) []string {
-	return newLauncher(bin, profile, port).FormatArgs()
+func launchArgs(bin, profile string, port int, fxDir string) []string {
+	return newLauncher(bin, profile, port, fxDir).FormatArgs()
 }

@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "AgentLayer FX",
+  "version": "1.0",
+  "description": "에이전트가 브라우저를 조작할 때 AI 커서·테두리 글로우를 그린다",
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*", "file:///*"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ]
+}

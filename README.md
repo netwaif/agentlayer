@@ -117,6 +117,8 @@ agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참
   `false`면 뱃지만 붙고 `p`로 연다
 - `browser_port`(선택): 전용 브라우저 CDP 디버깅 포트. 기본 `9222`.
   MCP 설정이 이 주소를 고정으로 보므로 바꾸면 `agentlayer browser mcp`를 다시 등록
+- `browser_fx`(선택): 에이전트가 브라우저를 조작할 때 AI 커서·테두리 글로우를
+  그린다. 기본 `true`. `false`면 효과만 꺼진다(아래 "조작 효과")
 
 ## Worktree 병렬 모드
 
@@ -177,6 +179,15 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   별개 앱이라 섞이지 않는다. 코덱은 실Chrome과 같고 Widevine DRM만 없다.
   내려받기에 실패하면 시스템 Chrome으로 대체한다(위 Dock 문제는 남음). 엔진을
   새 버전으로 바꾸려면 그 폴더를 지우면 다음 기동 때 다시 받는다
+- **조작 효과(FX)** — 에이전트가 MCP로 클릭·입력·드래그·스크립트를 실행하는 동안
+  뷰포트 안쪽 테두리에 테라코타 글로우가 켜지고, "AI" 뱃지가 달린 커서가 CDP
+  마우스 이벤트를 따라 움직이며 클릭 지점에 리플, 입력 중인 요소에 하이라이트가
+  뜬다. 사람이 "지금 AI가 손대고 있다"를 보게 하는 장치로, 스냅샷·스크린샷·목록
+  조회 같은 읽기 도구에는 켜지지 않는다. 구현은 `mcp-serve` 프록시가 도구 호출의
+  시작·끝을 CDP로 페이지에 알리고, 기동 시 프로필에 붙인 작은 확장
+  (`~/.local/state/agentlayer/browser-fx/`, 콘텐츠 스크립트)이 그린다.
+  Chrome for Testing 전용(브랜드 Chrome 137+는 확장 로드 플래그를 무시 → 효과만
+  없음). 이미 떠 있는 브라우저에는 다음 기동부터 붙는다. `browser_fx: false`로 끔
 - 전용 프로필 `~/.local/state/agentlayer/browser-profile`로 뜬다 —
   로그인 세션은 이 프로필에 보존되고, 실사용 Chrome과 격리된다.
   기동 시 프로필에 다크·중성 회색 테마(Claude Desktop 다크 톤)와 프로필 이름

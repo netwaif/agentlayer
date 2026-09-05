@@ -126,7 +126,7 @@ func TestEnsureEngine_Download(t *testing.T) {
 
 // 기동 플래그: 경고 띠를 띄우는 site-isolation 계열은 빼고, 사람이 같이 쓰는 창에 맞게.
 func TestLaunchArgs(t *testing.T) {
-	args := strings.Join(launchArgs("/bin/chrome", "/p", 9222), "\n")
+	args := strings.Join(launchArgs("/bin/chrome", "/p", 9222, ""), "\n")
 	for _, bad := range []string{"disable-site-isolation-trials", "site-per-process", "enable-automation", "no-startup-window"} {
 		if strings.Contains(args, bad) {
 			t.Errorf("플래그에 %s가 있으면 안 된다", bad)

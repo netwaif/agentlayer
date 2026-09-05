@@ -115,3 +115,13 @@ func TestWorkerAutoApproveDefaultTrue(t *testing.T) {
 		t.Error("false면 꺼짐")
 	}
 }
+
+func TestBrowserFxEnabled(t *testing.T) {
+	if !(&Config{}).BrowserFxEnabled() {
+		t.Fatal("기본값은 켜짐")
+	}
+	off := false
+	if (&Config{BrowserFx: &off}).BrowserFxEnabled() {
+		t.Fatal("false면 꺼짐")
+	}
+}

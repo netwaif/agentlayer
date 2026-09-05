@@ -35,6 +35,8 @@ type Config struct {
 	// 전용 브라우저의 CDP 디버깅 포트. 고정이라 MCP(chrome-devtools-mcp 등)가
 	// 늘 같은 주소로 붙는다. 비면 9222.
 	BrowserPort int `json:"browser_port,omitempty"`
+	// 에이전트가 브라우저를 조작할 때 AI 커서·테두리 글로우를 그린다. 기본 켜짐.
+	BrowserFx *bool `json:"browser_fx,omitempty"`
 }
 
 const (
@@ -71,6 +73,14 @@ func (c *Config) WorkerAutoApproveEnabled() bool {
 		return true
 	}
 	return *c.WorkerAutoApprove
+}
+
+// BrowserFxEnabled는 기본값(true)을 반영한 접근자.
+func (c *Config) BrowserFxEnabled() bool {
+	if c.BrowserFx == nil {
+		return true
+	}
+	return *c.BrowserFx
 }
 
 // BrowserPortOrDefault는 browser_port를 반영한 디버깅 포트. 범위 밖(0 이하·65535 초과)은 기본값.
