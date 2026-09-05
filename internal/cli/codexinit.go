@@ -228,6 +228,7 @@ const codexAgentsBlock = codexAgentsStart + `
 - 웹 페이지를 열고·보고·클릭하고·스크린샷을 찍는 일은 **chrome-devtools MCP**(` + "`list_pages`·`new_page`·`navigate_page`·`take_screenshot`·`click`·`fill`·`evaluate_script`" + `)로 한다. 이 MCP가 AgentLayer 전용 Chrome(에이전트 브라우저)에 붙어 있다.
 - ChatGPT 앱 내장 브라우저 스킬(인앱 브라우저 제어, ` + "`agent.browsers.list()`" + ` 류 node_repl 브라우저 API)은 쓰지 않는다 — 그건 이 브라우저를 모르고 "No browser is available"로 끝난다.
 - 브라우저가 안 떠 있어도 MCP 서버가 띄우므로 기동 명령은 없다. 자기 탭(` + "`new_page`" + `의 pageId)에서만 작업하고 남의 탭은 이동·닫지 않는다.
+- 사람이 같이 보는 창이다 — 묻지 않고 ` + "`resize_page`·`emulate`" + `로 창 크기를 바꾸지 않는다.
 - "뭔가 잘못된 것 같다"처럼 증상만 오면 사람에게 로그를 요구하지 말고 ` + "`list_console_messages`" + `(JS 예외·console.error)와 ` + "`list_network_requests`" + `(404·CORS)를 직접 읽는다. 보이는 증상 하나에 에러가 여럿인 경우가 흔하니 전부 짚고 원인별로 고친 뒤 같은 탭을 리로드해 확인한다.
 - 로그인 쿠키는 셸 명령으로 다룬다(값은 안 찍힘): "에이전트 브라우저에 뭐 들어 있어?" → ` + "`~/.local/bin/agentlayer browser cookies list`" + `(호스트별 개수) / ` + "`cookies list <도메인>`" + `(이름·만료), "OO 로그인 쿠키 가져와줘" → ` + "`cookies import <도메인>`" + `(macOS Keychain 팝업이 뜨니 "항상 허용"을 누르라고 먼저 말한다), "OO 쿠키 지워줘" → ` + "`cookies clear <도메인>`" + `. 실사용 Chrome은 절대 바꾸지 않는다.
 - 스크린샷 파일은 ` + "`take_screenshot`" + `의 ` + "`filePath`" + `로 **현재 작업 폴더 안**에 저장한다(그 밖은 MCP가 거부한다).

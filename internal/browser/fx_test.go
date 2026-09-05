@@ -53,19 +53,6 @@ func TestLaunchArgsLoadsFxExtension(t *testing.T) {
 	}
 }
 
-func TestIsActionTool(t *testing.T) {
-	for _, name := range []string{"click", "hover", "fill", "drag", "type_text", "navigate_page", "evaluate_script", "some_future_tool"} {
-		if !IsActionTool(name) {
-			t.Errorf("%s는 조작 도구여야 한다", name)
-		}
-	}
-	for _, name := range []string{"take_snapshot", "take_screenshot", "list_pages", "list_console_messages", "get_network_request", "wait_for"} {
-		if IsActionTool(name) {
-			t.Errorf("%s는 읽기 도구여야 한다", name)
-		}
-	}
-}
-
 func TestFxTracker(t *testing.T) {
 	var tr FxTracker
 	call := func(id, name string) []byte {
@@ -74,10 +61,13 @@ func TestFxTracker(t *testing.T) {
 	resp := func(id string) []byte {
 		return []byte(`{"jsonrpc":"2.0","id":` + id + `,"result":{"content":[]}}` + "\n")
 	}
-	if tool, ok := tr.Start(call("1", "take_snapshot")); ok {
-		t.Fatalf("읽기 도구는 시작 신호 없음: %q", tool)
+	if tool, ok := tr.Start(call("1", "take_snapshot")); !ok || tool != "take_snapshot" {
+		t.Fatalf("읽기 도구도 추적(깜빡임 방지): %q %v", tool, ok)
 	}
-	if tr.End(resp("1")) {
+	if !tr.End(resp("1")) {
+		t.Fatal("응답에 종료 신호")
+	}
+	if tr.End(resp("99")) {
 		t.Fatal("추적 안 한 응답에 종료 신호")
 	}
 	if tool, ok := tr.Start(call("2", "click")); !ok || tool != "click" {

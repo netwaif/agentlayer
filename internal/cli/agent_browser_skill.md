@@ -12,6 +12,7 @@ description: AgentLayer 에이전트 전용 브라우저(chrome-devtools MCP로 
 - **도구는 chrome-devtools MCP** — `list_pages`·`new_page`·`navigate_page`·`take_snapshot`·`take_screenshot`·`click`·`fill`·`evaluate_script`·`list_console_messages`·`list_network_requests`. 브라우저가 안 떠 있어도 MCP 서버(`agentlayer browser mcp-serve`)가 띄우므로 **기동 명령은 없다**.
 - **자기 탭에서만 작업한다** — 시작할 때 `new_page`로 탭을 만들고 그 pageId만 쓴다. 다른 에이전트가 같은 브라우저를 쓰고 있으므로 남의 탭을 이동·닫지 않는다.
 - 앱 내장 브라우저 스킬(`browser:control-in-app-browser` 등 자체 런타임)은 쓰지 않는다 — 그건 이 브라우저를 모른다.
+- **창 크기를 바꾸지 않는다** — `resize_page`·`emulate`는 사람이 보고 있는 창을 흔든다. 반응형 확인이 필요하면 먼저 사용자에게 묻고, 끝나면 원래 크기로 되돌린다.
 - 아래 셸 명령은 `agentlayer browser …`다. 봇 세션처럼 PATH가 최소면 `~/.local/bin/agentlayer`로 부른다.
 
 ## 보기·찍기 — "스크린샷 확인해봐", "폰으로 보내줘"
@@ -47,5 +48,6 @@ description: AgentLayer 에이전트 전용 브라우저(chrome-devtools MCP로 
 
 - 남의 탭 이동·닫기 금지. 자기 탭(pageId)만.
 - 앱 내장 브라우저 런타임 사용 금지 — chrome-devtools MCP만.
+- 묻지 않고 `resize_page`·`emulate`로 창 크기·기기 흉내 바꾸기 금지.
 - `errors`를 `--reload` 없이 부르기 금지(사람 입력을 기다리며 멈춘다).
 - 실사용 Chrome의 쿠키·프로필 변경 금지.
