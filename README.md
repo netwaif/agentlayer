@@ -232,6 +232,11 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   남는다. 에이전트에게 "claude.ai 세션 키 꺼내서 ~/bot/.env에 넣어줘"라고 하면
   `cookies export claude.ai sessionKey --env ~/bot/.env CLAUDE_SESSION_KEY`를 치고
   값은 에이전트도 보지 않는다. 만료되면 같은 말을 다시 하면 된다(healthcheck 뒤 갱신)
+- **구글 계정은 예외** — `cookies import google.com`은 형식상 들어가지만 구글이 복사된
+  세션을 첫 요청에서 거부하고 로그인 쿠키(SID·PSIDTS 계열)를 지운다(2026-09-06 실측,
+  세션이 원래 브라우저에 묶여 있음). notebooklm CLI 같은 구글 도구는 그 도구의
+  `login`으로 인증하고, 에이전트 브라우저에서 구글이 필요하면 그 창에서 직접 로그인한다.
+  import는 안착 확인을 하므로 Chrome이 조용히 거부한 쿠키가 있으면 이름을 보고한다
 - MCP 스크린샷은 Chrome에 화면 잠자기 방지 잠금("Capturing")을 남길 때가 있어
   모니터가 안 꺼진다 — hook이 에이전트 브라우저에 그런 잠금을 보면 탭마다 1×1
   캡처를 완료시켜 풀어 준다(자동, 30초 간격). 에이전트 브라우저는 재기동 때 이전

@@ -249,3 +249,46 @@ func TestExportCookiesIntegration(t *testing.T) {
 		t.Error("--to/--env 없이 stdout으로 내보내기는 거부돼야 함")
 	}
 }
+
+func TestMissingAfterSet(t *testing.T) {
+	params := []*proto.NetworkCookieParam{
+		{Name: "a", Domain: ".x.com", Path: "/"},
+		{Name: "b", Domain: "api.x.com", Path: "/"},
+		{Name: "b", Domain: "api.x.com", Path: "/v2"},
+	}
+	present := []*proto.NetworkCookie{
+		{Name: "a", Domain: ".x.com", Path: "/"},
+		{Name: "b", Domain: "api.x.com", Path: "/v2"},
+	}
+	got := missingAfterSet(params, present)
+	if len(got) != 1 || got[0] != "b@api.x.com/" {
+		t.Errorf("주입 안 된 것만 이름@호스트경로로: %v", got)
+	}
+}
+
+// 실브라우저: Chrome이 조용히 거부하는 쿠키(SameSite=None인데 Secure 아님)를 import가 이름으로 보고해야 한다.
+func TestInjectCookiesReportsRejected(t *testing.T) {
+	if _, ok := launcher.LookPath(); !ok {
+		t.Skip("Chrome 없음")
+	}
+	SetHeadlessForTest(true)
+	defer SetHeadlessForTest(false)
+	dir := t.TempDir()
+	b, err := Connect(dir, freePort(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { b.MustClose(); cleanupProfile(dir) }()
+	exp := proto.TimeSinceEpoch(float64(time.Now().Add(time.Hour).Unix()))
+	params := []*proto.NetworkCookieParam{
+		{Name: "ok", Value: "1", Domain: ".x.com", Path: "/", Secure: true, Expires: exp},
+		{Name: "bad", Value: "2", Domain: ".x.com", Path: "/", Secure: false, SameSite: "None", Expires: exp},
+	}
+	rejected, err := injectCookies(b, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rejected) != 1 || rejected[0] != "bad@.x.com/" {
+		t.Errorf("거부된 쿠키 보고: %v", rejected)
+	}
+}

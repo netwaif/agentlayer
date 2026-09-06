@@ -370,8 +370,9 @@ func ImportCookies(b *rod.Browser, home, sqlite3Path, profile string, domains []
 		return fmt.Errorf("가져올 유효한 쿠키가 없습니다 " +
 			"(도메인 철자 또는 크롬에서 해당 사이트 로그인 여부를 확인하세요)")
 	}
-	if err := (proto.StorageSetCookies{Cookies: params}).Call(b); err != nil {
-		return fmt.Errorf("쿠키 주입 실패: %w", err)
+	rejected, err := injectCookies(b, params)
+	if err != nil {
+		return err
 	}
 	for _, d := range domains {
 		fmt.Fprintf(out, "%s: 쿠키 %d개 가져옴\n", d, counts[d])
@@ -379,8 +380,46 @@ func ImportCookies(b *rod.Browser, home, sqlite3Path, profile string, domains []
 	if skipped > 0 {
 		fmt.Fprintf(out, "(만료·복호화 불가 %d개 건너뜀)\n", skipped)
 	}
+	if len(rejected) > 0 {
+		fmt.Fprintf(out, "(Chrome이 주입을 거부한 %d개: %s)\n", len(rejected), strings.Join(rejected, ", "))
+	}
 	fmt.Fprintln(out, "완료 — 에이전트 브라우저에서 해당 사이트에 로그인 상태로 접속됩니다.")
 	return nil
+}
+
+// injectCookies는 StorageSetCookies 뒤 실제 안착을 확인해 Chrome이 조용히 거부한 쿠키를
+// 이름@호스트경로로 돌려준다(값은 없음). SetCookies는 잘못된 쿠키를 에러 없이 버린다.
+func injectCookies(b *rod.Browser, params []*proto.NetworkCookieParam) ([]string, error) {
+	if err := (proto.StorageSetCookies{Cookies: params}).Call(b); err != nil {
+		return nil, fmt.Errorf("쿠키 주입 실패: %w", err)
+	}
+	res, err := proto.StorageGetCookies{}.Call(b)
+	if err != nil {
+		return nil, fmt.Errorf("쿠키 조회 실패: %w", err)
+	}
+	return missingAfterSet(params, res.Cookies), nil
+}
+
+func cookieKey(name, domain, path string) string {
+	if path == "" {
+		path = "/"
+	}
+	return name + "@" + domain + path
+}
+
+// missingAfterSet은 params 중 present에 없는 것을 이름@호스트경로로 나열한다.
+func missingAfterSet(params []*proto.NetworkCookieParam, present []*proto.NetworkCookie) []string {
+	have := map[string]bool{}
+	for _, c := range present {
+		have[cookieKey(c.Name, c.Domain, c.Path)] = true
+	}
+	var missing []string
+	for _, p := range params {
+		if k := cookieKey(p.Name, p.Domain, p.Path); !have[k] {
+			missing = append(missing, k)
+		}
+	}
+	return missing
 }
 
 // selectCookies는 브라우저에 있는 쿠키 중 요청 도메인(자신·하위)에 속한 것만 고르고
