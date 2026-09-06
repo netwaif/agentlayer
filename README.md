@@ -1,3 +1,5 @@
+![agentlayer — dark Pac-Man banner](docs/assets/agentlayer-banner.png)
+
 # agentlayer — iTerm2+tmux 멀티 에이전트 관제탑
 
 tmux 안에서 돌아가는 Claude Code / Codex / Gemini 에이전트들이
