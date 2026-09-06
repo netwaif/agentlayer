@@ -1,4 +1,4 @@
-![agentlayer — dark Pac-Man banner](docs/assets/agentlayer-banner.png)
+![agentlayer — The best of every tool. 도구의 장점을 흡수하는 마스코트](docs/assets/agentlayer-banner.png)
 
 # agentlayer — iTerm2+tmux 멀티 에이전트 관제탑
 
