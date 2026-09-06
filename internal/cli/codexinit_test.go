@@ -195,3 +195,43 @@ func TestInstallCodexAgentsAppendReplaceIdempotent(t *testing.T) {
 		t.Errorf("교체: %q", s)
 	}
 }
+
+func TestCodexAgentsBlockMentionsCookiesExport(t *testing.T) {
+	for _, want := range []string{"cookies export", "--env", "값은 안 찍힘"} {
+		if !strings.Contains(codexAgentsBlock, want) {
+			t.Errorf("codex 블록에 %q 없음", want)
+		}
+	}
+}
+
+// Gemini(agy·Gemini CLI)는 ~/.gemini/GEMINI.md에 같은 마커 블록을 심는다 — 인앱 브라우저 금지 문구는 codex 전용이라 빠진다.
+func TestInstallGeminiAgentsAppendIdempotent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "GEMINI.md")
+	if err := os.WriteFile(path, []byte("# mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := InstallGeminiAgents(&buf, path, false); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	s := string(raw)
+	if !strings.HasPrefix(s, "# mine\n\n"+codexAgentsStart) || !strings.HasSuffix(s, codexAgentsEnd+"\n") {
+		t.Errorf("덧붙이기: %q", s)
+	}
+	for _, want := range []string{"chrome-devtools", "cookies import", "cookies export", "resize_page"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("gemini 블록에 %q 없음", want)
+		}
+	}
+	if strings.Contains(s, "인앱 브라우저") {
+		t.Error("ChatGPT 인앱 브라우저 문구는 codex 전용")
+	}
+	buf.Reset()
+	if err := InstallGeminiAgents(&buf, path, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "이미 설치됨") {
+		t.Errorf("멱등: %s", buf.String())
+	}
+}

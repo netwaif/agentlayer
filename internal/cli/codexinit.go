@@ -222,21 +222,40 @@ const (
 // ChatGPT 앱 내장 "인앱 브라우저 제어" 스킬로 처리하려다 "No browser is available"로
 // 실패한다(2026-09-02·09-03 실측). 사용자가 "chrome-devtools 이용해"라고 하면 되는데,
 // 그 한마디를 기본값으로 만든다.
-const codexAgentsBlock = codexAgentsStart + `
+// 3사 공통 지침 줄들. codex 블록은 여기에 ChatGPT 인앱 브라우저 금지 줄을 더한다.
+const agentsCommonHead = `
 ## 에이전트 브라우저 (AgentLayer)
 
 - 웹 페이지를 열고·보고·클릭하고·스크린샷을 찍는 일은 **chrome-devtools MCP**(` + "`list_pages`·`new_page`·`navigate_page`·`take_screenshot`·`click`·`fill`·`evaluate_script`" + `)로 한다. 이 MCP가 AgentLayer 전용 Chrome(에이전트 브라우저)에 붙어 있다.
-- ChatGPT 앱 내장 브라우저 스킬(인앱 브라우저 제어, ` + "`agent.browsers.list()`" + ` 류 node_repl 브라우저 API)은 쓰지 않는다 — 그건 이 브라우저를 모르고 "No browser is available"로 끝난다.
-- 브라우저가 안 떠 있어도 MCP 서버가 띄우므로 기동 명령은 없다. 자기 탭(` + "`new_page`" + `의 pageId)에서만 작업하고 남의 탭은 이동·닫지 않는다.
+`
+
+const agentsCommonTail = `- 브라우저가 안 떠 있어도 MCP 서버가 띄우므로 기동 명령은 없다. 자기 탭(` + "`new_page`" + `의 pageId)에서만 작업하고 남의 탭은 이동·닫지 않는다.
 - 사람이 같이 보는 창이다 — 묻지 않고 ` + "`resize_page`·`emulate`" + `로 창 크기를 바꾸지 않는다.
 - "뭔가 잘못된 것 같다"처럼 증상만 오면 사람에게 로그를 요구하지 말고 ` + "`list_console_messages`" + `(JS 예외·console.error)와 ` + "`list_network_requests`" + `(404·CORS)를 직접 읽는다. 보이는 증상 하나에 에러가 여럿인 경우가 흔하니 전부 짚고 원인별로 고친 뒤 같은 탭을 리로드해 확인한다.
 - 로그인 쿠키는 셸 명령으로 다룬다(값은 안 찍힘): "에이전트 브라우저에 뭐 들어 있어?" → ` + "`~/.local/bin/agentlayer browser cookies list`" + `(호스트별 개수) / ` + "`cookies list <도메인>`" + `(이름·만료), "OO 로그인 쿠키 가져와줘" → ` + "`cookies import <도메인>`" + `(macOS Keychain 팝업이 뜨니 "항상 허용"을 누르라고 먼저 말한다), "OO 쿠키 지워줘" → ` + "`cookies clear <도메인>`" + `. 실사용 Chrome은 절대 바꾸지 않는다.
+- "OO 로그인 쿠키를 XX 설정에 넣어줘"·"세션 키 꺼내서 .env에 넣어줘"·"yt-dlp용 쿠키 파일 만들어줘" → ` + "`cookies export <도메인> [이름] --to <파일>`" + `(이름 있으면 값 한 줄, 없으면 Netscape cookies.txt, ` + "`--format json`" + ` 가능) 또는 ` + "`cookies export <도메인> <이름> --env <.env파일> <KEY>`" + `(그 KEY 줄만 갱신). 값은 파일(0600)로만 가고 화면에 안 나오니 명령 출력 요약만 전하고, 값을 읽어 보여주거나 채팅에 옮기지 않는다. 어느 쿠키인지 모르면 ` + "`cookies list <도메인>`" + `로 이름부터 본다. 없다고 나오면 ` + "`cookies import <도메인>`" + ` 뒤에 다시 한다.
 - 스크린샷 파일은 ` + "`take_screenshot`" + `의 ` + "`filePath`" + `로 **현재 작업 폴더 안**에 저장한다(그 밖은 MCP가 거부한다).
-` + codexAgentsEnd + "\n"
+`
+
+const codexAgentsBlock = codexAgentsStart + agentsCommonHead +
+	`- ChatGPT 앱 내장 브라우저 스킬(인앱 브라우저 제어, ` + "`agent.browsers.list()`" + ` 류 node_repl 브라우저 API)은 쓰지 않는다 — 그건 이 브라우저를 모르고 "No browser is available"로 끝난다.
+` + agentsCommonTail + codexAgentsEnd + "\n"
+
+// geminiAgentsBlock은 ~/.gemini/GEMINI.md에 심는 같은 지침(agy·Gemini CLI 공용).
+const geminiAgentsBlock = codexAgentsStart + agentsCommonHead + agentsCommonTail + codexAgentsEnd + "\n"
 
 // InstallCodexAgents는 ~/.codex/AGENTS.md에 브라우저 지침 블록을 심는다.
-// 마커 사이만 소유한다 — 있으면 내용 비교 후 교체, 없으면 끝에 덧붙인다. 다른 내용은 안 건드린다.
 func InstallCodexAgents(w io.Writer, agentsPath string, dryRun bool) error {
+	return installAgentsBlock(w, agentsPath, codexAgentsBlock, "chrome-devtools MCP 사용·인앱 브라우저 스킬 금지", dryRun)
+}
+
+// InstallGeminiAgents는 ~/.gemini/GEMINI.md에 같은 블록을 심는다.
+func InstallGeminiAgents(w io.Writer, agentsPath string, dryRun bool) error {
+	return installAgentsBlock(w, agentsPath, geminiAgentsBlock, "chrome-devtools MCP 사용·쿠키 명령", dryRun)
+}
+
+// installAgentsBlock은 마커 사이만 소유한다 — 있으면 내용 비교 후 교체, 없으면 끝에 덧붙인다. 다른 내용은 안 건드린다.
+func installAgentsBlock(w io.Writer, agentsPath, block, addedNote string, dryRun bool) error {
 	raw, err := os.ReadFile(agentsPath)
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -252,11 +271,11 @@ func InstallCodexAgents(w io.Writer, agentsPath string, dryRun bool) error {
 		if end < len(content) && content[end] == '\n' {
 			end++
 		}
-		if content[i:end] == codexAgentsBlock {
+		if content[i:end] == block {
 			fmt.Fprintln(w, "  브라우저 지침: 이미 설치됨 — 건너뜀")
 			return nil
 		}
-		updated = content[:i] + codexAgentsBlock + content[end:]
+		updated = content[:i] + block + content[end:]
 		fmt.Fprintln(w, "  브라우저 지침: 갱신")
 	} else {
 		sep := ""
@@ -266,8 +285,8 @@ func InstallCodexAgents(w io.Writer, agentsPath string, dryRun bool) error {
 		if content != "" {
 			sep += "\n"
 		}
-		updated = content + sep + codexAgentsBlock
-		fmt.Fprintln(w, "  브라우저 지침: 추가 (chrome-devtools MCP 사용·인앱 브라우저 스킬 금지)")
+		updated = content + sep + block
+		fmt.Fprintf(w, "  브라우저 지침: 추가 (%s)\n", addedNote)
 	}
 	if dryRun {
 		fmt.Fprintln(w, "(dry-run — 파일을 변경하지 않았습니다)")

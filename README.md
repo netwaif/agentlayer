@@ -165,6 +165,8 @@ agentlayer browser preview [포트...]     # worktree dev 서버(또는 지정 �
 agentlayer browser cookies import <도메인...> [--profile <이름>]  # 실사용 크롬의 지정 도메인 쿠키만 골라 전용 프로필로 가져오기 (macOS, 프로필은 쿠키 많은 쪽 자동)
 agentlayer browser cookies list [도메인...]     # 전용 프로필에 있는 쿠키 현황 — 호스트별 개수, 도메인 지정 시 이름·만료 (값은 안 보임)
 agentlayer browser cookies clear <도메인...>    # 전용 프로필에서 지정 도메인 쿠키만 지우기 (로그아웃, 실사용 크롬은 무관)
+agentlayer browser cookies export <도메인> [이름] --to <파일> [--format value|netscape|json]  # 쿠키를 파일로만 내보내기 (0600, 화면엔 값 안 찍힘) — 이름 있으면 값 한 줄, 없으면 yt-dlp·curl용 cookies.txt
+agentlayer browser cookies export <도메인> <이름> --env <.env파일> <KEY>  # .env의 KEY= 줄만 그 쿠키 값으로 갱신 (봇·스크립트 설정 주입)
 agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mcp를 이 브라우저로 붙이는 설치 명령 출력
 ```
 
@@ -224,6 +226,12 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   무엇이 들어 있는지는 `cookies list`(호스트별 개수)·`cookies list x.com`(이름·만료)으로
   보고, 다 쓴 로그인은 `cookies clear x.com`처럼 그 도메인만 지운다 — 다른 사이트
   로그인과 실사용 Chrome은 그대로다
+- `cookies export`는 "브라우저에선 되는데 자동화만 하면 로그인에서 막히는" 도구
+  (사용량 모니터·yt-dlp·notebooklm CLI·감시 봇)에 세션을 넘겨주는 통로 — 값은
+  파일(0600)로만 가고 터미널·로그·Discord에는 요약("… → 파일 기록, 만료 날짜")만
+  남는다. 에이전트에게 "claude.ai 세션 키 꺼내서 ~/bot/.env에 넣어줘"라고 하면
+  `cookies export claude.ai sessionKey --env ~/bot/.env CLAUDE_SESSION_KEY`를 치고
+  값은 에이전트도 보지 않는다. 만료되면 같은 말을 다시 하면 된다(healthcheck 뒤 갱신)
 - MCP 스크린샷은 Chrome에 화면 잠자기 방지 잠금("Capturing")을 남길 때가 있어
   모니터가 안 꺼진다 — hook이 에이전트 브라우저에 그런 잠금을 보면 탭마다 1×1
   캡처를 완료시켜 풀어 준다(자동, 30초 간격). 에이전트 브라우저는 재기동 때 이전

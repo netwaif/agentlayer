@@ -551,12 +551,14 @@ func browserOpen(out io.Writer, args []string) error {
 	return nil
 }
 
-// browserCookies: agentlayer browser cookies import|clear <도메인...>
+// browserCookies: agentlayer browser cookies import|list|clear|export
 // import는 실사용 크롬의 지정 도메인 쿠키만 골라 에이전트 프로필로 가져오고,
 // clear는 에이전트 프로필에서 그 도메인 쿠키만 지운다(실사용 크롬은 무관).
 func browserCookies(out io.Writer, args []string) error {
 	usage := "사용법: agentlayer browser cookies import <도메인...> [--profile <디렉터리|이름>] | " +
-		"cookies list [도메인...] | cookies clear <도메인...> (예: agentlayer browser cookies import x.com)"
+		"cookies list [도메인...] | cookies clear <도메인...> | " +
+		"cookies export <도메인> [이름] --to <파일> [--format value|netscape|json] | " +
+		"cookies export <도메인> <이름> --env <.env파일> <KEY> (예: agentlayer browser cookies import x.com)"
 	if len(args) == 0 {
 		return fmt.Errorf("%s", usage)
 	}
@@ -566,6 +568,8 @@ func browserCookies(out io.Writer, args []string) error {
 		return browserCookiesClear(out, args[1:])
 	case "list":
 		return browserCookiesList(out, args[1:])
+	case "export":
+		return browserCookiesExport(out, args[1:])
 	default:
 		return fmt.Errorf("%s", usage)
 	}
@@ -605,6 +609,61 @@ func browserCookiesList(out io.Writer, domains []string) error {
 		return err
 	}
 	return browser.ListCookies(b, domains, time.Now(), out)
+}
+
+// parseCookiesExport: cookies export <도메인> [이름] --to <파일> [--format ..] | --env <파일> <KEY>.
+// 플래그와 위치 인자 순서 무관. 값을 stdout으로 내는 옵션은 일부러 없다.
+func parseCookiesExport(args []string) (browser.ExportOptions, error) {
+	var o browser.ExportOptions
+	fs := flag.NewFlagSet("cookies export", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	to := fs.String("to", "", "결과 파일 (0600)")
+	format := fs.String("format", "", "value|netscape|json (기본: 이름 있으면 value, 없으면 netscape)")
+	env := fs.String("env", "", ".env 파일 — 뒤에 KEY가 따라온다")
+	var pos []string
+	rest := args
+	for {
+		if err := fs.Parse(rest); err != nil {
+			return o, err
+		}
+		if fs.NArg() == 0 {
+			break
+		}
+		pos = append(pos, fs.Arg(0))
+		rest = fs.Args()[1:]
+	}
+	o.To, o.Format, o.EnvFile = *to, browser.ExportFormat(*format), *env
+	if o.EnvFile != "" { // --env <파일> <KEY>: KEY는 마지막 위치 인자
+		if len(pos) < 3 {
+			return o, fmt.Errorf("--env는 <.env파일> 뒤에 KEY가 필요합니다 " +
+				"(예: cookies export claude.ai sessionKey --env ~/bot/.env CLAUDE_SESSION_KEY)")
+		}
+		o.EnvKey, pos = pos[len(pos)-1], pos[:len(pos)-1]
+	}
+	switch len(pos) {
+	case 2:
+		o.Name = pos[1]
+		fallthrough
+	case 1:
+		o.Domain = pos[0]
+	case 0:
+		return o, fmt.Errorf("도메인을 지정하세요 (예: cookies export claude.ai sessionKey --to ~/k.txt)")
+	default:
+		return o, fmt.Errorf("인자가 많습니다: %v — <도메인> [이름]만 받습니다", pos)
+	}
+	return o, nil
+}
+
+func browserCookiesExport(out io.Writer, args []string) error {
+	o, err := parseCookiesExport(args)
+	if err != nil {
+		return err
+	}
+	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
+	if err != nil {
+		return err
+	}
+	return browser.ExportCookies(b, o, time.Now(), out)
 }
 
 func browserCookiesClear(out io.Writer, domains []string) error {

@@ -350,6 +350,15 @@ func runInit(args []string) error {
 		}
 		fmt.Println()
 	}
+	// ~/.gemini가 있으면(agy·Gemini CLI 공용) GEMINI.md에 브라우저·쿠키 지침 블록
+	geminiMD := filepath.Join(home, ".gemini", "GEMINI.md")
+	if _, err := os.Stat(filepath.Dir(geminiMD)); err == nil {
+		fmt.Println("Gemini 브라우저 지침:", geminiMD)
+		if err := cli.InstallGeminiAgents(os.Stdout, geminiMD, *dryRun); err != nil {
+			return err
+		}
+		fmt.Println()
+	}
 	// agy(Antigravity CLI)가 설치된 경우에만 — 전역 훅 파일에 등록
 	geminiHooks := filepath.Join(home, ".gemini", "config", "hooks.json")
 	if _, err := os.Stat(filepath.Dir(geminiHooks)); err == nil {

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/netwaif/agentlayer/internal/browser"
 	"github.com/netwaif/agentlayer/internal/state"
 )
 
@@ -280,6 +281,42 @@ func TestIsMCPToolCall(t *testing.T) {
 	for _, l := range []string{`{"jsonrpc":"2.0","id":1,"method":"initialize"}`, `{"jsonrpc":"2.0","id":2,"method":"tools/list"}`, `not json`} {
 		if IsMCPToolCall([]byte(l)) {
 			t.Errorf("%s 는 도구 호출 아님", l)
+		}
+	}
+}
+
+func TestParseCookiesExport(t *testing.T) {
+	cases := []struct {
+		args    []string
+		want    browser.ExportOptions
+		wantErr bool
+	}{
+		{[]string{"claude.ai", "sessionKey", "--to", "~/k.txt"},
+			browser.ExportOptions{Domain: "claude.ai", Name: "sessionKey", To: "~/k.txt"}, false},
+		{[]string{"--to", "c.txt", "youtube.com"},
+			browser.ExportOptions{Domain: "youtube.com", To: "c.txt"}, false},
+		{[]string{"x.com", "--format", "json", "--to", "x.json"},
+			browser.ExportOptions{Domain: "x.com", Format: browser.FormatJSONF, To: "x.json"}, false},
+		{[]string{"claude.ai", "sessionKey", "--env", "~/bot/.env", "CLAUDE_SESSION_KEY"},
+			browser.ExportOptions{Domain: "claude.ai", Name: "sessionKey", EnvFile: "~/bot/.env", EnvKey: "CLAUDE_SESSION_KEY"}, false},
+		{[]string{"claude.ai", "sessionKey", "--env", "~/bot/.env"}, browser.ExportOptions{}, true}, // KEY 없음
+		{[]string{}, browser.ExportOptions{}, true},
+		{[]string{"a.com", "b", "c", "--to", "f"}, browser.ExportOptions{}, true}, // 인자 초과
+	}
+	for _, c := range cases {
+		got, err := parseCookiesExport(c.args)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("%v: 에러여야 함 (got %+v)", c.args, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%v: %v", c.args, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("%v:\n got %+v\nwant %+v", c.args, got, c.want)
 		}
 	}
 }

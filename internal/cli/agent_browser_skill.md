@@ -1,6 +1,6 @@
 ---
 name: agent-browser
-description: AgentLayer 에이전트 전용 브라우저(chrome-devtools MCP로 연결된 전용 Chrome)로 웹 화면을 열고·보고·조작하고·진단하는 지침. 트리거 — "브라우저에서 열어봐/확인해봐", "스크린샷 확인해봐", "스크린샷 폰으로 보내줘", "콘솔 에러 확인해봐"·"뭔가 잘못된 것 같은데"(웹 화면 증상), "브라우저에서 지목할게", "x.com 로그인 쿠키 가져와줘", "에이전트 브라우저에 뭐 들어 있어?", "x.com 쿠키 지워줘", "/agent-browser". 브라우저가 필요한 일은 전부 이 경로다 — 앱 내장 브라우저 런타임은 쓰지 않는다.
+description: AgentLayer 에이전트 전용 브라우저(chrome-devtools MCP로 연결된 전용 Chrome)로 웹 화면을 열고·보고·조작하고·진단하는 지침. 트리거 — "브라우저에서 열어봐/확인해봐", "스크린샷 확인해봐", "스크린샷 폰으로 보내줘", "콘솔 에러 확인해봐"·"뭔가 잘못된 것 같은데"(웹 화면 증상), "브라우저에서 지목할게", "x.com 로그인 쿠키 가져와줘", "에이전트 브라우저에 뭐 들어 있어?", "x.com 쿠키 지워줘", "claude.ai 세션 키 꺼내서 .env에 넣어줘"·"유튜브 쿠키 파일 만들어줘"(cookies export), "/agent-browser". 브라우저가 필요한 일은 전부 이 경로다 — 앱 내장 브라우저 런타임은 쓰지 않는다.
 ---
 
 # AgentLayer 에이전트 브라우저 — 사용 지침
@@ -37,6 +37,10 @@ description: AgentLayer 에이전트 전용 브라우저(chrome-devtools MCP로 
 - "OO 로그인 쿠키 가져와줘" → `agentlayer browser cookies import <도메인>` — 실사용 Chrome에서 그 도메인 쿠키만 읽어 에이전트 브라우저에 넣는다. macOS Keychain 팝업이 뜨니 사용자에게 "항상 허용"을 누르라고 **먼저** 말한다.
 - "에이전트 브라우저에 뭐 들어 있어?" → `cookies list`(호스트별 개수) / `cookies list <도메인>`(이름·만료). 값은 안 나오므로 출력을 그대로 보여줘도 된다.
 - "OO 쿠키 지워줘" → `cookies clear <도메인>` — 에이전트 브라우저에서만 지운다.
+- "OO 로그인 쿠키를 XX 설정에 넣어줘"·"세션 키 꺼내서 .env에 넣어줘"·"yt-dlp용 쿠키 파일 만들어줘" → `cookies export`. 브라우저에선 되는데 자동화만 하면 로그인에서 막히는 도구(사용량 모니터·yt-dlp·notebooklm CLI·감시 봇)에 세션을 넘겨주는 통로다.
+  - 값 하나: `cookies export claude.ai sessionKey --to ~/x/key.txt` (값 한 줄) / `.env` 주입: `cookies export claude.ai sessionKey --env ~/bot/.env CLAUDE_SESSION_KEY` (그 KEY 줄만 갱신, 나머지 보존)
+  - 도메인 전체: `cookies export youtube.com --to ~/x/cookies.txt` (Netscape cookies.txt — yt-dlp `--cookies`·curl `-b`) / `--format json`
+  - 값은 파일(0600)로만 가고 화면·로그·Discord에 안 나온다. 명령 출력 요약("… → 파일 기록, 만료 날짜")만 전하고, **값을 읽어 보여주거나 채팅에 옮기지 않는다**. 어느 쿠키인지 모르면 `cookies list <도메인>`으로 이름부터 보고, 없다고 나오면 `cookies import <도메인>` 뒤에 다시 한다.
 - 실사용 Chrome은 import 때 읽기만 하고 **절대 바꾸지 않는다**.
 
 ## dev 서버를 사람에게 보여주기
