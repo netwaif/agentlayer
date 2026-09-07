@@ -66,3 +66,22 @@ Ubuntu 24.04.4 server, Node 24.20(nvm), Claude Code 2.1.263, Codex 0.153.4, Gemi
 ### 미확인(WSL2에서)
 - 브라우저 창 실제 기동·FX·pick·shot(WSLg 필요). 데스크톱 알림 `notify-send`(WSL2엔 보통 없음 → 조용히 생략되는지).
 - `install.sh` 실설치는 linux 자산이 포함된 다음 릴리즈 뒤에.
+
+## 2026-09-07 — 6차: 디스코드 하네스 리눅스 서비스 층(systemd)
+
+정본 4레포에 launchd→systemd 사용자 유닛 분기. 태그 discord-multiagent v0.1.2, codex-discord v0.1.7, usage-coach v0.1.4, 설치기 0.1.15(pins 갱신). 스펙·계획은 discord-harness-installer `docs/superpowers/`.
+
+### 되는 것(VM E2E, systemd --user running)
+- preflight: `[OK] OS: linux`, `[OK] systemd --user: running`, 도구 전부 OK. (WSL2면 systemd 미가동 시 FAIL+wsl.conf 안내, WSL 감지 시 "터미널 열어 두기/VPS 권장" INFO)
+- fetch 새 핀, plugins(multi-agent-starter·folder-bot) 설치, pair(가짜 토큰) .env 조립.
+- install --autostart --dashboard: 유닛 6개 생성·enable·심링크, `loginctl enable-linger` = yes. orchestrator·chat-claude tmux 유닛 active, usage-coach 타이머 active(waiting), codex-discord-daemon `activating (auto-restart)` = Restart=always 증명.
+- remove: 유닛·사이드카·심링크·repos 전부 정리, .env·chat/·tasks/·~/.config/usage-coach 보존.
+- 각 레포 테스트 리눅스 케이스 추가 통과(usage-coach 8, codex-discord install-linux+uninstall+57 node, discord-multiagent autostart-linux+manifest, 설치기 44). 테스트에 launchctl/systemctl 호출 시 즉시 실패하는 안전장치(실기기 오염 방지 — 실제로 첫 시도에서 맥 LaunchAgent를 내려 복구함).
+
+### 봇 연결 실패는 전부 하위 원인(리눅스 포팅 무관), 실측 확인
+- codex-discord-daemon/gemini 크래시 = 가짜 Discord 토큰(진짜 토큰이면 맥에서 "로그인: Codex Bot" 확인됨).
+- usage-coach-dashboard 실패 = 가짜 웹훅 → 카드 POST에서 HTTP 404(코드는 끝까지 정상 실행, discord_dash.py:452). 진짜 웹훅이면 동작.
+- codex-discord-tui 실패 = **codex TUI 첫 실행 신뢰 프롬프트**. 새 CODEX_WORKDIR에서 codex TUI가 "Do you trust the contents of this directory?"를 띄우고 입력 대기 → tui-up.sh가 보낸 더미 턴 첫 글자를 프롬프트가 삼켜 롤아웃 미생성 → 180초 타임아웃. **OS 무관·프레시 설치 공통**(맥은 그 폴더를 과거에 한 번 신뢰해 안 겪음). `[projects."/home/soonho"] trust_level="trusted"`는 하위 폴더를 안 덮음(codex 신뢰는 경로 접두어가 아님). → 후속: codex-discord install/tui-up이 CODEX_WORKDIR를 codex 신뢰 목록에 선등록(또는 tui-up이 트러스트 프롬프트에 자동 응답). 이번 커밋 범위 밖(사용자 보고).
+
+### 곁다리로 잡은 agentlayer 버그(고침, b83aeb1)
+- `agentlayer init`의 codex notify 삽입이 최상위 키 다음 줄이 바로 `[section]`일 때 앞 줄에 붙어 `approvals_reviewer = "auto_review"notify = [...]`로 config.toml을 깨뜨림 → codex가 config 로드에서 죽음(TUI·exec 전부). 삽입 위치를 헤더 줄 시작으로 옮겨 수정, 재현 테스트 추가. VM config는 수동 복구함.
