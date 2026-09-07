@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -339,9 +340,15 @@ func safeStoragePassword() ([]byte, error) {
 	return bytes.TrimRight(out, "\n"), nil
 }
 
+// cookieImportOS는 import가 도는 OS(테스트 주입점). Keychain·macOS Chrome DB 의존이라 darwin뿐.
+var cookieImportOS = runtime.GOOS
+
 // ImportCookies는 전 과정을 엮는다: Keychain 키 → DB 조회 → 도메인 필터·복호화
 // → CDP 주입 → 개수 보고. 쿠키 값은 절대 출력하지 않는다(개수·도메인만).
 func ImportCookies(b *rod.Browser, home, sqlite3Path, profile string, domains []string, now time.Time, out io.Writer) error {
+	if cookieImportOS != "darwin" {
+		return fmt.Errorf("cookies import는 macOS 전용입니다(실사용 Chrome의 Keychain 키가 필요) — 리눅스/WSL2에서는 에이전트 브라우저 창에서 직접 로그인하세요. list·clear·export는 그대로 됩니다")
+	}
 	profiles, lastUsed := ListChromeProfiles(home)
 	chosen := ChooseProfile(profiles, func(dir string) int {
 		return countDomainCookies(sqlite3Path, chromeCookiesPath(home, dir), domains)

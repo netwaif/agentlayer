@@ -274,3 +274,17 @@ func TestFormatCookieListSummaryAndDetail(t *testing.T) {
 		t.Errorf("값이 새거나 다른 도메인이 섞임:\n%s", det)
 	}
 }
+
+func TestImportCookiesUnsupportedOS(t *testing.T) {
+	orig := cookieImportOS
+	cookieImportOS = "linux"
+	defer func() { cookieImportOS = orig }()
+	var out bytes.Buffer
+	err := ImportCookies(nil, t.TempDir(), "", "", []string{"x.com"}, time.Now(), &out)
+	if err == nil || !strings.Contains(err.Error(), "macOS") {
+		t.Fatalf("리눅스에서는 macOS 전용 에러여야 한다: %v", err)
+	}
+	if !strings.Contains(err.Error(), "직접 로그인") {
+		t.Errorf("대안(직접 로그인) 안내가 있어야 한다: %v", err)
+	}
+}
