@@ -401,7 +401,7 @@ func runInit(args []string) error {
 		return err
 	}
 	fmt.Println()
-	// iTerm2 링크 라우팅 — 자동 주입은 iTerm2가 되쓰기하므로 감지+안내만
+	// iTerm2 링크 라우팅 — 자동 주입은 iTerm2가 되쓰기하므로 감지+안내만. 리눅스는 앱이 없어 자연히 건너뛴다.
 	if _, err := os.Stat("/Applications/iTerm.app"); err == nil {
 		cli.PrintITerm2LinkGuide(os.Stdout, binPath, cli.ITerm2LinkRuleInstalled(cli.ReadITerm2Bookmarks()))
 		fmt.Println()

@@ -1,9 +1,21 @@
 package cli
 
+import "runtime"
+
+// TerminalLabel은 도움말 첫 줄의 터미널 이름. iTerm2 링크 라우팅은 macOS에만 있다.
+func TerminalLabel(goos string) string {
+	if goos == "darwin" {
+		return "iTerm2+tmux"
+	}
+	return "tmux"
+}
+
 // HelpText는 `agentlayer help`(-h/--help) 출력을 만든다.
 // main.go run()의 switch와 명령 목록이 어긋나지 않게 helpcmd_test.go가 감시한다.
-func HelpText() string {
-	return `agentlayer — iTerm2+tmux 멀티 에이전트 관제탑
+func HelpText() string { return helpText(runtime.GOOS) }
+
+func helpText(goos string) string {
+	return "agentlayer — " + TerminalLabel(goos) + ` 멀티 에이전트 관제탑
 
 사용법: agentlayer [명령] [플래그]
   인자 없이 실행하면 TUI가 뜬다 (tmux 안에서).

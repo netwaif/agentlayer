@@ -35,3 +35,15 @@ func TestHelpTextMentionsKeyFlags(t *testing.T) {
 		}
 	}
 }
+
+func TestHelpTextTerminalLabelByOS(t *testing.T) {
+	if !strings.HasPrefix(helpText("darwin"), "agentlayer — iTerm2+tmux") {
+		t.Error("darwin 첫 줄은 iTerm2+tmux")
+	}
+	if !strings.HasPrefix(helpText("linux"), "agentlayer — tmux") {
+		t.Error("linux 첫 줄은 tmux")
+	}
+	if strings.Contains(helpText("linux"), "iTerm2") {
+		t.Error("linux 도움말에 iTerm2가 남으면 안 된다")
+	}
+}
