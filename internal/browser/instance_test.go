@@ -59,3 +59,19 @@ func TestConnectIdempotentIntegration(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 }
+
+func TestDisplayAvailable(t *testing.T) {
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	if err := displayAvailable("darwin", env(nil)); err != nil {
+		t.Errorf("darwin은 검사 안 함: %v", err)
+	}
+	if err := displayAvailable("linux", env(map[string]string{"DISPLAY": ":0"})); err != nil {
+		t.Errorf("DISPLAY 있으면 통과: %v", err)
+	}
+	if err := displayAvailable("linux", env(map[string]string{"WAYLAND_DISPLAY": "wayland-0"})); err != nil {
+		t.Errorf("WAYLAND_DISPLAY 있으면 통과: %v", err)
+	}
+	if err := displayAvailable("linux", env(nil)); err == nil {
+		t.Error("리눅스에 디스플레이 없으면 명확한 에러")
+	}
+}

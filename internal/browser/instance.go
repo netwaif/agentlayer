@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -143,6 +144,9 @@ func Connect(stateDir string, port int) (*rod.Browser, error) {
 		fmt.Fprintf(os.Stderr, "FX 확장 설치 실패(%v) — 조작 효과 없이 기동합니다\n", err)
 		fxDir = ""
 	}
+	if err := displayAvailable(runtime.GOOS, os.Getenv); err != nil {
+		return nil, err
+	}
 	ws, err = newLauncher(bin, profile, port, fxDir).Launch()
 	if err != nil {
 		return nil, fmt.Errorf("Chrome 기동 실패: %w", err)
@@ -174,4 +178,16 @@ func newLauncher(bin, profile string, port int, fxDir string) *launcher.Launcher
 // launchArgs는 newLauncher가 만드는 명령줄 (테스트·진단용).
 func launchArgs(bin, profile string, port int, fxDir string) []string {
 	return newLauncher(bin, profile, port, fxDir).FormatArgs()
+}
+
+// displayAvailable은 리눅스에서 창을 띄울 디스플레이가 있는지 미리 본다 — 없으면 Chrome이
+// X 오류를 길게 뿜고 죽는다. 화면 없는 서버·WSLg 꺼진 WSL2가 여기 걸린다.
+func displayAvailable(goos string, getenv func(string) string) error {
+	if goos != "linux" {
+		return nil
+	}
+	if getenv("DISPLAY") != "" || getenv("WAYLAND_DISPLAY") != "" {
+		return nil
+	}
+	return fmt.Errorf("에이전트 브라우저는 창이 필요합니다 — 디스플레이가 없습니다(DISPLAY·WAYLAND_DISPLAY 비어 있음). WSL2는 WSLg(Windows 11 또는 스토어판 WSL)에서, 서버는 X 포워딩이나 데스크톱을 켜고 실행하세요")
 }

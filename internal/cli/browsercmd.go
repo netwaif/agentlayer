@@ -593,6 +593,9 @@ func browserCookies(out io.Writer, args []string) error {
 		return fmt.Errorf("가져올 도메인을 하나 이상 지정하세요 " +
 			"(예: agentlayer browser cookies import x.com)")
 	}
+	if !browser.CookieImportSupported() {
+		return browser.ErrCookieImportUnsupported // 브라우저를 띄우기 전에 거른다
+	}
 	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
 	if err != nil {
 		return err
