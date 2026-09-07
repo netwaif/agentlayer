@@ -15,7 +15,7 @@ type Config struct {
 	// 단문 알림 전용 웹훅(알림 채널). 비면 카드 웹훅으로 폴백 —
 	// 분리하면 대시보드 채널이 카드 한 장짜리로 유지된다.
 	NotifyWebhookURL string `json:"notify_webhook_url,omitempty"`
-	// macOS 알림 (osascript). 기본 켜짐.
+	// 데스크톱 알림(macOS osascript / 리눅스 notify-send). 기본 켜짐. 키 이름은 호환을 위해 notify_macos 유지.
 	NotifyMacOS *bool `json:"notify_macos,omitempty"`
 	// Discord 단문 알림. 기본 꺼짐 (웹훅이 있어도 명시적으로 켜야 함).
 	NotifyDiscord bool `json:"notify_discord,omitempty"`

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"runtime"
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/config"
@@ -17,16 +18,14 @@ import (
 
 // Sender는 전달 수단 주입점 (테스트용).
 type Sender struct {
-	RunOSA   func(script string) error           // osascript 실행
+	Notify   func(title, body string) error      // 데스크톱 알림(macOS osascript / 리눅스 notify-send). nil이면 생략
 	PostJSON func(url string, body []byte) error // Discord 웹훅 POST
 }
 
 // DefaultSender는 실제 전달 수단.
 func DefaultSender() Sender {
 	return Sender{
-		RunOSA: func(script string) error {
-			return exec.Command("osascript", "-e", script).Run()
-		},
+		Notify: desktopNotifier(runtime.GOOS, exec.LookPath),
 		PostJSON: func(url string, body []byte) error {
 			client := &http.Client{Timeout: 5 * time.Second}
 			resp, err := client.Post(url, "application/json", bytes.NewReader(body))
@@ -70,9 +69,8 @@ func Notify(cfg *config.Config, s Sender, a *state.Agent, prev, to state.AgentSt
 	if body == "" {
 		body = a.CWD
 	}
-	if cfg.MacOSEnabled() && s.RunOSA != nil {
-		script := fmt.Sprintf("display notification %q with title %q", body, t)
-		_ = s.RunOSA(script)
+	if cfg.MacOSEnabled() && s.Notify != nil {
+		_ = s.Notify(t, body)
 	}
 	url := cfg.NotifyURL()
 	if cfg.NotifyDiscord && url != "" && s.PostJSON != nil {
@@ -84,4 +82,23 @@ func Notify(cfg *config.Config, s Sender, a *state.Agent, prev, to state.AgentSt
 			_ = s.PostJSON(url, payload)
 		}
 	}
+}
+
+// desktopNotifier는 OS별 데스크톱 알림 실행기. 수단이 없으면 nil(조용히 생략).
+func desktopNotifier(goos string, lookPath func(string) (string, error)) func(title, body string) error {
+	switch goos {
+	case "darwin":
+		return func(title, body string) error {
+			script := fmt.Sprintf("display notification %q with title %q", body, title)
+			return exec.Command("osascript", "-e", script).Run()
+		}
+	case "linux":
+		if _, err := lookPath("notify-send"); err != nil {
+			return nil
+		}
+		return func(title, body string) error {
+			return exec.Command("notify-send", "--app-name=agentlayer", title, body).Run()
+		}
+	}
+	return nil
 }

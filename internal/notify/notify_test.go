@@ -1,6 +1,7 @@
 package notify
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -16,7 +17,7 @@ type capture struct {
 
 func sender(c *capture) Sender {
 	return Sender{
-		RunOSA: func(s string) error { c.osa = append(c.osa, s); return nil },
+		Notify: func(title, body string) error { c.osa = append(c.osa, title+" | "+body); return nil },
 		PostJSON: func(u string, b []byte) error {
 			c.postURL = append(c.postURL, u)
 			c.posts = append(c.posts, string(b))
@@ -101,5 +102,19 @@ func TestNotifyFallsBackToCardWebhook(t *testing.T) {
 	Notify(cfg, sender(c), agent(), state.StateWorking, state.StateDoneUnread)
 	if len(c.postURL) != 1 || c.postURL[0] != "https://card.example" {
 		t.Errorf("미설정 시 카드 웹훅 폴백: %v", c.postURL)
+	}
+}
+
+func TestDesktopNotifierByOS(t *testing.T) {
+	has := func(name string) (string, error) { return "/usr/bin/" + name, nil }
+	missing := func(name string) (string, error) { return "", errors.New("no") }
+	if desktopNotifier("darwin", missing) == nil {
+		t.Error("darwin은 osascript(내장)라 항상 있어야 한다")
+	}
+	if desktopNotifier("linux", has) == nil {
+		t.Error("linux에 notify-send가 있으면 알림기가 있어야 한다")
+	}
+	if desktopNotifier("linux", missing) != nil {
+		t.Error("linux에 notify-send가 없으면 nil(조용히 생략)")
 	}
 }
