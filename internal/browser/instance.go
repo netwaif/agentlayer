@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -123,6 +124,10 @@ func Connect(stateDir string, port int) (*rod.Browser, error) {
 	if alive {
 		return attach(stateDir, ws)
 	}
+	// 디스플레이 검사는 엔진 다운로드(200MB)보다 먼저 — 헤드리스 서버에서 헛다운로드 방지
+	if err := displayAvailable(runtime.GOOS, os.Getenv); err != nil {
+		return nil, err
+	}
 	bin, err := EnsureEngine(stateDir, os.Stderr)
 	if err != nil {
 		// 엔진(Chrome for Testing)을 못 구하면 시스템 Chrome — 단, Dock의 Chrome 클릭이
@@ -144,12 +149,9 @@ func Connect(stateDir string, port int) (*rod.Browser, error) {
 		fmt.Fprintf(os.Stderr, "FX 확장 설치 실패(%v) — 조작 효과 없이 기동합니다\n", err)
 		fxDir = ""
 	}
-	if err := displayAvailable(runtime.GOOS, os.Getenv); err != nil {
-		return nil, err
-	}
 	ws, err = newLauncher(bin, profile, port, fxDir).Launch()
 	if err != nil {
-		return nil, fmt.Errorf("Chrome 기동 실패: %w", err)
+		return nil, fmt.Errorf("Chrome 기동 실패: %w%s", err, launchHint(runtime.GOOS, err))
 	}
 	return attach(stateDir, ws)
 }
@@ -178,6 +180,19 @@ func newLauncher(bin, profile string, port int, fxDir string) *launcher.Launcher
 // launchArgs는 newLauncher가 만드는 명령줄 (테스트·진단용).
 func launchArgs(bin, profile string, port int, fxDir string) []string {
 	return newLauncher(bin, profile, port, fxDir).FormatArgs()
+}
+
+// launchHint는 기동 실패 원인이 알려진 리눅스 환경 문제면 해결 한 줄을 덧붙인다.
+// WSL2 실측(2026-09-07): 깨끗한 Ubuntu 24.04에는 Chrome for Testing이 링크하는
+// 공유 라이브러리(libnss3·libnspr4·libasound2 등)가 없어 첫 기동이 실패한다.
+func launchHint(goos string, err error) string {
+	if goos != "linux" || err == nil {
+		return ""
+	}
+	if strings.Contains(err.Error(), "error while loading shared libraries") {
+		return "\n필요한 공유 라이브러리가 없습니다 — Ubuntu/Debian: sudo apt install -y libnss3 libnspr4 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2t64 (Ubuntu 24.04 이전은 libasound2)"
+	}
+	return ""
 }
 
 // displayAvailable은 리눅스에서 창을 띄울 디스플레이가 있는지 미리 본다 — 없으면 Chrome이

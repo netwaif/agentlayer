@@ -359,9 +359,11 @@ func runInit(args []string) error {
 		}
 		fmt.Println()
 	}
-	// agy(Antigravity CLI)가 설치된 경우에만 — 전역 훅 파일에 등록
+	// agy(Antigravity CLI)가 설치된 경우에만 — 공유 훅 파일(~/.gemini/config/hooks.json,
+	// agy의 /hooks도 여기 쓴다)에 등록. 갓 설치한 agy는 config/ 폴더가 아직 없어
+	// (WSL2 실측 2026-09-07) 바이너리·antigravity-cli/ 흔적으로도 판단하고 폴더는 만든다.
 	geminiHooks := filepath.Join(home, ".gemini", "config", "hooks.json")
-	if _, err := os.Stat(filepath.Dir(geminiHooks)); err == nil {
+	if agyInstalled(home) {
 		fmt.Println("Gemini(agy) hook 등록:", geminiHooks)
 		if err := cli.InstallGeminiHooks(os.Stdout, geminiHooks, binPath, *dryRun); err != nil {
 			return err
@@ -633,4 +635,18 @@ func runRestore(args []string) error {
 		_ = scan.Sync(st, panes, time.Now())
 	}
 	return cli.RunRestore(os.Stdout, st, tmuxx.Tmux{}, args)
+}
+
+// agyInstalled는 Antigravity CLI(agy) 흔적이 있는지 — 공유 설정 폴더, 앱 데이터 폴더, PATH의 바이너리.
+func agyInstalled(home string) bool {
+	for _, d := range []string{
+		filepath.Join(home, ".gemini", "config"),
+		filepath.Join(home, ".gemini", "antigravity-cli"),
+	} {
+		if st, err := os.Stat(d); err == nil && st.IsDir() {
+			return true
+		}
+	}
+	_, err := exec.LookPath("agy")
+	return err == nil
 }

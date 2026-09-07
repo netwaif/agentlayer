@@ -1,7 +1,9 @@
 package browser
 
 import (
+	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,5 +75,18 @@ func TestDisplayAvailable(t *testing.T) {
 	}
 	if err := displayAvailable("linux", env(nil)); err == nil {
 		t.Error("리눅스에 디스플레이 없으면 명확한 에러")
+	}
+}
+
+func TestLaunchHint(t *testing.T) {
+	libErr := errors.New("[launcher] Failed to launch the browser: /x/chrome: error while loading shared libraries: libnspr4.so: cannot open shared object file")
+	if h := launchHint("linux", libErr); !strings.Contains(h, "apt install") || !strings.Contains(h, "libnss3") {
+		t.Errorf("리눅스 공유 라이브러리 힌트 없음: %q", h)
+	}
+	if h := launchHint("darwin", libErr); h != "" {
+		t.Errorf("맥에는 힌트를 붙이지 않는다: %q", h)
+	}
+	if h := launchHint("linux", errors.New("timeout")); h != "" {
+		t.Errorf("무관한 오류에 힌트: %q", h)
 	}
 }

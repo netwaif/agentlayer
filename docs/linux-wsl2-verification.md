@@ -89,3 +89,28 @@ Ubuntu 24.04.4 server, Node 24.20(nvm), Claude Code 2.1.263, Codex 0.153.4, Gemi
 ### 6차 후속: codex 신뢰 프롬프트 해결(codex-discord v0.1.8)
 - install.sh가 CODEX_WORKDIR를 `~/.codex/config.toml`에 `[projects."<wd>"] trust_level="trusted"`로 선등록(섹션 EOF 추가라 안전·멱등·.bak). tui-up.sh가 `--dangerously-bypass-hook-trust`를 붙인다(hooks.json 있을 때). 양 OS 공통(프레시 설치는 맥도 겪음).
 - VM 실측: config 선등록+플래그 조합으로 codex TUI가 디렉터리·hooks 프롬프트 없이 "Ask Codex to do anything" 입력창까지 기동. 설치기 pins codex-discord v0.1.8, 0.1.16.
+
+## 2026-09-07 — 7차: Win10 WSL2 실기(사용자 세션, v1.4.0-rc1 설치본)
+
+환경: Win10 Pro 19045 + 스토어판 WSL 2.5.7(WSLg 1.0.66) + Ubuntu-24.04(새 설치, systemd 기본 on). 원 보고서 = NAS `/Volumes/private/mac-to-win10/RESULT-wsl2-20260907.md`(스크린샷 7장 동봉).
+
+### 되는 것
+- install.sh(`AGENTLAYER_VERSION=v1.4.0-rc1`) → `~/.local/bin/agentlayer`, init(claude hook 5종·codex notify+hooks·GEMINI.md·gemini settings.json·MCP 3종·스킬 2개), tmux 팝업 `C-b a`, TUI `s`·`b`.
+- claude hook 전이 idle→WORK→DONE→dead 전부.
+- 에이전트 브라우저: Chrome for Testing 152 linux64 창이 **윈도우 데스크톱에 뜸**(WSLg X11). agent-browser 스킬로 열기·스크린샷·콘솔·지목(`pick --once`)·FX(테라코타 테두리+배지) 동작.
+- 멤버 배포물: loadout 0.5.1·multi-agent-starter 3.6.0 스킬 세션 PASS(validate 13). codex 셸 샌드박스 **sysctl 불필요**(WSL2 커널은 AppArmor userns 제한 없음, bubblewrap 번들 사용).
+- 디스코드 하네스: preflight 전부 OK, systemd 사용자 유닛 6개+timer, codex 봇 신뢰 프롬프트 없이 기동, remove 뒤 잔존 0. `/etc/wsl.conf` 수정·`wsl --shutdown` 불필요.
+
+### 고친 것(이 커밋)
+- **npm으로 깐 codex가 관제탑에서 영원히 `[dead]`** — pane 전면 프로세스가 `node` 래퍼라 `DetectKind`가 못 알아봄. `internal/scan/proc.go`: 래퍼 pane이면 `ps -axo pid=,ppid=,args=`로 pane_pid 자신·자식의 인자(`bin/codex`, `@openai/codex`, `bin/gemini`…)로 2차 판정. npm gemini-cli도 같이 해결.
+- **agy 훅 미등록** — init이 `~/.gemini/config/`가 있을 때만 `config/hooks.json`을 썼는데 갓 설치한 agy는 그 폴더가 없다. `main.go agyInstalled`: `config/`·`antigravity-cli/`·PATH의 `agy` 중 하나면 등록(폴더 생성). agy는 `/hooks`도 같은 파일에 쓴다(agy 릴리즈 노트 확인). WSL 쪽은 `agentlayer init` 재실행이면 된다.
+- **`browser`가 디스플레이 검사 전에 엔진 200MB를 받음** — `displayAvailable`을 `EnsureEngine` 앞으로.
+- **CfT 공유 라이브러리 누락** 첫 기동 실패에 apt 한 줄 힌트(`launchHint`), README 리눅스 절에 apt+`fonts-noto-cjk` 안내(FX 배지 한글이 □로 나오던 것).
+- [discord-multiagent v0.1.3] `scripts/bot-up.sh` BSD `stat -f %m` → 리눅스 `stat -c %Y`, MCP 로그 경로 `~/.cache/claude-cli-nodejs` 분기(chat-claude 봇이 `line 44: File: unbound variable`로 즉사하던 것). 설치기 pins 갱신.
+
+### WSL2에서만 다른 점(참고)
+- 세 CLI 로그인 모두 "브라우저 열기"가 WSL 안에서 안 뜸(xdg-open 없음) → URL을 윈도우 브라우저에 복사. `127.0.0.1:<port>` 콜백은 localhost 포워딩으로 정상.
+- nvm이 `~/.bashrc`에만 PATH를 넣어 비대화형 `bash -lc`에서 node/claude가 안 보임 → `~/.profile`에도. 훅·유닛은 절대 경로라 무관.
+- `wsl.exe -- bash -lc`(비대화형)에서는 `systemctl --user`가 "Failed to connect to bus" — tmux/로그인 셸 안에서는 running.
+- CfT 툴바에 프로필 아바타가 없어 "AgentLayer" 프로필 이름이 안 보임(맥과 동일한지 미확인). `agentlayer browser`(인자 없음)를 브라우저가 떠 있을 때 다시 실행하면 붙어 있음, `browser errors`는 Enter 대기 — 자동화 스크립트에서는 timeout 필요.
+

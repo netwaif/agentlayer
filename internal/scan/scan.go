@@ -72,8 +72,16 @@ func Sync(st *state.Store, panes []tmuxx.Pane, now time.Time) error {
 	}
 	alive := make(map[string]bool)
 	occupied := make(map[string]bool)
+	var procs ProcTable // 래퍼 pane이 있을 때만 한 번 읽는다
 	for _, p := range panes {
 		kind := DetectKind(p)
+		if kind == "" && IsWrapperCommand(p.Command) {
+			// npm으로 깐 codex·gemini-cli: pane 전면이 node 래퍼 → 프로세스 표로 2차 판정
+			if procs == nil {
+				procs = loadProcTable()
+			}
+			kind = procs.DescendantKind(p.PanePID)
+		}
 		if kind == "" {
 			continue
 		}

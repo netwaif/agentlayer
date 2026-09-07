@@ -42,7 +42,15 @@ make install   # ~/.local/bin/agentlayer
 리눅스는 Ubuntu 24.04(VM)에서 관제탑·hook·worktree·Discord를 검증했고, 창이 필요한 에이전트
 브라우저는 WSL2(WSLg) 기준이다. 리눅스에서 다른 점: iTerm2 링크 라우팅 없음(터미널 링크는
 `agentlayer browser open <url>`로), 데스크톱 알림은 `notify-send`가 있을 때만, `cookies import`는
-macOS 전용(실사용 Chrome이 윈도우 쪽이라 에이전트 브라우저 창에서 직접 로그인). 상세는
+macOS 전용(실사용 Chrome이 윈도우 쪽이라 에이전트 브라우저 창에서 직접 로그인). 깨끗한
+Ubuntu에는 Chrome for Testing이 쓰는 공유 라이브러리와 한글 폰트가 없으니 먼저 깐다:
+
+```bash
+sudo apt install -y libnss3 libnspr4 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2t64 fonts-noto-cjk
+# Ubuntu 24.04 이전은 libasound2t64 대신 libasound2
+```
+
+Win10도 스토어판 WSL(2.x)이면 WSLg가 있어 브라우저 창이 뜬다. 상세는
 `docs/linux-wsl2-verification.md`.
 
 설정은 한 번:

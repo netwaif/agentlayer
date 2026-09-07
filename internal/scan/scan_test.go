@@ -145,8 +145,8 @@ func TestSyncPurgesDeadSupersededByRevivedSession(t *testing.T) {
 	// 남는다 — 같은 kind·세션·cwd의 살아있는 pane이 있으면 즉시 정리해야 함.
 	st := newStore(t)
 	dead := &state.Agent{ID: "codex-4", Kind: "codex", State: state.StateDead,
-		Tmux: state.TmuxRef{Session: "codex-live", Window: 0, PaneID: "%4"},
-		CWD:  "/Users/soonho/ai-folder/codex-discord-workspace",
+		Tmux:      state.TmuxRef{Session: "codex-live", Window: 0, PaneID: "%4"},
+		CWD:       "/Users/soonho/ai-folder/codex-discord-workspace",
 		UpdatedAt: t0, StateSince: t0}
 	if err := st.Save(dead); err != nil {
 		t.Fatal(err)
@@ -169,8 +169,8 @@ func TestSyncKeepsDeadWithoutLiveReplacement(t *testing.T) {
 	// 대체 pane이 없는 DEAD는 기존대로 24h 보존 (restore 대상)
 	st := newStore(t)
 	dead := &state.Agent{ID: "codex-4", Kind: "codex", State: state.StateDead,
-		Tmux: state.TmuxRef{Session: "codex-live", Window: 0, PaneID: "%4"},
-		CWD:  "/Users/soonho/ai-folder/codex-discord-workspace",
+		Tmux:      state.TmuxRef{Session: "codex-live", Window: 0, PaneID: "%4"},
+		CWD:       "/Users/soonho/ai-folder/codex-discord-workspace",
 		UpdatedAt: t0, StateSince: t0}
 	if err := st.Save(dead); err != nil {
 		t.Fatal(err)
@@ -200,5 +200,75 @@ func TestSyncMatchesHookCreatedRecordBySessionCoords(t *testing.T) {
 	got, _ := st.List()
 	if len(got) != 1 {
 		t.Errorf("중복 생성 금지: %d개", len(got))
+	}
+}
+
+// WSL2 실측(2026-09-07): npm으로 깐 codex는 pane_current_command가 `node`(래퍼)이고
+// 진짜 codex 바이너리는 그 자식이다. gemini-cli는 node 자신이 에이전트(인자에 경로).
+func TestKindFromArgs(t *testing.T) {
+	cases := []struct{ args, want string }{
+		{"node /home/netwa/.nvm/versions/node/v22.23.2/bin/codex", "codex"},
+		{"/home/netwa/.nvm/versions/node/v22.23.2/lib/node_modules/@openai/codex/bin/../vendor/x86_64-unknown-linux-musl/codex/codex", "codex"},
+		{"node /home/netwa/.nvm/versions/node/v22.23.2/bin/gemini", "gemini"},
+		{"node /usr/lib/node_modules/@google/gemini-cli/dist/index.js", "gemini"},
+		{"/home/netwa/.local/bin/agy", "gemini"},
+		{"node /home/x/lib/node_modules/@anthropic-ai/claude-code/cli.js", "claude"},
+		{"node server.ts", ""},
+		{"-zsh", ""},
+		{"python3 codex-runner.py", ""}, // basename이 정확히 일치할 때만
+	}
+	for _, c := range cases {
+		if got := KindFromArgs(c.args); got != c.want {
+			t.Errorf("KindFromArgs(%q) = %q, want %q", c.args, got, c.want)
+		}
+	}
+}
+
+func TestDescendantKind(t *testing.T) {
+	pt := ParseProcTable(`
+ 10999 10000 -bash
+ 11086 10999 node /home/netwa/.nvm/versions/node/v22.23.2/bin/codex
+ 11095 11086 /home/netwa/.nvm/.../@openai/codex/vendor/x86_64-unknown-linux-musl/codex/codex
+ 12000 11999 node /opt/app/server.js
+ 12001 12000 sh -c codex exec
+ 12002 12001 codex exec
+ 13000 12999 node /home/netwa/.nvm/versions/node/v22.23.2/bin/gemini
+`)
+	if got := pt.DescendantKind(11086); got != "codex" {
+		t.Errorf("node 래퍼(codex) = %q, want codex", got)
+	}
+	// pane_pid가 셸이고 그 자식이 래퍼인 경우(셸에서 codex를 친 pane)
+	if got := pt.DescendantKind(10999); got != "codex" {
+		t.Errorf("셸 → node 래퍼(codex) = %q, want codex", got)
+	}
+	if got := pt.DescendantKind(13000); got != "gemini" {
+		t.Errorf("node 래퍼(gemini) = %q, want gemini", got)
+	}
+	// 자식까지만 본다 — 앱 서버가 셸을 거쳐 띄운 codex(손자)는 안 잡는다
+	if got := pt.DescendantKind(12000); got != "" {
+		t.Errorf("무관한 node 서버 = %q, want \"\"", got)
+	}
+	if got := pt.DescendantKind(0); got != "" {
+		t.Errorf("pid 0 = %q", got)
+	}
+}
+
+func TestSyncResolvesNodeWrapperViaProcTable(t *testing.T) {
+	orig := loadProcTable
+	loadProcTable = func() ProcTable {
+		return ParseProcTable("11086 1 node /home/netwa/.nvm/versions/node/v22/bin/codex\n11095 11086 /x/@openai/codex/vendor/codex/codex\n")
+	}
+	defer func() { loadProcTable = orig }()
+	st := newStore(t)
+	pane := tmuxx.Pane{Session: "t2", Window: 0, PaneID: "%7", Command: "node", Path: "/home/netwa/work/t2", PanePID: 11086}
+	if err := Sync(st, []tmuxx.Pane{pane}, t0); err != nil {
+		t.Fatal(err)
+	}
+	a, err := st.Load("codex-7")
+	if err != nil || a == nil {
+		t.Fatalf("codex-7 미발견: %v", err)
+	}
+	if a.Kind != "codex" || a.Tmux.Session != "t2" || a.PID != 11086 || a.State != state.StateIdle {
+		t.Errorf("잘못된 레코드: %+v", a)
 	}
 }
