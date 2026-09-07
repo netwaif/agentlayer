@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -919,7 +920,8 @@ func browserAutoPreview(out io.Writer) error {
 	}
 	// 에이전트 브라우저가 화면 잠자기 방지 잠금("Capturing")을 들고 있으면 풀어 준다.
 	// 브라우저가 떠 있을 때만(안 떠 있으면 잠금도 없다) — 여기서 브라우저를 띄우지는 않는다.
-	if browser.IsUp(port) && browser.ThrottleOK(state.DefaultDir(), "capture-janitor", 30*time.Second, time.Now()) &&
+	if browser.CaptureJanitorSupported(runtime.GOOS) && browser.IsUp(port) &&
+		browser.ThrottleOK(state.DefaultDir(), "capture-janitor", 30*time.Second, time.Now()) &&
 		browser.HasCaptureLock(port, browser.ExecLsof, browser.RunPmsetAssertions) {
 		if br := connect(); br != nil {
 			if n := browser.ReleaseCaptures(br); n > 0 {

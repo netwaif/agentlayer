@@ -108,3 +108,6 @@ func ThrottleOK(dir, name string, min time.Duration, now time.Time) bool {
 	_ = os.Chtimes(path, now, now)
 	return true
 }
+
+// CaptureJanitorSupported는 잠금 감지 수단(pmset)이 있는 OS인지. 리눅스는 건너뛴다.
+func CaptureJanitorSupported(goos string) bool { return goos == "darwin" }

@@ -52,3 +52,12 @@ func TestThrottleOK(t *testing.T) {
 		t.Error("간격 지나면 통과")
 	}
 }
+
+func TestCaptureJanitorSupported(t *testing.T) {
+	if !CaptureJanitorSupported("darwin") {
+		t.Error("darwin은 pmset이 있어 지원")
+	}
+	if CaptureJanitorSupported("linux") {
+		t.Error("linux는 pmset이 없어 미지원")
+	}
+}
