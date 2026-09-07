@@ -41,6 +41,35 @@ func TestInstallCodexNotifyInsertsBeforeSection(t *testing.T) {
 	}
 }
 
+func TestInstallCodexNotifyTightSectionKeepsNewline(t *testing.T) {
+	// 최상위 키 바로 다음 줄이 섹션 헤더(빈 줄 없음)일 때 notify가 앞 줄에 붙으면 안 된다.
+	// 2026-09-07 VM 실측: `approvals_reviewer = "auto_review"notify = [...]`로 붙어 codex가
+	// config 로드에서 죽었다.
+	p := filepath.Join(t.TempDir(), "config.toml")
+	os.WriteFile(p, []byte("model = \"x\"\napprovals_reviewer = \"auto_review\"\n[projects.\"/home/u\"]\ntrust_level = \"trusted\"\n"), 0o600)
+	var buf bytes.Buffer
+	if err := InstallCodexNotify(&buf, p, "/abs/agentlayer", false); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(p)
+	content := string(b)
+	if strings.Contains(content, `"auto_review"notify`) {
+		t.Errorf("notify가 앞 줄에 붙었다(개행 유실):\n%s", content)
+	}
+	if !strings.Contains(content, "approvals_reviewer = \"auto_review\"\nnotify =") {
+		t.Errorf("notify는 제 줄에 있어야 한다:\n%s", content)
+	}
+	// 삽입 결과가 유효 TOML인지: 모든 최상위 키가 제 줄에 (섹션 앞)
+	if strings.Contains(content, `"]notify`) || strings.Contains(content, `"trusted"notify`) {
+		t.Errorf("섹션/키에 붙음:\n%s", content)
+	}
+	notifyIdx := strings.Index(content, "notify =")
+	sectionIdx := strings.Index(content, "[projects")
+	if notifyIdx < 0 || notifyIdx > sectionIdx {
+		t.Errorf("notify는 섹션 앞 최상위에:\n%s", content)
+	}
+}
+
 func TestInstallCodexNotifyExistingSkipped(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "config.toml")
 	orig := "notify = [\"my-notifier\"]\n" + codexConfigFixture

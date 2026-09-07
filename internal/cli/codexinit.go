@@ -81,18 +81,30 @@ func InstallCodexNotify(w io.Writer, configPath, binPath string, dryRun bool) er
 	if err := os.WriteFile(configPath+".agentlayer.bak", raw, 0o600); err != nil {
 		return fmt.Errorf("백업 실패 — 설치 중단: %w", err)
 	}
-	// 첫 섹션 앞(최상위)에 삽입
+	// 첫 섹션 헤더([...]) 줄의 시작 위치에 삽입한다(최상위 영역 끝). 헤더 앞 개행 뒤로
+	// 넣어야 앞 줄(top-level 키)에 붙지 않는다 — 2026-09-07 실측 버그.
+	lines := strings.Split(content, "\n")
 	idx := len(content)
-	for i, line := range strings.Split(content, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "[") {
-			lines := strings.Split(content, "\n")
+	for i, l := range lines {
+		if strings.HasPrefix(strings.TrimSpace(l), "[") {
 			idx = len(strings.Join(lines[:i], "\n"))
+			if idx > 0 {
+				idx++ // 헤더 앞 '\n'을 건너뛰어 헤더 줄 시작으로
+			}
 			break
 		}
 	}
-	updated := content[:idx] + line + "\n" + content[idx:]
-	if idx == len(content) && !strings.HasSuffix(content, "\n") {
-		updated = content + "\n" + line + "\n"
+	var updated string
+	if idx >= len(content) {
+		// 섹션 없음 — 끝에 덧붙이되 앞이 개행으로 안 끝나면 개행을 먼저 넣는다
+		sep := ""
+		if content != "" && !strings.HasSuffix(content, "\n") {
+			sep = "\n"
+		}
+		updated = content + sep + line + "\n"
+	} else {
+		// content[:idx]는 헤더 앞 개행까지 포함 → 앞 줄에 붙지 않는다
+		updated = content[:idx] + line + "\n" + content[idx:]
 	}
 	tmp := configPath + ".agentlayer.tmp"
 	if err := os.WriteFile(tmp, []byte(updated), 0o600); err != nil {
