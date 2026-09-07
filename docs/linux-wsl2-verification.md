@@ -85,3 +85,7 @@ Ubuntu 24.04.4 server, Node 24.20(nvm), Claude Code 2.1.263, Codex 0.153.4, Gemi
 
 ### 곁다리로 잡은 agentlayer 버그(고침, b83aeb1)
 - `agentlayer init`의 codex notify 삽입이 최상위 키 다음 줄이 바로 `[section]`일 때 앞 줄에 붙어 `approvals_reviewer = "auto_review"notify = [...]`로 config.toml을 깨뜨림 → codex가 config 로드에서 죽음(TUI·exec 전부). 삽입 위치를 헤더 줄 시작으로 옮겨 수정, 재현 테스트 추가. VM config는 수동 복구함.
+
+### 6차 후속: codex 신뢰 프롬프트 해결(codex-discord v0.1.8)
+- install.sh가 CODEX_WORKDIR를 `~/.codex/config.toml`에 `[projects."<wd>"] trust_level="trusted"`로 선등록(섹션 EOF 추가라 안전·멱등·.bak). tui-up.sh가 `--dangerously-bypass-hook-trust`를 붙인다(hooks.json 있을 때). 양 OS 공통(프레시 설치는 맥도 겪음).
+- VM 실측: config 선등록+플래그 조합으로 codex TUI가 디렉터리·hooks 프롬프트 없이 "Ask Codex to do anything" 입력창까지 기동. 설치기 pins codex-discord v0.1.8, 0.1.16.
