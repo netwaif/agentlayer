@@ -15,12 +15,12 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**GitHub 릴리즈 latest = v1.3.1**(tap Casks 1.3.1). **v1.4.0-rc2 = prerelease**(f634c17, 2026-09-07 저녁, Win10 WSL2 1차 결과 4건 반영). 로컬 main = f634c17 = origin/main(전부 푸시됨). make install = f634c17. 매뉴얼 v1.3.1 Drive 배포 완료(같은 ID, 47페이지, agentbrowser-loops 세션이 11:33에 함). WSL2 rc2 재검증 대기 — 지침 `/Volumes/private/mac-to-win10/README-agentlayer-wsl2-retest-rc2.md`, 결과 `RESULT-wsl2-rc2-*.md`. 하네스: discord-multiagent v0.1.3·설치기 0.1.17 푸시. VM `ubuntu-agent` 일시정지.
+**GitHub 릴리즈 latest = v1.3.1**(tap Casks 1.3.1). **v1.4.0-rc2 = prerelease**(f634c17, 2026-09-07 저녁, Win10 WSL2 1차 결과 4건 반영). 로컬 main = f634c17 = origin/main(전부 푸시됨). make install = f634c17. 매뉴얼 v1.3.1 Drive 배포 완료(같은 ID, 47페이지, agentbrowser-loops 세션이 11:33에 함). WSL2 rc2 재검증 **진행 중**(사용자가 2026-09-07 밤 Win10 콜드세션에서 착수) — 지침 `/Volumes/private/mac-to-win10/README-agentlayer-wsl2-retest-rc2.md`, 결과 `RESULT-wsl2-rc2-*.md`. 하네스: discord-multiagent v0.1.3·설치기 0.1.17 푸시. VM `ubuntu-agent` 일시정지.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **WSL2 rc2 재검증 결과 읽기** — NAS `/Volumes/private/mac-to-win10/RESULT-wsl2-rc2-*.md`(마운트 안 돼 있으면 `open smb://Netwaif-Storage.local/private` 뒤 Finder 인증창 「연결」). 확인 항목: agy 훅 등록 줄·codex [idle→WORK→DONE] 전이·agy 전이·브라우저 순서. 문제 있으면 고쳐 rc3, 없으면 **v1.4.0 정식 릴리즈**(태그→`GITHUB_TOKEN=$(gh auth token) goreleaser release --clean --release-notes <scratchpad>` — 한 줄로 묶으면 분류기에 막히니 export 따로) → tap cask 1.4.0 확인 → 멤버 공지(리눅스/WSL2 지원 + apt 한 줄 + 리눅스 매뉴얼 절 필요 여부 판단).
+1. **WSL2 rc2 재검증 결과 읽기**(Win10 세션이 2026-09-07 밤 착수, 결과 파일이 아직 없으면 그쪽 진행 중) — NAS `/Volumes/private/mac-to-win10/RESULT-wsl2-rc2-*.md`(마운트 안 돼 있으면 `open smb://Netwaif-Storage.local/private` 뒤 Finder 인증창 「연결」). 확인 항목: agy 훅 등록 줄·codex [idle→WORK→DONE] 전이·agy 전이·브라우저 순서. 문제 있으면 고쳐 rc3, 없으면 **v1.4.0 정식 릴리즈**(태그→`GITHUB_TOKEN=$(gh auth token) goreleaser release --clean --release-notes <scratchpad>` — 한 줄로 묶으면 분류기에 막히니 export 따로) → tap cask 1.4.0 확인 → 멤버 공지(리눅스/WSL2 지원 + apt 한 줄 + 리눅스 매뉴얼 절 필요 여부 판단).
 2. **디스코드 v1.3.x 공지**(아직 안 함) — v1.4.0과 묶어 한 번에 하는 것도 가능. 매뉴얼 v1.3.1은 Drive 배포 완료(ID 1c6ud4ALnvfJaOFVtFq4VmFKwJAzQO6eZ, 링크 그대로).
 3. 후속 후보: `internal/discord/card.go`·`card_test.go` gofmt 미적용(기존, 내용 무관) / 에이전트 브라우저 창 식별 강화(창 제목·첫 탭 표식, CfT 툴바에 프로필 아바타 없음) / FX iframe / mcp-serve resize 차단 / CfT 갱신 명령 / favicon 404 소음 / autopreview 포트 제외 / 관제탑 restore 체크리스트 키 / codex trusted_hash 자동 기록 / `agentlayer browser`(인자 없음) 재실행 시 붙어 있는 동작·`browser errors` Enter 대기 — 자동화 관점 정리.
 4. 디스크: 내장 20GB 여유. 사용자 판단 대기 항목 — agy 대화 기록 6.4GB(`~/.gemini/antigravity-cli/{conversations,brain}`), codex 세션 6GB(`~/.codex/sessions/2026`, `.tmp/marketplaces`), Chrome 캐시 3.3GB(종료 후), VS Code 구버전 확장 0.55GB(`openai.chatgpt-26.825.41651`), Playwright chromium-1187 0.5GB, 영상·백업 7GB는 T7으로 이동. 리포트 `~/Downloads/ClaudeDir/disk_analysis_20260906.md`.
