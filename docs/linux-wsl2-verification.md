@@ -1,0 +1,68 @@
+# 리눅스(WSL2) 검증 기록
+
+시청자 배포물이 리눅스에서 도는지 실측한 기록. 목적지는 Windows WSL2, 1차 실험대는 Ubuntu 24.04 VM(`ubuntu-agent`, 화면 없음 = WSL2·VPS와 같은 조건).
+갱신 규칙: 날짜별로 아래에 추가. 되는 것/안 되는 것을 도구별로 적는다.
+
+## 2026-09-07 — 1차: Ubuntu VM, 헤드리스(로그인 없이 되는 범위)
+
+### 환경
+Ubuntu 24.04.4 server, Node 24.20(nvm), Claude Code 2.1.263, Codex 0.153.4, Gemini CLI 0.58.0, bun 1.4.2, agy 1.1.27, python 3.12, jq·git·tmux 있음.
+비대화형 SSH에서도 잡히도록 `/usr/local/bin/{claude,codex,gemini,bun,agy}` 링크.
+
+### 되는 것
+- **플러그인 마켓 추가·설치가 로그인 없이 된다**: `claude plugin marketplace add netwaif/loadout` → `claude plugin install loadout@loadout`. multi-agent-starter·claude-plugins-official(discord)·discord-harness-installer 전부 동일. `claude plugin list`에 4개 enabled.
+- **loadout 0.5.1**: `store.py --list`, `--pick karpathy,agent-loop --yes`(CLAUDE.md+딸린 파일), `--doctor`(구조 이상 없음), `--remove agent-loop`, `--flavor codex`(AGENTS.md) 전부 exit 0. macOS 전용 코드 없음.
+- **multi-agent-starter 3.6.0**: `init.py --flavor claude|codex|antigravity --target … --yes` 셋 다 validate PASS(13·14·15개). `call_worker.sh` 전제(bash·jq·timeout·mktemp) 전부 있음, `bash -n` 통과. KNOWN_ISSUES KI-3(네이티브 Windows)는 WSL2에선 해당 없음.
+- **discord 플러그인 0.0.4**(공식): bun 설치 후 `bun install` 114 packages, `bun run start`가 토큰 요구 메시지까지 정상 도달(`~/.claude/channels/discord/.env`).
+- **discord-harness-installer 0.1.14** `harnessctl.py preflight`: macOS 한 줄만 FAIL, git·tmux·node·bun·claude·codex·agy·discord 플러그인 전부 OK. `fetch`로 정본 3레포 핀 체크아웃 정상(discord-multiagent v0.1.1, codex-discord v0.1.6, usage-coach v0.1.2 → `~/.local/share/discord-harness/repos`).
+- **agy(Antigravity CLI)**: 공식 설치기 `curl -fsSL https://antigravity.google/cli/install.sh | bash`가 리눅스 x86_64 바이너리를 `~/.local/bin/agy`에 놓는다(210MB, 1.1.27 = 맥과 같은 버전).
+
+### 안 되는 것 / 포팅 필요
+- **디스코드 하네스는 리눅스에서 설치 불가(현재)**. 두 층에 macOS 의존:
+  1. `harnessctl.py:88` `sys.platform == "darwin"` 아니면 preflight FAIL(설치 시작 자체가 막힘).
+  2. 정본 3레포가 봇 자동 기동을 **launchd LaunchAgent**(plist + `launchctl bootstrap gui/$(id -u)`)로 한다 — `discord-multiagent/scripts/install-autostart.sh`, `codex-discord/scripts/install.sh`(plist 3종 tui·daemon·gemini)·`uninstall.sh`, `usage-coach/scripts/install.sh`·`uninstall.sh`. `bot-restart.sh`는 `~/Library/LaunchAgents/*.plist`를 훑는다. harnessctl 자체도 `plistlib`로 수다 클로드 plist를 만든다.
+  → 리눅스 대응 = systemd user unit(`~/.config/systemd/user/*.service`, `systemctl --user enable --now`, `loginctl enable-linger`)으로 분기. WSL2는 systemd가 기본 꺼져 있을 수 있음(`/etc/wsl.conf` `[boot] systemd=true`) — WSL2 단계에서 확인.
+  3. 사소: tmux 경로 후보 `/opt/homebrew/bin/tmux`(리눅스에선 which로 잡히므로 무해), 힌트 문구 `brew install …`, 매뉴얼의 `pbpaste > .bot-token-*`(리눅스는 `xclip -o`/`wl-paste` 또는 편집기로 저장 안내 필요).
+- **세션 단위 검증(스킬을 말로 호출)은 로그인 뒤**: VM에 `claude`·`codex`·`agy` 로그인이 없다(`claude auth status` loggedIn=false). 화면 없는 VM이라 브라우저 OAuth는 사용자 pane에서 URL 열기·코드 붙여넣기로 진행해야 함. 맥 세션 복사 금지(구글은 회전 충돌).
+
+### 다음
+- 사용자가 VM에서 로그인(claude → codex → agy) 후: multi-agent-starter "멀티 에이전트 시스템 구성해줘"·loadout "구성 골라 담아줘" 세션 실행, 클로드 워커 1회 dispatch.
+- 디스코드 하네스 리눅스 분기(systemd)는 별도 작업으로 — 정본 3레포+설치기 4곳.
+- WSL2(Boot Camp Win10)에서 같은 절차 재확인 → 그 뒤 멤버 공지.
+
+## 2026-09-07 — 2차: 로그인 뒤 세션 단위(codex·agy)
+
+- **codex 로그인** Device Code 방식으로 완료(`codex login status` = Logged in using ChatGPT). **agy 로그인** 완료(`~/.gemini/antigravity-cli/antigravity-oauth-token`). **claude 로그인은 안 됨** — `~/.claude/.credentials.json` 없음, `claude auth status` loggedIn=false. 재시도 필요.
+- **agy 제미나이 워커 경로 OK**: 격리 tmp에서 `agy --prompt "…"`(backends.json gemini cli 정의 그대로) → 응답 정상, exit 0. 리눅스 x86_64 바이너리로 맥과 동일 동작.
+- **codex 오케스트레이터(flavor codex) 읽기 OK**: `codex exec --skip-git-repo-check` 비대화형으로 AGENTS.md를 읽고 워커 3종 역할 요약. 주의 2가지 — SSH 비TTY에서는 `</dev/null` 필요(stdin 대기), git 저장소가 아니면 `--skip-git-repo-check` 또는 `git init`.
+- **codex 셸 샌드박스 리눅스 차단(해결됨, 아래 4차)**: 셸 명령 실행 시 `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`. 원인 = Ubuntu 24.04 `kernel.apparmor_restrict_unprivileged_userns=1`(비특권 user namespace 제한). `apt install bubblewrap`(0.9.0)만으로는 해결 안 됨. 후보: `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0`(+`/etc/sysctl.d/`에 영구화) 또는 bwrap용 AppArmor 프로필. **WSL2 커널은 AppArmor 제한이 다르므로 WSL2에서 재확인 필수** — 멤버 공지문에 "codex 셸이 막히면 이 sysctl" 문구 후보.
+- 도구 검증 중 자동 승인 우회 문구가 든 `codex exec --full-auto` 실행은 이 세션(auto mode)에서 차단됨 — 오케스트레이터 1사이클 실행(승인 포함)은 사용자 pane에서 대화형으로 하는 게 맞다.
+
+## 2026-09-07 — 3차: claude 로그인 뒤 세션 단위(스킬을 말로 호출)
+
+- claude 재로그인 완료(`~/.claude/.credentials.json`, authMethod claude.ai). 비대화형 `claude -p … --permission-mode acceptEdits --allowedTools "Skill,Bash,Read,Write,Edit,Glob,Grep"`로 검증.
+- **multi-agent-starter 스킬 OK**: "멀티 에이전트 시스템 구성해줘"(flavor claude, 대상 `~/lab/s-mas`) → 33개 파일, validate 13개 PASS. 사용자 플러그인 스킬이 리눅스 세션에서 정상 트리거·실행.
+- **loadout 스킬 OK**: "CLAUDE.md 구성 골라 담아줘"(karpathy·session-handoff, 대상 `~/lab/s-loadout`) → CLAUDE.md+SESSION.template.md, doctor 이상 없음.
+- 남은 세션 검증: 워커 dispatch 1사이클(승인 포함)은 gate G0가 인터랙티브 전용이라 사용자 pane 대화형에서. codex 셸 샌드박스는 sysctl 적용 뒤 재확인.
+
+## 2026-09-07 — 4차: codex 셸 샌드박스 해결
+
+- `sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0` + `/etc/sysctl.d/99-codex-bwrap.conf` 영구화(사용자 pane에서 실행) → `codex exec`가 셸 명령(`ls _shared/adapters`) 정상 실행. bubblewrap 0.9.0은 설치돼 있음(없으면 codex가 번들 bwrap 사용, 경고만).
+- 결론: Ubuntu 24.04에서 codex 워커를 쓰려면 이 sysctl 한 줄이 필수. 멤버 공지·매뉴얼 후보 문구: "codex가 `bwrap: loopback: Failed RTM_NEWADDR`로 막히면 위 sysctl".
+- 이로써 loadout·multi-agent-starter는 리눅스에서 생성기·스킬 세션·백엔드 3종(claude 로그인, codex 셸, agy 응답) 전부 확인. 미확인은 워커 dispatch 1사이클(대화형, 사용자 pane)뿐.
+
+## 2026-09-07 — 5차: agentlayer 리눅스 빌드(브랜치 linux-port)
+
+스펙 `docs/superpowers/specs/2026-09-07-linux-port-design.md`, 계획 `docs/superpowers/plans/2026-09-07-linux-port.md`. 크로스빌드(`GOOS=linux GOARCH=amd64`, -s -w) 바이너리를 VM `~/.local/bin/agentlayer`에 넣어 실측.
+
+### 되는 것
+- `agentlayer version`(linux/amd64), `help` 첫 줄 "agentlayer — tmux 멀티 에이전트 관제탑"(iTerm2 문구 없음).
+- `agentlayer init`: claude hook 3종·codex notify+hooks.json+AGENTS.md·gemini GEMINI.md+hooks.json+settings.json·chrome-devtools MCP 3종·스킬 2개 설치. iTerm2 절은 앱이 없어 건너뜀. tmux 팝업 두 줄 안내는 그대로.
+- **hook 전이**: VM tmux 세션 `t2`에서 `claude` 대화형 실행 → `agentlayer status`에 `[idle] claude t2 ~/lab/s-mas` → 질문 뒤 `[DONE]` → `/exit` 뒤 `[dead]`. `claude -p`도 기록 파일(`agents/claude-0.json`) 생성 후 dead. 관제탑 핵심 경로가 리눅스에서 동작.
+- **엔진 다운로드**: `agentlayer browser`가 Chrome for Testing 152.0.7977.82 linux64(약 290MB 실행 파일)를 받아 Go unzip으로 풀고 실행 권한까지 정상(`chrome-linux64/chrome`).
+- 리눅스 전용 문구 두 가지 실측: `cookies import x.com` → "cookies import는 macOS 전용입니다 … 에이전트 브라우저 창에서 직접 로그인" (브라우저를 띄우기 전에 거름). `agentlayer browser`(무화면) → "에이전트 브라우저는 창이 필요합니다 — 디스플레이가 없습니다(DISPLAY·WAYLAND_DISPLAY 비어 있음). WSL2는 WSLg…" (첫 실측에선 Chrome X 오류 원문이 그대로 나와 사전 검사를 추가함).
+- `go test ./...` 맥 통과, `GOOS=linux` amd64·arm64 빌드 통과. `install.sh` dry-run이 릴리즈 URL을 올바르게 조립(`AGENTLAYER_VERSION`·`AGENTLAYER_DRY_RUN`·`AGENTLAYER_BIN_DIR`).
+
+### 미확인(WSL2에서)
+- 브라우저 창 실제 기동·FX·pick·shot(WSLg 필요). 데스크톱 알림 `notify-send`(WSL2엔 보통 없음 → 조용히 생략되는지).
+- `install.sh` 실설치는 linux 자산이 포함된 다음 릴리즈 뒤에.
