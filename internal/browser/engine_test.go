@@ -14,20 +14,71 @@ import (
 )
 
 func TestCFTPlatform(t *testing.T) {
-	cases := map[string]string{"amd64": "mac-x64", "arm64": "mac-arm64"}
-	for arch, want := range cases {
-		if got := cftPlatformFor(arch); got != want {
-			t.Errorf("cftPlatformFor(%s) = %s, want %s", arch, got, want)
+	cases := []struct{ goos, arch, want string }{
+		{"darwin", "arm64", "mac-arm64"}, {"darwin", "amd64", "mac-x64"},
+		{"linux", "amd64", "linux64"}, {"linux", "arm64", "linux64"},
+	}
+	for _, c := range cases {
+		if got := cftPlatformFor(c.goos, c.arch); got != c.want {
+			t.Errorf("cftPlatformFor(%s,%s) = %s, want %s", c.goos, c.arch, got, c.want)
 		}
+	}
+}
+
+func TestEngineRel(t *testing.T) {
+	if got := engineRel("darwin", "arm64"); got != filepath.Join("chrome-mac-arm64", "Google Chrome for Testing.app", "Contents", "MacOS", "Google Chrome for Testing") {
+		t.Errorf("darwin rel = %s", got)
+	}
+	if got := engineRel("linux", "amd64"); got != filepath.Join("chrome-linux64", "chrome") {
+		t.Errorf("linux rel = %s", got)
 	}
 }
 
 func TestEngineBinPath(t *testing.T) {
 	got := EngineBin("/st")
-	want := filepath.Join("/st", "chrome-for-testing", "chrome-"+cftPlatformFor(runtime.GOARCH),
-		"Google Chrome for Testing.app", "Contents", "MacOS", "Google Chrome for Testing")
+	want := filepath.Join("/st", "chrome-for-testing", engineRel(runtime.GOOS, runtime.GOARCH))
 	if got != want {
 		t.Errorf("EngineBin = %s, want %s", got, want)
+	}
+}
+
+func TestExtractZip(t *testing.T) {
+	var zbuf bytes.Buffer
+	zw := zip.NewWriter(&zbuf)
+	h := &zip.FileHeader{Name: "chrome-linux64/chrome", Method: zip.Deflate}
+	h.SetMode(0o755)
+	w, _ := zw.CreateHeader(h)
+	_, _ = w.Write([]byte("#!/bin/sh\necho cft\n"))
+	_, _ = zw.CreateHeader(&zip.FileHeader{Name: "chrome-linux64/locales/", Method: zip.Store})
+	_ = zw.Close()
+	dir := t.TempDir()
+	zp := filepath.Join(dir, "d.zip")
+	if err := os.WriteFile(zp, zbuf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := extractZip(zp, dir); err != nil {
+		t.Fatal(err)
+	}
+	st, err := os.Stat(filepath.Join(dir, "chrome-linux64", "chrome"))
+	if err != nil || st.Mode()&0o111 == 0 {
+		t.Fatalf("실행 파일 없거나 권한 없음: %v %v", st, err)
+	}
+	if st, err := os.Stat(filepath.Join(dir, "chrome-linux64", "locales")); err != nil || !st.IsDir() {
+		t.Errorf("디렉터리 항목이 풀려야 한다: %v %v", st, err)
+	}
+	if err := extractZip(zp, dir); err != nil {
+		t.Errorf("같은 zip 재추출은 덮어써야 한다: %v", err)
+	}
+	// zip slip 방어
+	var bad bytes.Buffer
+	bw := zip.NewWriter(&bad)
+	w2, _ := bw.Create("../evil")
+	_, _ = w2.Write([]byte("x"))
+	_ = bw.Close()
+	bp := filepath.Join(dir, "bad.zip")
+	_ = os.WriteFile(bp, bad.Bytes(), 0o644)
+	if err := extractZip(bp, filepath.Join(dir, "out")); err == nil {
+		t.Error("경로 탈출 항목은 거부해야 한다")
 	}
 }
 
@@ -73,11 +124,8 @@ func TestEnsureEngine_Existing(t *testing.T) {
 
 // 없으면 버전 JSON → zip 다운로드 → 풀기 → 실행 파일 경로. VERSION 기록.
 func TestEnsureEngine_Download(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("ditto는 macOS 전용")
-	}
-	plat := cftPlatformFor(runtime.GOARCH)
-	rel := filepath.Join("chrome-"+plat, "Google Chrome for Testing.app", "Contents", "MacOS", "Google Chrome for Testing")
+	plat := cftPlatformFor(runtime.GOOS, runtime.GOARCH)
+	rel := engineRel(runtime.GOOS, runtime.GOARCH)
 	var zbuf bytes.Buffer
 	zw := zip.NewWriter(&zbuf)
 	h := &zip.FileHeader{Name: filepath.ToSlash(rel), Method: zip.Deflate}
