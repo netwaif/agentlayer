@@ -15,7 +15,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**GitHub 릴리즈 = v1.3.1**(2026-09-07 완료, 1cf3144 태그·tap Casks 1.3.1·자산 3종). 로컬 main = origin/main = b174dd8(리눅스 포팅 머지·푸시됨). **v1.4.0-rc1 prerelease**(리눅스 자산 포함, WSL2 검증용, tap은 1.3.1 유지). make install = 34d8fa6. 로컬 main은 b83aeb1(codex notify 버그 고침, origin 대비 앞섬 — 다음 릴리즈에 포함). make install = 37a59b0 기준 바이너리(export 포함), init 재실행됨(스킬·codex·gemini 블록). 새로 생긴 것: Ubuntu 24.04 VM `ubuntu-agent`(VMware Fusion 26.0.1, T7 `/Volumes/VIDEO_WORK/VMs/`)·맥 `~/.local/bin/vm` 명령·`~/.claude/skills/linux-vm` 스킬. VM은 켜진 채 마감(재부팅 전 `vm suspend ubuntu`). 워킹트리 클린(SESSION.md 제외).
+**GitHub 릴리즈 latest = v1.3.1**(tap Casks 1.3.1). **v1.4.0-rc1 = prerelease**(리눅스 자산 포함, WSL2 검증용, tap 안 건드림). 로컬 main = 55c5459, **origin 대비 3커밋 미푸시**(codex notify 버그 수정 b83aeb1 + 리눅스 검증 문서 2건) — v1.4.0 정식 릴리즈 때 함께 푸시. make install = 34d8fa6(dev-linux 크로스빌드는 VM에만, 맥 로컬은 34d8fa6). 디스코드 하네스 리눅스 포팅 완료·4레포 푸시(설치기 0.1.16). Win10 WSL2 검증 대기 — 지침 `/Volumes/private/mac-to-win10/README-agentlayer-wsl2-test.md`, 결과는 그쪽 세션이 같은 폴더 `RESULT-wsl2-*.md`로. VM `ubuntu-agent` 일시정지·워킹트리 클린.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
