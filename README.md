@@ -31,11 +31,19 @@ tmux가 모르는 것(에이전트의 의미 상태)만 채운다.
 ## 설치
 
 ```bash
-brew install netwaif/tap/agentlayer
+brew install netwaif/tap/agentlayer                 # macOS
+# 리눅스 / Windows WSL2 (brew 없이) — 맥도 가능. 릴리즈 tar.gz를 ~/.local/bin 에 놓는다
+curl -fsSL https://raw.githubusercontent.com/netwaif/agentlayer/main/install.sh | bash
 # 또는 소스 빌드 (Go 1.22+)
 git clone https://github.com/netwaif/agentlayer.git && cd agentlayer
 make install   # ~/.local/bin/agentlayer
 ```
+
+리눅스는 Ubuntu 24.04(VM)에서 관제탑·hook·worktree·Discord를 검증했고, 창이 필요한 에이전트
+브라우저는 WSL2(WSLg) 기준이다. 리눅스에서 다른 점: iTerm2 링크 라우팅 없음(터미널 링크는
+`agentlayer browser open <url>`로), 데스크톱 알림은 `notify-send`가 있을 때만, `cookies import`는
+macOS 전용(실사용 Chrome이 윈도우 쪽이라 에이전트 브라우저 창에서 직접 로그인). 상세는
+`docs/linux-wsl2-verification.md`.
 
 설정은 한 번:
 
@@ -188,7 +196,9 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   뜨지 않고 에이전트 브라우저에 창만 추가된다. 번들 ID가 다른 Chrome for Testing은
   별개 앱이라 섞이지 않는다. 코덱은 실Chrome과 같고 Widevine DRM만 없다.
   내려받기에 실패하면 시스템 Chrome으로 대체한다(위 Dock 문제는 남음). 엔진을
-  새 버전으로 바꾸려면 그 폴더를 지우면 다음 기동 때 다시 받는다
+  새 버전으로 바꾸려면 그 폴더를 지우면 다음 기동 때 다시 받는다. 리눅스는
+  `linux64` 빌드(x86_64만)를 받아 `chrome-linux64/chrome`으로 띄운다 — arm64 리눅스는
+  시스템 Chrome/Chromium을 쓴다
 - **조작 효과(FX)** — 에이전트가 MCP로 클릭·입력·드래그·스크립트를 실행하는 동안
   뷰포트 안쪽 테두리에 테라코타 글로우가 켜지고, "AI" 뱃지가 달린 커서가 CDP
   마우스 이벤트를 따라 움직이며 클릭 지점에 리플, 입력 중인 요소에 하이라이트가

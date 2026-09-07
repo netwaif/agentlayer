@@ -7,7 +7,7 @@ builds:
     main: .
     binary: agentlayer
     env: [CGO_ENABLED=0]
-    goos: [darwin]
+    goos: [darwin, linux]
     goarch: [amd64, arm64]
     # `agentlayer version`이 읽는 값 — 기본값에 기대지 않고 명시한다
     ldflags:
