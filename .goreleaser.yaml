@@ -23,8 +23,14 @@ archives:
 
 # brews는 v2.16부로 완전 deprecated(다음 메이저에서 제거) → cask로 이관.
 # cask는 tap의 Casks/에 생성된다. 첫 cask 릴리즈 때 tap의 Formula/agentlayer.rb는 수동 삭제할 것.
+# rc·beta 같은 semver 사전 릴리즈 태그는 GitHub에 prerelease로 표시하고 brew cask는 건드리지 않는다
+# (v1.4.0-rc1 때 둘 다 안 돼서 수동으로 되돌림, 2026-09-07).
+release:
+  prerelease: auto
+
 homebrew_casks:
   - name: agentlayer
+    skip_upload: auto
     repository:
       owner: netwaif
       name: homebrew-tap
