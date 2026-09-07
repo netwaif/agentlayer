@@ -112,7 +112,7 @@ func TestInitMissingSettingsCreates(t *testing.T) {
 
 func TestTmuxBindingAdvice(t *testing.T) {
 	var buf bytes.Buffer
-	PrintTmuxBinding(&buf, false, "/Users/x/.local/bin/agentlayer") // 충돌 없음 케이스
+	PrintTmuxBinding(&buf, "", "/Users/x/.local/bin/agentlayer") // 바인딩 없음 케이스
 	out := buf.String()
 	if !strings.Contains(out, "bind-key a display-popup") {
 		t.Errorf("바인딩 안내 포함: %s", out)
@@ -127,8 +127,15 @@ func TestTmuxBindingAdvice(t *testing.T) {
 		}
 	}
 	buf.Reset()
-	PrintTmuxBinding(&buf, true, "/x") // 충돌 케이스
-	if !strings.Contains(buf.String(), "이미") {
-		t.Error("충돌 경고 포함")
+	PrintTmuxBinding(&buf, "bind-key -T prefix a send-prefix", "/x") // 남의 바인딩: 충돌 경고
+	if !strings.Contains(buf.String(), "다른 키를 고르세요") || !strings.Contains(buf.String(), "send-prefix") {
+		t.Errorf("충돌 경고 + 현재 바인딩 표시: %s", buf.String())
+	}
+	buf.Reset()
+	// 자기 바인딩(init 재실행): 경고가 아니라 "이미 등록됨 — 건너뜀" (WSL2 rc2 검증 피드백)
+	own := `bind-key -T prefix a display-popup -E -e AGENTLAYER_POPUP=1 -h "80%" -w "90%" /home/x/.local/bin/agentlayer`
+	PrintTmuxBinding(&buf, own, "/home/x/.local/bin/agentlayer")
+	if !strings.Contains(buf.String(), "이미 등록됨 — 건너뜀") || strings.Contains(buf.String(), "다른 키") {
+		t.Errorf("자기 바인딩은 건너뜀으로: %s", buf.String())
 	}
 }

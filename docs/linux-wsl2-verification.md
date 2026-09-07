@@ -114,3 +114,23 @@ Ubuntu 24.04.4 server, Node 24.20(nvm), Claude Code 2.1.263, Codex 0.153.4, Gemi
 - `wsl.exe -- bash -lc`(비대화형)에서는 `systemctl --user`가 "Failed to connect to bus" — tmux/로그인 셸 안에서는 running.
 - CfT 툴바에 프로필 아바타가 없어 "AgentLayer" 프로필 이름이 안 보임(맥과 동일한지 미확인). `agentlayer browser`(인자 없음)를 브라우저가 떠 있을 때 다시 실행하면 붙어 있음, `browser errors`는 Enter 대기 — 자동화 스크립트에서는 timeout 필요.
 
+
+## 2026-09-08 — 8차: Win10 WSL2 rc2 재검증(사용자 세션, v1.4.0-rc2 설치본) → v1.4.0 정식
+
+원 보고서 = NAS `/Volumes/private/mac-to-win10/RESULT-wsl2-rc2-20260908.md`(스크린샷 3장). 7차에서 고친 4건 전부 해소.
+
+### 되는 것
+- `Gemini(agy) hook 등록: ~/.gemini/config/hooks.json` 줄 출력, agy `/hooks` 메뉴에 `[agentlayer]` 항목(PostToolUse·PreInvocation·Stop).
+- npm codex: `[idle] codex`(pane 전면은 `node`인데 codex로 판정, pid 채워짐) → 지시 뒤 `[WORK]` → `[DONE]` → `/exit` 뒤 `[dead]` 네 전이 전부.
+- agy: `[idle] gemini` → `[WORK]` → `[DONE]`(DONE_UNREAD). 권한 프롬프트 대기 중에도 `[WORK]`로 보임(agy 훅에 "승인 대기" 이벤트가 없음 — 표시 오류 아님).
+- `env -u DISPLAY -u WAYLAND_DISPLAY agentlayer browser`: 엔진이 있든 없든 다운로드 없이 0.3초 안에 디스플레이 문구로 종료.
+- FX 배지 "AI 조작 중" 한글 정상(`fonts-noto-cjk`). 창을 최대화하면 WSLg 스케일링으로 배지가 오른쪽에서 잘림(참고).
+- 하네스: `chat-claude` 세션 뜸(bot-up.sh v0.1.3). remove 뒤 유닛·세션 잔존 0.
+
+### 고친 것
+- [discord-harness-installer 0.1.18] **수다 봇이 `New MCP server found in this project: codex … Enter to confirm`에서 멈춤** — 신뢰 전 폴더에서는 프로젝트 settings의 `enableAllProjectMcpServers`가 무시된다(Claude Code 2.1.196+). git 저장소가 아닌 작업 폴더는 `chat/`이 별개 프로젝트라 루트 신뢰가 상속되지 않는다(맥에서 재현: 루트·chat 양쪽 `enableAllProjectMcpServers`여도 프롬프트, `~/.claude.json projects["<chat>"].hasTrustDialogAccepted=true` 선등록이면 바로 입력창). 오버레이 단계에서 `<work>`·`<work>/chat` 둘 다 선등록, remove가 되돌림.
+- [agentlayer] init 재실행 때 자기 팝업 바인딩에도 `⚠ prefix 'a' 키가 이미 바인딩 … 다른 키를 고르세요`가 나오던 것 → `이미 등록됨 — 건너뜀`. 남의 바인딩이면 경고 + 현재 바인딩 줄 표시.
+
+### 참고
+- `tmux send-keys -t <s> "/exit" Enter`는 codex 슬래시 팝업만 열림 — Enter 한 번 더(codex TUI).
+- 배포판 vhdx가 외장 USB SSD에 있으면 순간 단절 때 WSL 전체가 EIO(`getpwnam failed 5`) — 내장 디스크 권장.

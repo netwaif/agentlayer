@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type hookEvent struct{ settingsKey, eventArg string }
@@ -165,9 +166,17 @@ func hasCommand(entries []any, cmd string) bool {
 // 수정하지 않는다 — 키 바인딩은 사용자의 영역이다.
 // binPath는 반드시 절대 경로 — tmux 서버는 최소 PATH(/usr/bin:/bin...)로
 // 뜨는 경우가 많아, 명령 이름만 쓰면 팝업이 즉시 닫힌다(깜빡임).
-func PrintTmuxBinding(w io.Writer, conflict bool, binPath string) {
-	if conflict {
+// existing은 `tmux list-keys -T prefix a`의 출력(없으면 빈 문자열) — agentlayer
+// 자신의 팝업 바인딩이면 재실행에서 "이미 등록됨"으로 알리고, 남의 바인딩이면
+// 경고한다(init 재실행 때 자기 바인딩에도 "다른 키를 고르세요"가 나오던 것 정리).
+func PrintTmuxBinding(w io.Writer, existing string, binPath string) {
+	if existing != "" {
+		if strings.Contains(existing, "agentlayer") {
+			fmt.Fprintln(w, "tmux 팝업 바인딩 (C-b a): 이미 등록됨 — 건너뜀")
+			return
+		}
 		fmt.Fprintln(w, "⚠ prefix 'a' 키가 이미 바인딩되어 있습니다. 다른 키를 고르세요.")
+		fmt.Fprintf(w, "  현재: %s\n", existing)
 		return
 	}
 	if binPath == "" {

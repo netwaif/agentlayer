@@ -408,9 +408,13 @@ func runInit(args []string) error {
 		cli.PrintITerm2LinkGuide(os.Stdout, binPath, cli.ITerm2LinkRuleInstalled(cli.ReadITerm2Bookmarks()))
 		fmt.Println()
 	}
-	// prefix 'a' 충돌 검사: list-keys가 성공하면 이미 바인딩된 것
-	conflict := exec.Command(tmuxx.Bin(), "list-keys", "-T", "prefix", "a").Run() == nil
-	cli.PrintTmuxBinding(os.Stdout, conflict, binPath)
+	// prefix 'a' 충돌 검사: list-keys가 성공하면 이미 바인딩된 것. 바인딩 줄을
+	// 넘겨 자기 것(agentlayer 팝업)이면 "이미 등록됨"으로 구분한다.
+	existing := ""
+	if out, err := exec.Command(tmuxx.Bin(), "list-keys", "-T", "prefix", "a").Output(); err == nil {
+		existing = strings.TrimSpace(string(out))
+	}
+	cli.PrintTmuxBinding(os.Stdout, existing, binPath)
 	return nil
 }
 
