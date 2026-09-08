@@ -15,17 +15,15 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.4.0 정식 릴리즈·멤버 공지 완료**(2026-09-08). 로컬 main = origin/main, 트리 깨끗. 디스코드 공지(채널 1522490241859059784, 메시지 1546681035939381289, 윈도우 강조·설치는 "윈도우 클로드에 부탁하는 문장 하나")와 영상 W6C5IuDUFW8 고정댓글(UgyV5G5YSvYz2y9JkER4AaABAg) 🔄 업데이트 블록에 v1.4.0 줄 추가까지 끝. 하네스 4레포 리눅스 분기(usage-coach v0.1.4·codex-discord v0.1.8·discord-multiagent v0.1.3·설치기 0.1.18)는 푸시됨. **설치기 0.1.18 WSL2 실기 재확인은 Win10 쪽이 아직 안 돌림**(NAS에 결과 파일 없음, 절차서만 있음). VM `ubuntu-agent` 일시정지.
+**v1.4.0 릴리즈·윈도우 공지 2건 모두 완료**(2026-09-08). 설치기 0.1.18 WSL2 실기 재확인 ✓(NAS `RESULT-wsl2-followup-0.1.18-20260908.md`, 신뢰 선등록·chat-claude 입력창·remove 회수 전부 원문대로). 하네스 윈도우 공지 게시(채널 1522490241859059784, 메시지 1546694530210857050). 설치기 README 요구 사항 절 리눅스·WSL2 반영(e38a2f6, 푸시됨). 로컬 main = origin/main. VM `ubuntu-agent` 일시정지.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **Win10 세션에 설치기 0.1.18 재확인 지시**(사용자가 Win10 클로드에 "NAS `mac-to-win10/README-agentlayer-wsl2-followup-0.1.18.md` 절차대로 해줘") → 결과 `RESULT-wsl2-followup-0.1.18-*.md` 읽기. NAS는 `/Volumes/private-1/mac-to-win10/`로 붙는다(옛 `/Volumes/private` 빈 폴더가 남아 경로가 -1로 밀림, Permission denied면 이것). 확인 항목: install 출력 `폴더 신뢰 선등록 … /chat` 줄, chat-claude pane에 "New MCP server found" 없이 입력창, remove 출력 `폴더 신뢰 선등록 회수`. 실패하면 `~/.claude.json` projects 키 경로(resolve된 절대경로)부터 대조.
-2. **하네스 윈도우 지원 디스코드 공지**(1번 ✓ 뒤, 초안 → 사용자 확인 → 게시). 공지 톤 규칙(사용자 피드백): 명령어·기술 설명 금지, "클로드에 이렇게 부탁하세요" 문장 하나로, 윈도우 강조, 단락마다 빈 줄. 반드시 넣을 조건: WSL2에서는 우분투 터미널을 열어 둔 동안만 돈다(enable-linger는 VPS만). agentlayer 공지 끝에 "마지막 확인 뒤 이어서 올리겠다"고 예고해 둠.
-3. 곁가지: usage-coach는 v0.1.4 태그만 있고 GitHub 릴리즈 페이지 latest는 v0.1.3(설치기는 태그로 받아 무해, 단독 사용자 안내 시 릴리즈 생성 고려). my-videos `videos.json`에 W6C5IuDUFW8(9/6 에이전트 브라우저 편) 미등록 → `sync_videos.py`.
-4. 후속 후보: `internal/discord/card.go`·`card_test.go` gofmt 미적용(기존, 내용 무관) / agy 권한 프롬프트 대기가 [WORK]로 보임(agy 훅에 승인 대기 이벤트 없음 — 표시 개선 여지) / 에이전트 브라우저 창 식별 강화 / FX iframe / mcp-serve resize 차단 / CfT 갱신 명령 / favicon 404 소음 / autopreview 포트 제외 / 관제탑 restore 체크리스트 키 / codex trusted_hash 자동 기록 / `agentlayer browser`(인자 없음) 재실행 시 붙어 있는 동작·`browser errors` Enter 대기 / 매뉴얼 "윈도우에서 시작하기" 장(멤버가 README를 어려워하면).
-5. 디스크: 내장 20GB 여유. 사용자 판단 대기 항목 — agy 대화 기록 6.4GB(`~/.gemini/antigravity-cli/{conversations,brain}`), codex 세션 6GB(`~/.codex/sessions/2026`, `.tmp/marketplaces`), Chrome 캐시 3.3GB(종료 후), VS Code 구버전 확장 0.55GB(`openai.chatgpt-26.825.41651`), Playwright chromium-1187 0.5GB, 영상·백업 7GB는 T7으로 이동. 리포트 `~/Downloads/ClaudeDir/disk_analysis_20260906.md`.
-6. 촬영 뒤 정리(이월): 8080 python 서버, `~/.local/state/agentlayer/picks/`, demo 저장소 reset, worktree hero-bold-*. 대시보드 옛 핑 삭제(567c2c9).
+1. 곁가지: usage-coach는 v0.1.4 태그만 있고 GitHub 릴리즈 페이지 latest는 v0.1.3(설치기는 태그로 받아 무해, 단독 사용자 안내 시 릴리즈 생성 고려). my-videos `videos.json`에 W6C5IuDUFW8(9/6 에이전트 브라우저 편) 미등록 → `sync_videos.py`.
+2. 후속 후보: 설치기 remove 끝에 `systemctl --user daemon-reload; reset-failed` 추가(WSL2 재확인 때 유닛 파일 삭제 뒤 런타임 잔상 3건 — codex-discord-tui RemainAfterExit는 stop 필요, rc2 때는 0건) /  `internal/discord/card.go`·`card_test.go` gofmt 미적용(기존, 내용 무관) / agy 권한 프롬프트 대기가 [WORK]로 보임(agy 훅에 승인 대기 이벤트 없음 — 표시 개선 여지) / 에이전트 브라우저 창 식별 강화 / FX iframe / mcp-serve resize 차단 / CfT 갱신 명령 / favicon 404 소음 / autopreview 포트 제외 / 관제탑 restore 체크리스트 키 / codex trusted_hash 자동 기록 / `agentlayer browser`(인자 없음) 재실행 시 붙어 있는 동작·`browser errors` Enter 대기 / 매뉴얼 "윈도우에서 시작하기" 장(멤버가 README를 어려워하면).
+3. 디스크: 내장 20GB 여유. 사용자 판단 대기 항목 — agy 대화 기록 6.4GB(`~/.gemini/antigravity-cli/{conversations,brain}`), codex 세션 6GB(`~/.codex/sessions/2026`, `.tmp/marketplaces`), Chrome 캐시 3.3GB(종료 후), VS Code 구버전 확장 0.55GB(`openai.chatgpt-26.825.41651`), Playwright chromium-1187 0.5GB, 영상·백업 7GB는 T7으로 이동. 리포트 `~/Downloads/ClaudeDir/disk_analysis_20260906.md`.
+4. 촬영 뒤 정리(이월): 8080 python 서버, `~/.local/state/agentlayer/picks/`, demo 저장소 reset, worktree hero-bold-*. 대시보드 옛 핑 삭제(567c2c9).
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -189,6 +187,9 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-08 **고정댓글 갱신 규칙**: agentlayer 계열 최신 영상은 W6C5IuDUFW8(9/6, 고정댓글 UgyV5G5YSvYz2y9JkER4AaABAg, 🔄 업데이트 블록 보유). 이전 COcgg7Q_r8U 고정댓글은 이미 리다이렉트 문구라 손대지 않음. 갱신은 comments.update로 기존 본문 끝에 줄 추가(scratchpad `update_comment.py`, 백업 `~/.claude/skills/youtube-pinned-redirect/backups/`). **유튜브 댓글은 공개라 "디스코드 공지 참고" 같은 멤버 전용 언급 금지**(사용자 지적).
 - 2026-09-08 공지 순서 결정(사용자 승인): agentlayer 본체 공지 먼저 → Win10에서 설치기 0.1.18 재확인 → 하네스 윈도우 공지 따로. 합치지 않는 이유: 하네스 미확인 상태로 같이 올리면 되돌리기 어렵고 본체 공지가 밀림.
 
+- 2026-09-08 **설치기 0.1.18 WSL2 실기 재확인 통과**(Win10 세션, 결과 NAS `mac-to-win10/RESULT-wsl2-followup-0.1.18-20260908.md`): install `폴더 신뢰 선등록 …/chat`·chat-claude "New MCP server found" 없이 입력창·`~/.claude.json` 양쪽 True·remove `폴더 신뢰 선등록 회수`(chat False 복원, 사용자 settings.local.json 50B 원복). Win10 쪽 자동 모드 분류기가 tmux send-keys를 막아 harnessctl.py를 직접 실행했음(검증 대상 동일). 참고: wsl.exe 직접 셸에서 `/run/user/1000` 위 WSLg tmpfs 이중 마운트로 `systemctl --user` 버스 실패 → `sudo systemctl restart user@1000`(설치기 무관). NAS는 이번엔 `/Volumes/private`로 정상 마운트(-1 아님).
+- 2026-09-08 **하네스 윈도우 공지 게시**(채널 1522490241859059784, id 1546694530210857050). 사용자 수정 1건: "지난 공지에서 예고드린 대로" → "바로 앞 agentlayer 공지에 이어서 올립니다"(연이어 올리는 공지라 '지난'이 어색). 공지 전 발견: 설치기 README 요구 사항 절이 "macOS 전용·리눅스·윈도우 미지원"으로 낡아 있어 리눅스(VPS)·WSL2 지원 + 터미널 열어 둔 동안만 동작 + 실기 검증 환경으로 교체(e38a2f6). 매뉴얼 v3.0은 개정 안 함.
+
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
@@ -335,3 +336,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-07(rc2): `internal/scan/proc.go`(신규, ProcTable·KindFromArgs·DescendantKind), `internal/scan/scan.go`(Sync 래퍼 2차 판정), `internal/scan/scan_test.go`(+3 테스트), `internal/browser/instance.go`(displayAvailable 선행·launchHint), `internal/browser/instance_test.go`(TestLaunchHint), `main.go`(agyInstalled), `README.md`(리눅스 apt·fonts-noto-cjk), `docs/linux-wsl2-verification.md`(7차). 태그 v1.4.0-rc2(f634c17). 스크래치 `release-notes-v1.4.0-rc2.md`, `RESULT-wsl2-20260907.md` 사본. NAS `README-agentlayer-wsl2-retest-rc2.md`(신규). 다른 레포: `~/ai-folder/dev/discord-multiagent/scripts/bot-up.sh`(e3577d3, v0.1.3, `_shared/learnings.md`는 사용자 미커밋분 그대로 둠), `~/VSCodeWorkspace/discord-harness-installer`(ee7ed96: pins.json·plugin.json·marketplace.json 0.1.17).
 - 2026-09-08(v1.4.0): `main.go`(existing 바인딩 줄 전달), `internal/cli/initcmd.go`(PrintTmuxBinding 시그니처 변경, strings), `internal/cli/initcmd_test.go`(자기/남의 바인딩 케이스), `docs/linux-wsl2-verification.md`(8차). 태그 v1.4.0(57a407f), tap Casks/agentlayer.rb 1.4.0. 스크래치 `release-notes-v1.4.0.md`·`discord-announce-v1.4.0.md`·`RESULT-wsl2-rc2-20260908.md` 사본·`mcprepro-*`(재현 폴더)·`claude.json.bak-*`. NAS `README-agentlayer-wsl2-followup-0.1.18.md`(신규). 다른 레포: `~/VSCodeWorkspace/discord-harness-installer`(28fa323: harnessctl.py `write_project_trust`+remove 회수, tests 2건, SKILL.md 한 줄, plugin.json·marketplace.json 0.1.18).
 - 2026-09-08(공지): 코드 변경 없음. scratchpad `discord-announce-v1.4.0.md`(최종본은 디스코드 메시지 1546681035939381289가 정본), `get_comment.py`·`update_comment.py`(YouTube comments.list/update, youtube-reply auth 재사용). 고정댓글 백업 `~/.claude/skills/youtube-pinned-redirect/backups/W6C5IuDUFW8_UgyV5G5YSvYz2y9JkER4AaABAg_20260908-094616.txt`.
+- 2026-09-08(하네스 공지): 코드 변경 없음. scratchpad `discord-announce-harness-windows.md`(정본은 디스코드 메시지 1546694530210857050). 다른 레포: `~/VSCodeWorkspace/discord-harness-installer/README.md`(e38a2f6, 요구 사항 절). NAS 읽기만: `/Volumes/private/mac-to-win10/RESULT-wsl2-followup-0.1.18-20260908.md`.
