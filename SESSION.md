@@ -15,7 +15,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.4.0 릴리즈·윈도우 공지 2건 모두 완료**(2026-09-08). 설치기 0.1.18 WSL2 실기 재확인 ✓(NAS `RESULT-wsl2-followup-0.1.18-20260908.md`, 신뢰 선등록·chat-claude 입력창·remove 회수 전부 원문대로). 하네스 윈도우 공지 게시(채널 1522490241859059784, 메시지 1546694530210857050). 설치기 README 요구 사항 절 리눅스·WSL2 반영(e38a2f6, 푸시됨). 로컬 main = origin/main. VM `ubuntu-agent` 일시정지.
+**v1.4.0 릴리즈·윈도우 공지 2건 모두 완료**(2026-09-08). 설치기 0.1.18 WSL2 실기 재확인 ✓(NAS `RESULT-wsl2-followup-0.1.18-20260908.md`, 신뢰 선등록·chat-claude 입력창·remove 회수 전부 원문대로). 하네스 윈도우 공지 게시(채널 1522490241859059784, 메시지 1546694530210857050). 일반 시청자용 유튜브 커뮤니티 글(agentlayer+하네스 윈도우 지원 통합, 수정됨 표시)도 게시. 설치기 README 요구 사항 절 리눅스·WSL2 반영(e38a2f6, 푸시됨). 로컬 main = origin/main. VM `ubuntu-agent` 일시정지.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
@@ -190,6 +190,9 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-08 **설치기 0.1.18 WSL2 실기 재확인 통과**(Win10 세션, 결과 NAS `mac-to-win10/RESULT-wsl2-followup-0.1.18-20260908.md`): install `폴더 신뢰 선등록 …/chat`·chat-claude "New MCP server found" 없이 입력창·`~/.claude.json` 양쪽 True·remove `폴더 신뢰 선등록 회수`(chat False 복원, 사용자 settings.local.json 50B 원복). Win10 쪽 자동 모드 분류기가 tmux send-keys를 막아 harnessctl.py를 직접 실행했음(검증 대상 동일). 참고: wsl.exe 직접 셸에서 `/run/user/1000` 위 WSLg tmpfs 이중 마운트로 `systemctl --user` 버스 실패 → `sudo systemctl restart user@1000`(설치기 무관). NAS는 이번엔 `/Volumes/private`로 정상 마운트(-1 아님).
 - 2026-09-08 **하네스 윈도우 공지 게시**(채널 1522490241859059784, id 1546694530210857050). 사용자 수정 1건: "지난 공지에서 예고드린 대로" → "바로 앞 agentlayer 공지에 이어서 올립니다"(연이어 올리는 공지라 '지난'이 어색). 공지 전 발견: 설치기 README 요구 사항 절이 "macOS 전용·리눅스·윈도우 미지원"으로 낡아 있어 리눅스(VPS)·WSL2 지원 + 터미널 열어 둔 동안만 동작 + 실기 검증 환경으로 교체(e38a2f6). 매뉴얼 v3.0은 개정 안 함.
 
+- 2026-09-08 **유튜브 커뮤니티 공지(일반 시청자용)**: 멤버는 디스코드, 비멤버는 커뮤니티 — 둘 다 올려야 함(사용자). 두 공지를 하나로 합쳐 기술 설명 없이·윈도우 강조·마무리 인사 없음·문단 개행. 전날 커뮤니티에 "윈도우 검증 시작합니다"(네 가지: 실행환경·loadout·멀티에이전트·디스코드) 글이 있어 "어제 예고한 검증 중 두 가지 완료"로 이어 씀. 실사용 크롬(claude-in-chrome)으로 작성창에 넣어 두고 사용자가 게시 버튼만 누르기로 했는데, 마지막 줄 교체를 위해 본문을 클릭한 직후 글이 게시돼 버림(제 클릭이 게시 버튼에 닿았는지 사용자가 눌렀는지 불명). 사용자 승인 후 ⋮→수정으로 마지막 줄을 "CLAUDE.md 구성 백화점(loadout)과 멀티 에이전트도 윈도우 10에서 확인했습니다"로 교체(원래 "확인되는 대로 이어서"는 사실과 어긋남 — 둘 다 Win10 7차에서 이미 PASS). 교훈: 사용자가 누르게 남겨 둔 작성창은 다시 건드리지 말고, 수정이 필요하면 전체 재입력 전에 스크린샷으로 좌표 재확인.
+- 2026-09-08 리눅스·Win10 지원 범위 정리(사용자 질문): agentlayer·loadout·multi-agent-starter·codex 워커·usage-coach·codex-discord·discord-multiagent 전부 VM+Win10 WSL2 실측 ✓. 단서: usage-coach 단독 install.sh 경로는 하네스 설치기 경유로만 실기 확인 / graph-run 미검증 / Win11 실기 없음.
+
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
@@ -337,3 +340,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-08(v1.4.0): `main.go`(existing 바인딩 줄 전달), `internal/cli/initcmd.go`(PrintTmuxBinding 시그니처 변경, strings), `internal/cli/initcmd_test.go`(자기/남의 바인딩 케이스), `docs/linux-wsl2-verification.md`(8차). 태그 v1.4.0(57a407f), tap Casks/agentlayer.rb 1.4.0. 스크래치 `release-notes-v1.4.0.md`·`discord-announce-v1.4.0.md`·`RESULT-wsl2-rc2-20260908.md` 사본·`mcprepro-*`(재현 폴더)·`claude.json.bak-*`. NAS `README-agentlayer-wsl2-followup-0.1.18.md`(신규). 다른 레포: `~/VSCodeWorkspace/discord-harness-installer`(28fa323: harnessctl.py `write_project_trust`+remove 회수, tests 2건, SKILL.md 한 줄, plugin.json·marketplace.json 0.1.18).
 - 2026-09-08(공지): 코드 변경 없음. scratchpad `discord-announce-v1.4.0.md`(최종본은 디스코드 메시지 1546681035939381289가 정본), `get_comment.py`·`update_comment.py`(YouTube comments.list/update, youtube-reply auth 재사용). 고정댓글 백업 `~/.claude/skills/youtube-pinned-redirect/backups/W6C5IuDUFW8_UgyV5G5YSvYz2y9JkER4AaABAg_20260908-094616.txt`.
 - 2026-09-08(하네스 공지): 코드 변경 없음. scratchpad `discord-announce-harness-windows.md`(정본은 디스코드 메시지 1546694530210857050). 다른 레포: `~/VSCodeWorkspace/discord-harness-installer/README.md`(e38a2f6, 요구 사항 절). NAS 읽기만: `/Volumes/private/mac-to-win10/RESULT-wsl2-followup-0.1.18-20260908.md`.
+- 2026-09-08(커뮤니티 공지): scratchpad `youtube-community-windows.md`(정본은 유튜브 커뮤니티 게시물). 코드 변경 없음.
