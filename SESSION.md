@@ -15,15 +15,16 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**윈도우 지원 공지 전부 완료**(2026-09-08 마감). v1.4.0 릴리즈·설치기 0.1.18 WSL2 재확인 ✓·디스코드 멤버 공지 3건(agentlayer 1546681035939381289 / 하네스 1546694530210857050 / 확인 목록 1546699591137759282)·유튜브 커뮤니티 통합 공지 1건(수정됨). 설치기 README 리눅스 반영 푸시됨(e38a2f6). 남은 열린 작업 없음 — 다음은 곁가지·후속 후보뿐. VM `ubuntu-agent` 일시정지.
+**folder-bot 리눅스(systemd) 분기 진행 중**(2026-09-09, 외부 강의 커리 준비 계기). 분담: discord-harness-installer 세션(tmux `discord-harness-installer:1`)이 folder-bot 0.1.6 systemd 분기·테스트·핀 갱신·VM 검증, 이 세션은 `internal/wiring/wiring.go` systemd 유닛 읽기(완료, f192367). VM `ubuntu-agent` 재개됨(ssh OK, systemd --user running). 하네스 세션 결과는 이 pane(`agentlayer-dev:0.0`)으로 한 줄 보내기로 함.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. 곁가지: usage-coach는 v0.1.4 태그만 있고 GitHub 릴리즈 페이지 latest는 v0.1.3(설치기는 태그로 받아 무해, 단독 사용자 안내 시 릴리즈 생성 고려). my-videos `videos.json`에 W6C5IuDUFW8(9/6 에이전트 브라우저 편) 미등록 → `sync_videos.py`.
-2. 후속 후보: 설치기 remove 끝에 `systemctl --user daemon-reload; reset-failed` 추가(WSL2 재확인 때 유닛 파일 삭제 뒤 런타임 잔상 3건 — codex-discord-tui RemainAfterExit는 stop 필요, rc2 때는 0건) /  `internal/discord/card.go`·`card_test.go` gofmt 미적용(기존, 내용 무관) / agy 권한 프롬프트 대기가 [WORK]로 보임(agy 훅에 승인 대기 이벤트 없음 — 표시 개선 여지) / 에이전트 브라우저 창 식별 강화 / FX iframe / mcp-serve resize 차단 / CfT 갱신 명령 / favicon 404 소음 / autopreview 포트 제외 / 관제탑 restore 체크리스트 키 / codex trusted_hash 자동 기록 / `agentlayer browser`(인자 없음) 재실행 시 붙어 있는 동작·`browser errors` Enter 대기 / 매뉴얼 "윈도우에서 시작하기" 장(멤버가 README를 어려워하면).
-3. 디스크: 내장 20GB 여유. 사용자 판단 대기 항목 — agy 대화 기록 6.4GB(`~/.gemini/antigravity-cli/{conversations,brain}`), codex 세션 6GB(`~/.codex/sessions/2026`, `.tmp/marketplaces`), Chrome 캐시 3.3GB(종료 후), VS Code 구버전 확장 0.55GB(`openai.chatgpt-26.825.41651`), Playwright chromium-1187 0.5GB, 영상·백업 7GB는 T7으로 이동. 리포트 `~/Downloads/ClaudeDir/disk_analysis_20260906.md`.
-4. 촬영 뒤 정리(이월): 8080 python 서버, `~/.local/state/agentlayer/picks/`, demo 저장소 reset, worktree hero-bold-*. 대시보드 옛 핑 삭제(567c2c9).
+1. folder-bot 리눅스 분기 결과 수신 대기 → 유닛 이름이 `com.folder-bot.<이름>.service`·사이드카 `<세션>.up.sh`/`<세션>.tmux-cmd` 규약과 다르면 `unitTexts`(wiring.go) 조정. 끝나면 VM에서 `agentlayer info`로 "구동 systemd 유닛 …" 표시 실측 → v1.4.1 여부 판단 → VM `vm suspend`.
+2. 곁가지: usage-coach는 v0.1.4 태그만 있고 GitHub 릴리즈 페이지 latest는 v0.1.3(2026-09-09 재확인, 설치기는 태그로 받아 무해) — 릴리즈 생성 여부는 사용자 판단 대기. my-videos `videos.json` W6C5IuDUFW8 등록 완료(2026-09-09 `sync_videos.py`, 총 33편).
+3. 후속 후보: 설치기 remove 끝에 `systemctl --user daemon-reload; reset-failed` 추가(WSL2 재확인 때 유닛 파일 삭제 뒤 런타임 잔상 3건 — codex-discord-tui RemainAfterExit는 stop 필요, rc2 때는 0건) /  `internal/discord/card.go`·`card_test.go` gofmt 미적용(기존, 내용 무관) / agy 권한 프롬프트 대기가 [WORK]로 보임(agy 훅에 승인 대기 이벤트 없음 — 표시 개선 여지) / 에이전트 브라우저 창 식별 강화 / FX iframe / mcp-serve resize 차단 / CfT 갱신 명령 / favicon 404 소음 / autopreview 포트 제외 / 관제탑 restore 체크리스트 키 / codex trusted_hash 자동 기록 / `agentlayer browser`(인자 없음) 재실행 시 붙어 있는 동작·`browser errors` Enter 대기 / 매뉴얼 "윈도우에서 시작하기" 장(멤버가 README를 어려워하면).
+4. 디스크: 내장 20GB 여유. 사용자 판단 대기 항목 — agy 대화 기록 6.4GB(`~/.gemini/antigravity-cli/{conversations,brain}`), codex 세션 6GB(`~/.codex/sessions/2026`, `.tmp/marketplaces`), Chrome 캐시 3.3GB(종료 후), VS Code 구버전 확장 0.55GB(`openai.chatgpt-26.825.41651`), Playwright chromium-1187 0.5GB, 영상·백업 7GB는 T7으로 이동. 리포트 `~/Downloads/ClaudeDir/disk_analysis_20260906.md`.
+5. 촬영 뒤 정리(이월): 8080 python 서버, `~/.local/state/agentlayer/picks/`, demo 저장소 reset, worktree hero-bold-*. 대시보드 옛 핑 삭제(567c2c9).
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -194,6 +195,9 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-08 리눅스·Win10 지원 범위 정리(사용자 질문): agentlayer·loadout·multi-agent-starter·codex 워커·usage-coach·codex-discord·discord-multiagent 전부 VM+Win10 WSL2 실측 ✓. 단서: usage-coach 단독 install.sh 경로는 하네스 설치기 경유로만 실기 확인 / graph-run 미검증 / Win11 실기 없음.
 
 - 2026-09-08 **윈도우 확인 목록 공지**(멤버 채널, id 1546699591137759282): 지원 범위 표를 ✅ 목록으로(디스코드는 표 미지원), 미확인(graph-run·Win11 실기)과 VM 전용 단서(codex sysctl)는 제외. 마무리 인사 없음·항목마다 개행(사용자).
+
+- 2026-09-09 **folder-bot은 리눅스 지원에서 빠져 있었음** 확인: 6차 포팅 때 systemd 분기는 discord-multiagent·codex-discord·usage-coach·설치기 4개뿐. folder-bot 0.1.5는 `configure-bot/SKILL.md`가 Darwin 아니면 중단, `botctl.py`는 launchctl·`~/Library/LaunchAgents`만. 설치기가 리눅스에서 "folder-bot 플러그인 설치"는 되지만 실사용 불가. 결정: 분기 작업은 하네스 패턴을 세 번 한 discord-harness-installer 세션이, agentlayer는 wiring만(사용자 승인). VM 검증 필수(맥엔 systemd 없음). 강의용 답변 정리: agentlayer 필수 의존은 tmux뿐, iTerm2는 링크 라우팅(Smart Selection 안내)만 선택 / orchestration 스킬은 agentlayer 필수(`wt new`·`status`·`wt merge`·`wt clean`), tmux만으로 쓰려면 별도 lite 판 필요.
+- 2026-09-09 **wiring systemd 읽기 설계**(f192367): `Paths.SystemdUserDir`(~/.config/systemd/user) 추가, `unitTexts()`가 plist와 `.service`를 한 목록으로. systemd 유닛은 세션명이 ExecStop에, 폴더는 `<세션>.tmux-cmd`에만 있어 ExecStart의 `<stem>.up.sh` stem으로 `.up.sh`·`.tmux-cmd`를 이어 붙인 뒤 기존 정규식(세션 단어경계·경로 뒤경계) 그대로 적용. 라벨은 `.service` 뺀 파일명 → `Info.LaunchAgents` 필드명 유지(restore·info 호환). `TmuxSessionAgents`도 같은 본문으로 new-session 판정. info 문구 `unitWord()`로 OS 분기.
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
