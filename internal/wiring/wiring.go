@@ -1,5 +1,5 @@
 // Package wiring은 에이전트 하나의 "배선"을 읽기 전용으로 수집한다:
-// folder-bot 등록 정보, 담당 Discord 채널·정책, 구동 LaunchAgent.
+// folder-bot 등록 정보, 담당 Discord 채널·정책, 구동 LaunchAgent(macOS)·systemd 사용자 유닛(리눅스).
 // 어떤 파일도 수정하지 않는다 — 관리(등록·pairing)는 각 도구의 영역이다.
 package wiring
 
@@ -41,7 +41,7 @@ type Info struct {
 	Engine       string
 	Discord      *Discord // .discord-state 없으면 nil
 	Bridge       *Bridge  // codex 브리지로 연결된 경우
-	LaunchAgents []string // 이 세션·폴더를 언급하는 plist 라벨들
+	LaunchAgents []string // 이 세션·폴더를 언급하는 구동 유닛 라벨들 (plist 라벨 또는 systemd 유닛 이름)
 }
 
 // DiscordConnected는 어떤 형태로든 Discord로 조종되는지 (⌁ 마크 기준).
@@ -60,7 +60,8 @@ func (i Info) DiscordConnected() bool {
 // Paths는 수집 소스 위치. 테스트에서 교체한다.
 type Paths struct {
 	BotsJSON        string   // ~/.config/folder-bot/bots.json
-	LaunchAgentsDir string   // ~/Library/LaunchAgents
+	LaunchAgentsDir string   // ~/Library/LaunchAgents (macOS)
+	SystemdUserDir  string   // ~/.config/systemd/user (리눅스)
 	BridgeRoots     []string // codex-discord 브리지 루트 후보
 }
 
@@ -72,6 +73,7 @@ func DefaultPaths() Paths {
 	return Paths{
 		BotsJSON:        filepath.Join(home, ".config", "folder-bot", "bots.json"),
 		LaunchAgentsDir: filepath.Join(home, "Library", "LaunchAgents"),
+		SystemdUserDir:  filepath.Join(home, ".config", "systemd", "user"),
 		BridgeRoots: []string{
 			filepath.Join(home, "ai-folder", "dev", "codex-discord"),
 			filepath.Join(home, "codex-discord"),
@@ -185,6 +187,36 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 	if info.Bridge != nil {
 		addNeedle(info.Bridge.Dir)
 	}
+	for _, u := range unitTexts(p) {
+		matched := sessionRe != nil && sessionRe.MatchString(u.text)
+		if !matched {
+			for _, re := range pathRes {
+				if re.MatchString(u.text) {
+					matched = true
+					break
+				}
+			}
+		}
+		if matched {
+			info.LaunchAgents = append(info.LaunchAgents, u.label)
+		}
+	}
+	return info
+}
+
+// unitText는 구동 유닛 하나의 라벨과 매칭용 본문.
+type unitText struct {
+	label string
+	text  string
+}
+
+// unitTexts는 구동 유닛(macOS plist, 리눅스 systemd 사용자 유닛)을 모두 읽는다.
+// systemd 유닛은 세션 명령 원문을 <세션>.tmux-cmd 사이드카에, tmux 기동을
+// <세션>.up.sh에 두는 구조(discord-multiagent install-autostart.sh·설치기·
+// folder-bot 공통)라 유닛 본문에 ExecStart가 가리키는 up.sh와 같은 이름의
+// .tmux-cmd를 이어 붙여 plist와 같은 기준으로 세션명·폴더를 찾게 한다.
+func unitTexts(p Paths) []unitText {
+	var out []unitText
 	if entries, err := os.ReadDir(p.LaunchAgentsDir); err == nil {
 		for _, e := range entries {
 			if !strings.HasSuffix(e.Name(), ".plist") {
@@ -194,24 +226,35 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 			if err != nil {
 				continue
 			}
-			s := string(b)
-			matched := sessionRe != nil && sessionRe.MatchString(s)
-			if !matched {
-				for _, re := range pathRes {
-					if re.MatchString(s) {
-						matched = true
-						break
+			out = append(out, unitText{strings.TrimSuffix(e.Name(), ".plist"), string(b)})
+		}
+	}
+	if entries, err := os.ReadDir(p.SystemdUserDir); err == nil {
+		for _, e := range entries {
+			if !strings.HasSuffix(e.Name(), ".service") {
+				continue
+			}
+			b, err := os.ReadFile(filepath.Join(p.SystemdUserDir, e.Name()))
+			if err != nil {
+				continue
+			}
+			text := string(b)
+			for _, m := range upShRe.FindAllStringSubmatch(text, -1) {
+				stem := m[1]
+				for _, side := range []string{stem + ".up.sh", stem + ".tmux-cmd"} {
+					if sb, err := os.ReadFile(filepath.Join(p.SystemdUserDir, side)); err == nil {
+						text += "\n" + string(sb)
 					}
 				}
 			}
-			if matched {
-				info.LaunchAgents = append(info.LaunchAgents,
-					strings.TrimSuffix(e.Name(), ".plist"))
-			}
+			out = append(out, unitText{strings.TrimSuffix(e.Name(), ".service"), text})
 		}
 	}
-	return info
+	return out
 }
+
+// upShRe는 systemd 유닛 ExecStart가 부르는 <stem>.up.sh의 stem을 뽑는다.
+var upShRe = regexp.MustCompile(`([^\s/"']+)\.up\.sh`)
 
 // envPointsTo는 .env 내용의 *WORKDIR 값이 folder와 일치하는지.
 func envPointsTo(env, folder string) bool {
@@ -275,8 +318,10 @@ func ShortID(id string) string {
 	return id[:4] + "…" + id[len(id)-4:]
 }
 
-// TmuxSessionAgents는 이 세션 이름으로 tmux 세션을 직접 띄우는 plist 라벨들.
-// Collect의 LaunchAgents(폴더 언급까지 포함)보다 좁다 — restore가 "launchd가
+// TmuxSessionAgents는 이 세션 이름으로 tmux 세션을 직접 띄우는 구동 유닛 라벨들
+// (plist 또는 systemd 유닛). systemd 쪽은 new-session이 up.sh 사이드카에 있어
+// unitTexts가 이어 붙인 본문으로 판정한다.
+// Collect의 LaunchAgents(폴더 언급까지 포함)보다 좁다 — restore가 "launchd·systemd가
 // 살릴 세션"을 가려낼 때 카드·모니터 plist를 구동 주체로 오인하지 않게.
 // 4자 미만 세션명은 Collect와 같은 이유(오탐)로 매칭하지 않는다.
 func TmuxSessionAgents(p Paths, session string) []string {
@@ -284,22 +329,10 @@ func TmuxSessionAgents(p Paths, session string) []string {
 		return nil
 	}
 	sessionRe := regexp.MustCompile(`(^|[^A-Za-z0-9_-])` + regexp.QuoteMeta(session) + `($|[^A-Za-z0-9_-])`)
-	entries, err := os.ReadDir(p.LaunchAgentsDir)
-	if err != nil {
-		return nil
-	}
 	var out []string
-	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".plist") {
-			continue
-		}
-		b, err := os.ReadFile(filepath.Join(p.LaunchAgentsDir, e.Name()))
-		if err != nil {
-			continue
-		}
-		s := string(b)
-		if strings.Contains(s, "tmux") && strings.Contains(s, "new-session") && sessionRe.MatchString(s) {
-			out = append(out, strings.TrimSuffix(e.Name(), ".plist"))
+	for _, u := range unitTexts(p) {
+		if strings.Contains(u.text, "tmux") && strings.Contains(u.text, "new-session") && sessionRe.MatchString(u.text) {
+			out = append(out, u.label)
 		}
 	}
 	return out

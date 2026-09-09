@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
 	"time"
 
@@ -80,15 +81,15 @@ func RenderInfo(w io.Writer, d InfoData, now time.Time) {
 			fmt.Fprintf(w, "             채널 %s\n", label)
 		}
 	} else if d.Wiring.DiscordConnected() {
-		fmt.Fprintln(w, "  Discord    연결됨 (LaunchAgent 경유)")
+		fmt.Fprintf(w, "  Discord    연결됨 (%s 경유)\n", unitWord())
 	} else {
 		fmt.Fprintln(w, "  Discord    연결 없음")
 	}
 
 	if len(d.Wiring.LaunchAgents) > 0 {
-		fmt.Fprintf(w, "  구동       LaunchAgent %s\n", strings.Join(d.Wiring.LaunchAgents, ", "))
+		fmt.Fprintf(w, "  구동       %s %s\n", unitWord(), strings.Join(d.Wiring.LaunchAgents, ", "))
 	} else {
-		fmt.Fprintln(w, "  구동       수동 실행 (LaunchAgent 없음)")
+		fmt.Fprintf(w, "  구동       수동 실행 (%s 없음)\n", unitWord())
 	}
 
 	if a.SessionID != "" {
@@ -121,4 +122,12 @@ func FindAgent(agents []*state.Agent, key string) *state.Agent {
 		}
 	}
 	return nil
+}
+
+// unitWord는 구동 유닛의 OS별 이름 — macOS는 LaunchAgent, 리눅스는 systemd 사용자 유닛.
+func unitWord() string {
+	if runtime.GOOS == "linux" {
+		return "systemd 유닛"
+	}
+	return "LaunchAgent"
 }

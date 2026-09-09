@@ -183,3 +183,63 @@ func TestTmuxSessionAgents(t *testing.T) {
 		t.Fatalf("4자 미만 세션명은 매칭 제외: %v", got)
 	}
 }
+
+// systemd 사용자 유닛(리눅스) — 세션명은 유닛 본문(ExecStop)에, 폴더는
+// .tmux-cmd 사이드카에만 있다. 둘 다 plist와 같은 기준으로 매칭돼야 한다.
+func systemdFixture(t *testing.T) (Paths, string) {
+	t.Helper()
+	root := t.TempDir()
+	folder := filepath.Join(root, "collab")
+	sd := filepath.Join(root, "systemd-user")
+	os.MkdirAll(sd, 0o755)
+	os.WriteFile(filepath.Join(sd, "com.folder-bot.collab.service"), []byte(`[Unit]
+Description=folder-bot collab (tmux 세션 collab-bot)
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash `+sd+`/collab-bot.up.sh
+ExecStop=/usr/bin/tmux kill-session -t collab-bot
+`), 0o644)
+	os.WriteFile(filepath.Join(sd, "collab-bot.up.sh"),
+		[]byte(`#!/bin/bash`+"\n"+`exec "/usr/bin/tmux" new-session -d -s collab-bot "$(cat "`+sd+`/collab-bot.tmux-cmd")"`+"\n"), 0o755)
+	os.WriteFile(filepath.Join(sd, "collab-bot.tmux-cmd"),
+		[]byte(`/bin/zsh -lc 'cd `+folder+`; exec bot-up.sh -n collab'`+"\n"), 0o644)
+	// 폴더만 언급하는 무관 유닛(하위 폴더 봇) — 뒤 경계로 걸러져야 함
+	os.WriteFile(filepath.Join(sd, "com.folder-bot.sub.service"), []byte(`[Service]
+ExecStart=/bin/bash `+sd+`/sub-bot.up.sh
+ExecStop=/usr/bin/tmux kill-session -t sub-bot
+`), 0o644)
+	os.WriteFile(filepath.Join(sd, "sub-bot.tmux-cmd"),
+		[]byte(`cd `+folder+`/child; exec bot-up.sh -n sub`+"\n"), 0o644)
+	os.WriteFile(filepath.Join(sd, "usage-coach.timer"), []byte(`[Timer]`), 0o644)
+	return Paths{BotsJSON: "/없음", LaunchAgentsDir: "/없음", SystemdUserDir: sd}, folder
+}
+
+func TestCollectSystemdUnitBySession(t *testing.T) {
+	p, _ := systemdFixture(t)
+	info := Collect(p, "/다른/경로", "collab-bot", nil)
+	if len(info.LaunchAgents) != 1 || info.LaunchAgents[0] != "com.folder-bot.collab" {
+		t.Errorf("systemd 세션명 매칭: %v", info.LaunchAgents)
+	}
+}
+
+func TestCollectSystemdUnitByFolderSidecar(t *testing.T) {
+	p, folder := systemdFixture(t)
+	// 세션명이 안 맞아도 .tmux-cmd 사이드카의 폴더로 매칭. 하위 폴더 봇은 제외.
+	info := Collect(p, folder, "x", nil)
+	if len(info.LaunchAgents) != 1 || info.LaunchAgents[0] != "com.folder-bot.collab" {
+		t.Errorf("systemd 폴더 매칭: %v", info.LaunchAgents)
+	}
+}
+
+func TestTmuxSessionAgentsSystemd(t *testing.T) {
+	p, _ := systemdFixture(t)
+	got := TmuxSessionAgents(p, "collab-bot")
+	if len(got) != 1 || got[0] != "com.folder-bot.collab" {
+		t.Errorf("systemd tmux 구동 유닛: %v", got)
+	}
+	if got := TmuxSessionAgents(p, "sub-bot"); len(got) != 0 {
+		t.Errorf("up.sh 없는 유닛은 new-session 판정 불가여야 함: %v", got)
+	}
+}
