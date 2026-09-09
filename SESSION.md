@@ -15,12 +15,12 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**folder-bot 리눅스(systemd) 분기 진행 중**(2026-09-09, 외부 강의 커리 준비 계기). 분담: discord-harness-installer 세션(tmux `discord-harness-installer:1`)이 folder-bot 0.1.6 systemd 분기·테스트·핀 갱신·VM 검증, 이 세션은 `internal/wiring/wiring.go` systemd 유닛 읽기(완료, f192367). VM `ubuntu-agent` 재개됨(ssh OK, systemd --user running). 하네스 세션 결과는 이 pane(`agentlayer-dev:0.0`)으로 한 줄 보내기로 함.
+**folder-bot 리눅스(systemd) 분기 완료**(2026-09-09). folder-bot v0.1.6(6448380)·설치기 0.1.19(c6c3195)는 discord-harness-installer 세션이, agentlayer는 wiring systemd 읽기(f192367)+restore 문구(7b85739). VM 실측 통과: `agentlayer info`에 "구동 systemd 유닛 com.folder-bot.…", restore --dry-run이 systemd 관할 세션 건너뜀. 미릴리즈(main에만) — v1.4.1 태그 여부 사용자 판단. VM `ubuntu-agent` 일시정지(잔존물 0).
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. folder-bot 리눅스 분기 결과 수신 대기 → 유닛 이름이 `com.folder-bot.<이름>.service`·사이드카 `<세션>.up.sh`/`<세션>.tmux-cmd` 규약과 다르면 `unitTexts`(wiring.go) 조정. 끝나면 VM에서 `agentlayer info`로 "구동 systemd 유닛 …" 표시 실측 → v1.4.1 여부 판단 → VM `vm suspend`.
+1. 사용자 판단: agentlayer v1.4.1 릴리즈(wiring systemd 읽기 — folder-bot 0.1.6 리눅스 사용자가 관제탑에서 봇 구동 주체를 보려면 필요, 없어도 봇 자체는 동작) / 강의 커리용 `orchestration-lite`(agentlayer 없이 tmux+git worktree만) 스킬 제작 여부 / README 제목 "iTerm2+tmux"→"tmux" 문구 정정 여부.
 2. 곁가지: usage-coach는 v0.1.4 태그만 있고 GitHub 릴리즈 페이지 latest는 v0.1.3(2026-09-09 재확인, 설치기는 태그로 받아 무해) — 릴리즈 생성 여부는 사용자 판단 대기. my-videos `videos.json` W6C5IuDUFW8 등록 완료(2026-09-09 `sync_videos.py`, 총 33편).
 3. 후속 후보: 설치기 remove 끝에 `systemctl --user daemon-reload; reset-failed` 추가(WSL2 재확인 때 유닛 파일 삭제 뒤 런타임 잔상 3건 — codex-discord-tui RemainAfterExit는 stop 필요, rc2 때는 0건) /  `internal/discord/card.go`·`card_test.go` gofmt 미적용(기존, 내용 무관) / agy 권한 프롬프트 대기가 [WORK]로 보임(agy 훅에 승인 대기 이벤트 없음 — 표시 개선 여지) / 에이전트 브라우저 창 식별 강화 / FX iframe / mcp-serve resize 차단 / CfT 갱신 명령 / favicon 404 소음 / autopreview 포트 제외 / 관제탑 restore 체크리스트 키 / codex trusted_hash 자동 기록 / `agentlayer browser`(인자 없음) 재실행 시 붙어 있는 동작·`browser errors` Enter 대기 / 매뉴얼 "윈도우에서 시작하기" 장(멤버가 README를 어려워하면).
 4. 디스크: 내장 20GB 여유. 사용자 판단 대기 항목 — agy 대화 기록 6.4GB(`~/.gemini/antigravity-cli/{conversations,brain}`), codex 세션 6GB(`~/.codex/sessions/2026`, `.tmp/marketplaces`), Chrome 캐시 3.3GB(종료 후), VS Code 구버전 확장 0.55GB(`openai.chatgpt-26.825.41651`), Playwright chromium-1187 0.5GB, 영상·백업 7GB는 T7으로 이동. 리포트 `~/Downloads/ClaudeDir/disk_analysis_20260906.md`.
@@ -199,6 +199,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-09 **folder-bot은 리눅스 지원에서 빠져 있었음** 확인: 6차 포팅 때 systemd 분기는 discord-multiagent·codex-discord·usage-coach·설치기 4개뿐. folder-bot 0.1.5는 `configure-bot/SKILL.md`가 Darwin 아니면 중단, `botctl.py`는 launchctl·`~/Library/LaunchAgents`만. 설치기가 리눅스에서 "folder-bot 플러그인 설치"는 되지만 실사용 불가. 결정: 분기 작업은 하네스 패턴을 세 번 한 discord-harness-installer 세션이, agentlayer는 wiring만(사용자 승인). VM 검증 필수(맥엔 systemd 없음). 강의용 답변 정리: agentlayer 필수 의존은 tmux뿐, iTerm2는 링크 라우팅(Smart Selection 안내)만 선택 / orchestration 스킬은 agentlayer 필수(`wt new`·`status`·`wt merge`·`wt clean`), tmux만으로 쓰려면 별도 lite 판 필요.
 - 2026-09-09 **wiring systemd 읽기 설계**(f192367): `Paths.SystemdUserDir`(~/.config/systemd/user) 추가, `unitTexts()`가 plist와 `.service`를 한 목록으로. systemd 유닛은 세션명이 ExecStop에, 폴더는 `<세션>.tmux-cmd`에만 있어 ExecStart의 `<stem>.up.sh` stem으로 `.up.sh`·`.tmux-cmd`를 이어 붙인 뒤 기존 정규식(세션 단어경계·경로 뒤경계) 그대로 적용. 라벨은 `.service` 뺀 파일명 → `Info.LaunchAgents` 필드명 유지(restore·info 호환). `TmuxSessionAgents`도 같은 본문으로 new-session 판정. info 문구 `unitWord()`로 OS 분기.
 
+- 2026-09-09 **folder-bot 리눅스 분기 완료·VM 실측**: 하네스 세션 확정 유닛 형식 = `~/.config/systemd/user/com.folder-bot.<이름>.service`(첫 줄 `# folder-bot: name= session= folder=` 주석, ExecStart=`/bin/bash <dir>/<세션>.up.sh`, ExecStop=`tmux kill-session -t <세션>`) + 사이드카 `<세션>.tmux-cmd`(cd 폴더 포함)·`<세션>.up.sh`. codex 엔진은 `com.codex-discord.<이름>.service`(simple)·`-tui.service`(oneshot, `tui-up.sh`, 사이드카 없음 — 세션명은 ExecStop·주석). wiring `upShRe`는 `.up.sh`만 잡아 `tui-up.sh`는 사이드카 없이 본문만으로 매칭(주석의 folder=로 폴더도 잡힘). VM 실측: 가짜 유닛 파일만(systemctl 미호출)+tmux 세션+`claude -p`로 레코드 생성 → info "Discord 연결됨 (systemd 유닛 경유) / 구동 systemd 유닛 com.codex-discord.wiretest-tui, com.folder-bot.wiretest" / restore --dry-run "systemd 유닛 관할(…) 복원 제외", 유닛 제거 후 "세션 생성". restore는 폴더 없음 검사가 구동 유닛 검사보다 먼저라 폴더 지운 채 재현 안 됨(정상). 뒷정리: 유닛·폴더·`agents/claude-0.json` 삭제, VM suspend.
+
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
@@ -347,3 +349,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-08(공지): 코드 변경 없음. scratchpad `discord-announce-v1.4.0.md`(최종본은 디스코드 메시지 1546681035939381289가 정본), `get_comment.py`·`update_comment.py`(YouTube comments.list/update, youtube-reply auth 재사용). 고정댓글 백업 `~/.claude/skills/youtube-pinned-redirect/backups/W6C5IuDUFW8_UgyV5G5YSvYz2y9JkER4AaABAg_20260908-094616.txt`.
 - 2026-09-08(하네스 공지): 코드 변경 없음. scratchpad `discord-announce-harness-windows.md`(정본은 디스코드 메시지 1546694530210857050). 다른 레포: `~/VSCodeWorkspace/discord-harness-installer/README.md`(e38a2f6, 요구 사항 절). NAS 읽기만: `/Volumes/private/mac-to-win10/RESULT-wsl2-followup-0.1.18-20260908.md`.
 - 2026-09-08(커뮤니티 공지): scratchpad `youtube-community-windows.md`(정본은 유튜브 커뮤니티 게시물). 코드 변경 없음.
+- 2026-09-09: `internal/wiring/wiring.go`(`Paths.SystemdUserDir`·`unitText`·`unitTexts()`·`upShRe`), `internal/wiring/wiring_test.go`(`systemdFixture`+테스트 3), `internal/cli/infocmd.go`(`unitWord()`), `internal/cli/restorecmd.go`(건너뜀 문구). VM: `~/.local/bin/agentlayer` = dev 7b85739 빌드(릴리즈본 아님). 하네스 세션 지시문 scratchpad `folder-bot-linux-task.md`.
