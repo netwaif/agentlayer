@@ -20,7 +20,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. Win10 WSL2 실기: install.sh로 v1.4.1 → 설치기 0.1.19로 folder-bot 0.1.6 → 진짜 토큰으로 configure-bot 봇 1개 등록·디스코드 응답 → `agentlayer info <봇세션>`에 "구동 systemd 유닛 com.folder-bot.…" 확인. 통과하면 멤버 공지(디스코드 agentlayer 채널 + 하네스 채널, 커뮤니티는 통합본). 확인 목록은 NAS `mac-to-win10`에 만들어 두기(요청 시).
+1. Win10 WSL2 실기: install.sh로 v1.4.1 → 설치기 0.1.19로 folder-bot 0.1.6 → 진짜 토큰으로 configure-bot 봇 1개 등록·디스코드 응답 → `agentlayer info <봇세션>`에 "구동 systemd 유닛 com.folder-bot.…" 확인. 통과하면 멤버 공지(디스코드 agentlayer 채널 + 하네스 채널, 커뮤니티는 통합본). 확인 목록 NAS `/Volumes/private/mac-to-win10/README-agentlayer-wsl2-folderbot-1.4.1.md` 작성됨(2026-09-09) → 결과는 `RESULT-wsl2-folderbot-YYYYMMDD.md`로 돌아옴.
    사용자 판단 대기: 강의 커리용 `orchestration-lite`(agentlayer 없이 tmux+worktree) 스킬 / README 제목 "iTerm2+tmux"→"tmux" 정정.
 2. 곁가지: usage-coach는 v0.1.4 태그만 있고 GitHub 릴리즈 페이지 latest는 v0.1.3(2026-09-09 재확인, 설치기는 태그로 받아 무해) — 릴리즈 생성 여부는 사용자 판단 대기. my-videos `videos.json` W6C5IuDUFW8 등록 완료(2026-09-09 `sync_videos.py`, 총 33편).
 3. 후속 후보: 설치기 remove 끝에 `systemctl --user daemon-reload; reset-failed` 추가(WSL2 재확인 때 유닛 파일 삭제 뒤 런타임 잔상 3건 — codex-discord-tui RemainAfterExit는 stop 필요, rc2 때는 0건) /  `internal/discord/card.go`·`card_test.go` gofmt 미적용(기존, 내용 무관) / agy 권한 프롬프트 대기가 [WORK]로 보임(agy 훅에 승인 대기 이벤트 없음 — 표시 개선 여지) / 에이전트 브라우저 창 식별 강화 / FX iframe / mcp-serve resize 차단 / CfT 갱신 명령 / favicon 404 소음 / autopreview 포트 제외 / 관제탑 restore 체크리스트 키 / codex trusted_hash 자동 기록 / `agentlayer browser`(인자 없음) 재실행 시 붙어 있는 동작·`browser errors` Enter 대기 / 매뉴얼 "윈도우에서 시작하기" 장(멤버가 README를 어려워하면).
