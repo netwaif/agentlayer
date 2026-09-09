@@ -15,12 +15,13 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**folder-bot 리눅스(systemd) 분기 완료**(2026-09-09). folder-bot v0.1.6(6448380)·설치기 0.1.19(c6c3195)는 discord-harness-installer 세션이, agentlayer는 wiring systemd 읽기(f192367)+restore 문구(7b85739). VM 실측 통과: `agentlayer info`에 "구동 systemd 유닛 com.folder-bot.…", restore --dry-run이 systemd 관할 세션 건너뜀. 미릴리즈(main에만) — v1.4.1 태그 여부 사용자 판단. VM `ubuntu-agent` 일시정지(잔존물 0).
+**v1.4.1 릴리즈 완료**(2026-09-09, bbffd0f 태그) — 리눅스 folder-bot(systemd) 관제 인식. 짝: folder-bot v0.1.6·설치기 0.1.19(하네스 세션). 자산 darwin 2·linux 2·checksums, tap cask 1.4.1. VM 실측 통과, Win10 WSL2 실기(진짜 토큰 봇 응답)는 미실시. VM `ubuntu-agent` 일시정지.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. 사용자 판단: agentlayer v1.4.1 릴리즈(wiring systemd 읽기 — folder-bot 0.1.6 리눅스 사용자가 관제탑에서 봇 구동 주체를 보려면 필요, 없어도 봇 자체는 동작) / 강의 커리용 `orchestration-lite`(agentlayer 없이 tmux+git worktree만) 스킬 제작 여부 / README 제목 "iTerm2+tmux"→"tmux" 문구 정정 여부.
+1. Win10 WSL2 실기: install.sh로 v1.4.1 → 설치기 0.1.19로 folder-bot 0.1.6 → 진짜 토큰으로 configure-bot 봇 1개 등록·디스코드 응답 → `agentlayer info <봇세션>`에 "구동 systemd 유닛 com.folder-bot.…" 확인. 통과하면 멤버 공지(디스코드 agentlayer 채널 + 하네스 채널, 커뮤니티는 통합본). 확인 목록은 NAS `mac-to-win10`에 만들어 두기(요청 시).
+   사용자 판단 대기: 강의 커리용 `orchestration-lite`(agentlayer 없이 tmux+worktree) 스킬 / README 제목 "iTerm2+tmux"→"tmux" 정정.
 2. 곁가지: usage-coach는 v0.1.4 태그만 있고 GitHub 릴리즈 페이지 latest는 v0.1.3(2026-09-09 재확인, 설치기는 태그로 받아 무해) — 릴리즈 생성 여부는 사용자 판단 대기. my-videos `videos.json` W6C5IuDUFW8 등록 완료(2026-09-09 `sync_videos.py`, 총 33편).
 3. 후속 후보: 설치기 remove 끝에 `systemctl --user daemon-reload; reset-failed` 추가(WSL2 재확인 때 유닛 파일 삭제 뒤 런타임 잔상 3건 — codex-discord-tui RemainAfterExit는 stop 필요, rc2 때는 0건) /  `internal/discord/card.go`·`card_test.go` gofmt 미적용(기존, 내용 무관) / agy 권한 프롬프트 대기가 [WORK]로 보임(agy 훅에 승인 대기 이벤트 없음 — 표시 개선 여지) / 에이전트 브라우저 창 식별 강화 / FX iframe / mcp-serve resize 차단 / CfT 갱신 명령 / favicon 404 소음 / autopreview 포트 제외 / 관제탑 restore 체크리스트 키 / codex trusted_hash 자동 기록 / `agentlayer browser`(인자 없음) 재실행 시 붙어 있는 동작·`browser errors` Enter 대기 / 매뉴얼 "윈도우에서 시작하기" 장(멤버가 README를 어려워하면).
 4. 디스크: 내장 20GB 여유. 사용자 판단 대기 항목 — agy 대화 기록 6.4GB(`~/.gemini/antigravity-cli/{conversations,brain}`), codex 세션 6GB(`~/.codex/sessions/2026`, `.tmp/marketplaces`), Chrome 캐시 3.3GB(종료 후), VS Code 구버전 확장 0.55GB(`openai.chatgpt-26.825.41651`), Playwright chromium-1187 0.5GB, 영상·백업 7GB는 T7으로 이동. 리포트 `~/Downloads/ClaudeDir/disk_analysis_20260906.md`.
@@ -201,6 +202,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 
 - 2026-09-09 **folder-bot 리눅스 분기 완료·VM 실측**: 하네스 세션 확정 유닛 형식 = `~/.config/systemd/user/com.folder-bot.<이름>.service`(첫 줄 `# folder-bot: name= session= folder=` 주석, ExecStart=`/bin/bash <dir>/<세션>.up.sh`, ExecStop=`tmux kill-session -t <세션>`) + 사이드카 `<세션>.tmux-cmd`(cd 폴더 포함)·`<세션>.up.sh`. codex 엔진은 `com.codex-discord.<이름>.service`(simple)·`-tui.service`(oneshot, `tui-up.sh`, 사이드카 없음 — 세션명은 ExecStop·주석). wiring `upShRe`는 `.up.sh`만 잡아 `tui-up.sh`는 사이드카 없이 본문만으로 매칭(주석의 folder=로 폴더도 잡힘). VM 실측: 가짜 유닛 파일만(systemctl 미호출)+tmux 세션+`claude -p`로 레코드 생성 → info "Discord 연결됨 (systemd 유닛 경유) / 구동 systemd 유닛 com.codex-discord.wiretest-tui, com.folder-bot.wiretest" / restore --dry-run "systemd 유닛 관할(…) 복원 제외", 유닛 제거 후 "세션 생성". restore는 폴더 없음 검사가 구동 유닛 검사보다 먼저라 폴더 지운 채 재현 안 됨(정상). 뒷정리: 유닛·폴더·`agents/claude-0.json` 삭제, VM suspend.
 
+- 2026-09-09 **v1.4.1 릴리즈 결정**: 사용자 "수정은 해놓고 릴리즈 안 하면 윈도우 사용자 봇은 어쩌라고" — 맞는 지적. folder-bot 0.1.6·설치기 0.1.19가 이미 나간 상태라 agentlayer 쪽 wiring이 미릴리즈면 조합이 반쪽. 절차는 v1.4.0과 동일(`git tag -a` → push → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean --release-notes <파일>`, 16초). 자동 모드 분류기가 태그 푸시·goreleaser를 막아 `/permissions`로 승인 후 재실행. 교훈: 릴리즈는 코드 수정과 한 묶음으로 계획하고, "사용자 판단 대기"로 미루지 말 것(멤버 배포물이 이미 새 조합을 가리키면 특히).
+
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
@@ -350,3 +353,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-08(하네스 공지): 코드 변경 없음. scratchpad `discord-announce-harness-windows.md`(정본은 디스코드 메시지 1546694530210857050). 다른 레포: `~/VSCodeWorkspace/discord-harness-installer/README.md`(e38a2f6, 요구 사항 절). NAS 읽기만: `/Volumes/private/mac-to-win10/RESULT-wsl2-followup-0.1.18-20260908.md`.
 - 2026-09-08(커뮤니티 공지): scratchpad `youtube-community-windows.md`(정본은 유튜브 커뮤니티 게시물). 코드 변경 없음.
 - 2026-09-09: `internal/wiring/wiring.go`(`Paths.SystemdUserDir`·`unitText`·`unitTexts()`·`upShRe`), `internal/wiring/wiring_test.go`(`systemdFixture`+테스트 3), `internal/cli/infocmd.go`(`unitWord()`), `internal/cli/restorecmd.go`(건너뜀 문구). VM: `~/.local/bin/agentlayer` = dev 7b85739 빌드(릴리즈본 아님). 하네스 세션 지시문 scratchpad `folder-bot-linux-task.md`.
+- 2026-09-09(v1.4.1): 태그 v1.4.1(bbffd0f), GitHub 릴리즈 자산 5개, tap `Casks/agentlayer.rb` 1.4.1, `docs/linux-wsl2-verification.md`(9차), `README.md`(restore 줄), scratchpad `release-notes-v1.4.1.md`.
