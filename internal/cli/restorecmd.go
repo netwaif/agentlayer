@@ -36,7 +36,7 @@ type RestorePlan struct {
 type RestoreEnv struct {
 	SessionExists func(session string) bool      // tmux 세션 존재
 	PaneAt        func(session, cwd string) bool // 그 세션에 같은 폴더의 pane(명령 불문)이 있음
-	LaunchAgents  func(session string) []string  // 이 세션을 tmux로 띄우는 plist 라벨들
+	LaunchAgents  func(session string) []string  // 이 세션을 tmux로 띄우는 구동 유닛 라벨들(plist·systemd)
 }
 
 // RestoreOpts는 계획 옵션. Explicit는 사용자가 ID로 지목한 경우 — 정책상
@@ -103,7 +103,7 @@ func PlanRestore(agents []*state.Agent, env RestoreEnv, opts RestoreOpts) Restor
 		// 만들면 launchd의 new-session이 duplicate로 실패해 봇이 영영 안 뜬다.
 		if las := launchAgents(a.Tmux.Session); len(las) > 0 && !opts.Explicit {
 			plan.Skipped = append(plan.Skipped,
-				a.ID+": LaunchAgent 관할("+strings.Join(las, ", ")+") — 부팅 시 자동 기동, 복원 제외 (restore "+a.ID+"로 강제)")
+				a.ID+": "+unitWord()+" 관할("+strings.Join(las, ", ")+") — 부팅 시 자동 기동, 복원 제외 (restore "+a.ID+"로 강제)")
 			continue
 		}
 		wk := fmt.Sprintf("%s:%d", a.Tmux.Session, a.Tmux.Window)
