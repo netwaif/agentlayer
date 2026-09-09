@@ -73,7 +73,7 @@ agentlayer card       # Discord 상태 카드 업서트 (주기 실행용) / --o
 agentlayer resume     # 죽은 claude 대화 목록 / resume <id>로 구조
 agentlayer restore    # 재부팅 뒤 죽은 세션 배치 복원 — 체크리스트에서 골라 enter (space 토글, a 전체, q 취소)
 agentlayer restore --resume       # 대화까지 이어서 복원 (같은 체크리스트) / --yes는 체크 없이 전부 / --dry-run은 계획만
-agentlayer restore <id> ...       # ID 지정 복원. LaunchAgent 봇·이미 pane 있는 자리는 자동 제외 (봇은 ID 지정 시 강제)
+agentlayer restore <id> ...       # ID 지정 복원. LaunchAgent(리눅스는 systemd 유닛) 봇·이미 pane 있는 자리는 자동 제외 (봇은 ID 지정 시 강제)
 agentlayer wake-all   # 모든 claude·codex 세션에 "세션 이어서하자" 일괄 전송
 agentlayer close-all  # "세션 마감하자" 전송 → 전원 완료(DONE)까지 감시 → 요약
 agentlayer broadcast "<메시지>"   # 임의 메시지 일괄 전송 (--except로 제외, --yes로 무확인)

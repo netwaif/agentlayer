@@ -134,3 +134,18 @@ Ubuntu 24.04.4 server, Node 24.20(nvm), Claude Code 2.1.263, Codex 0.153.4, Gemi
 ### 참고
 - `tmux send-keys -t <s> "/exit" Enter`는 codex 슬래시 팝업만 열림 — Enter 한 번 더(codex TUI).
 - 배포판 vhdx가 외장 USB SSD에 있으면 순간 단절 때 WSL 전체가 EIO(`getpwnam failed 5`) — 내장 디스크 권장.
+
+## 2026-09-09 — 9차: folder-bot 리눅스 분기(v0.1.6) + agentlayer wiring systemd 읽기(v1.4.1)
+
+계기: 6차 systemd 분기는 하네스 4레포뿐이라 folder-bot(폴더 봇)은 리눅스에서 `configure-bot` 스킬이 "macOS만 검증됨"으로 중단되던 것. 분담: folder-bot 0.1.6·설치기 0.1.19는 discord-harness-installer 세션, agentlayer는 `internal/wiring`.
+
+### 되는 것(VM ubuntu-agent 실측)
+- [folder-bot 0.1.6] add → `~/.config/systemd/user/com.folder-bot.<이름>.service` + 사이드카 `<세션>.tmux-cmd`·`<세션>.up.sh` + enable + linger + tmux 세션 / stop·start 유닛 경유 / remove 잔존 0 / codex 엔진 신뢰 선등록 후 doctor OK. 테스트 33 통과(launchctl·systemctl 실호출 즉시 실패 안전장치 포함).
+- [agentlayer] `wiring.Collect`·`TmuxSessionAgents`가 plist와 systemd 유닛을 한 목록으로 읽음. 유닛 본문에 ExecStart가 가리키는 `<stem>.up.sh`·`<stem>.tmux-cmd`를 이어 붙여 세션명·폴더 매칭. 실측 `agentlayer info <세션>` → `Discord 연결됨 (systemd 유닛 경유)` / `구동 systemd 유닛 com.codex-discord.<이름>-tui, com.folder-bot.<이름>`. `restore --dry-run` → `systemd 유닛 관할(…) — 복원 제외`, 유닛 제거 후 `세션 생성`.
+
+### 유닛 형식(하네스 세션 확정)
+- folder-bot: 첫 줄 `# folder-bot: name=<이름> session=<세션> folder=<폴더>`, oneshot+RemainAfterExit+KillMode=process, `ExecStart=/bin/bash <dir>/<세션>.up.sh`, `ExecStop=<tmux> kill-session -t <세션>`.
+- codex 엔진: `com.codex-discord.<이름>.service`(simple)·`com.codex-discord.<이름>-tui.service`(oneshot, `tui-up.sh`, 사이드카 없음 — 세션명은 ExecStop·주석에서, 폴더는 주석 `folder=`에서 매칭).
+
+### 미확인
+- Win10 WSL2 실기(진짜 Discord 토큰으로 봇 응답까지). VM은 가짜 토큰으로 유닛 층만.
