@@ -179,7 +179,13 @@ func runStatus(args []string) error {
 			return err
 		}
 	}
-	return cli.Status(os.Stdout, st, *jsonOut, now)
+	wired := map[string]string{}
+	if !*jsonOut {
+		if agents, err := st.List(); err == nil {
+			wired = cli.WiredSessions(agents, config.Load().ChannelLabels)
+		}
+	}
+	return cli.Status(os.Stdout, st, *jsonOut, now, wired)
 }
 
 // runCard: agentlayer card [--out] [--event]
@@ -222,24 +228,8 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 	ctx := usage.AgentCtx(agents, usage.LoadSnapshots(usage.SnapshotsDir()),
 		usage.CodexSessionsRoot(), usage.GeminiDir())
 	home, _ := os.UserHomeDir()
-	// Discord 연결 표시: 채널 라벨이 있으면 ⌁라벨, 없으면 ⌁
-	cfgForCard := config.Load()
-	wired := map[string]string{}
-	wp := wiring.DefaultPaths()
-	for _, a := range agents {
-		if a.CWD == "" || wired[a.CWD] != "" {
-			continue
-		}
-		wi := wiring.Collect(wp, a.CWD, a.Tmux.Session, cfgForCard.ChannelLabels)
-		if !wi.DiscordConnected() {
-			continue
-		}
-		mark := "⌁"
-		if wi.Discord != nil && len(wi.Discord.Channels) > 0 && wi.Discord.Channels[0].Label != "" {
-			mark += wi.Discord.Channels[0].Label
-		}
-		wired[a.CWD] = mark
-	}
+	// Discord 봇 표시(세션 단위): 채널 라벨이 있으면 ⌁라벨, 없으면 ⌁
+	wired := cli.WiredSessions(agents, config.Load().ChannelLabels)
 	// worktree 브랜치 표시 (TUI의 ⎇와 동일 소스)
 	branches := map[string]string{}
 	if metas, err := wt.ListMetas(state.DefaultDir()); err == nil {

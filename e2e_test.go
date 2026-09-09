@@ -94,7 +94,7 @@ func TestEndToEnd(t *testing.T) {
 
 	// 3) status 출력에 반영
 	var buf bytes.Buffer
-	if err := cli.Status(&buf, st, false, now.Add(3*time.Second)); err != nil {
+	if err := cli.Status(&buf, st, false, now.Add(3*time.Second), nil); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(buf.String(), "[DONE]") {

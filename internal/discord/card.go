@@ -208,7 +208,7 @@ func agentsContainer(d CardData, now time.Time) map[string]any {
 		if a.State != state.StateIdle {
 			line += " " + since(a.StateSince, now)
 		}
-		if w := d.Wired[a.CWD]; w != "" {
+		if w := d.Wired[a.Tmux.Session]; w != "" {
 			line += " · " + w
 		}
 		if br := d.Branches[a.CWD]; br != "" {
@@ -354,7 +354,7 @@ type CardData struct {
 	Pay       *usage.Payload            // coach 사용량 (nil이면 provider 섹션 생략)
 	Agents    []*state.Agent            // store.List 순서 그대로 (종류 그룹 정렬)
 	Ctx       map[string]usage.CtxInfo  // 에이전트 ID → 모델·ctx% 스냅샷
-	Wired     map[string]string         // CWD → Discord 연결 표시("⌁" 또는 "⌁라벨")
+	Wired     map[string]string         // tmux 세션 → Discord 봇 표시("⌁" 또는 "⌁라벨")
 	Branches  map[string]string         // CWD → worktree 브랜치 (⎇)
 	DefModels map[string]string         // claude·codex·gemini 기본모델 (빈 값=자동)
 	Tasks     []starter.Task            // MultiAgent 활성 작업

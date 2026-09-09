@@ -12,6 +12,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 	"github.com/netwaif/agentlayer/internal/state"
+	"github.com/netwaif/agentlayer/internal/wiring"
 )
 
 func stateLabel(a *state.Agent, now time.Time) string {
@@ -63,7 +64,31 @@ func Since(from, now time.Time) string {
 
 // Status는 저장소 내용을 표 또는 JSON으로 출력한다.
 // 동기화(Sync)는 호출자 책임 — 이 함수는 렌더링만 한다.
-func Status(w io.Writer, st *state.Store, jsonOut bool, now time.Time) error {
+// WiredSessions는 tmux 세션 이름 → Discord 봇 표시("⌁" 또는 "⌁채널라벨").
+// 세션 단위 판정(wiring.Info.DrivesSession) — 같은 폴더의 작업용 세션엔 붙지 않는다.
+func WiredSessions(agents []*state.Agent, labels map[string]string) map[string]string {
+	wired := map[string]string{}
+	wp := wiring.DefaultPaths()
+	for _, a := range agents {
+		sess := a.Tmux.Session
+		if sess == "" || wired[sess] != "" {
+			continue
+		}
+		wi := wiring.Collect(wp, a.CWD, sess, labels)
+		if !wi.DrivesSession(sess) {
+			continue
+		}
+		mark := "⌁"
+		if wi.Discord != nil && len(wi.Discord.Channels) > 0 && wi.Discord.Channels[0].Label != "" {
+			mark += wi.Discord.Channels[0].Label
+		}
+		wired[sess] = mark
+	}
+	return wired
+}
+
+// Status는 텍스트/JSON 상태표. wired는 세션 → ⌁ 표시(WiredSessions)로, 텍스트의 SESSION 열에 붙는다.
+func Status(w io.Writer, st *state.Store, jsonOut bool, now time.Time, wired map[string]string) error {
 	agents, err := st.List()
 	if err != nil {
 		return err
@@ -88,8 +113,12 @@ func Status(w io.Writer, st *state.Store, jsonOut bool, now time.Time) error {
 		if runewidth.StringWidth(task) > 40 {
 			task = runewidth.Truncate(task, 39, "…")
 		}
+		sess := a.Tmux.Session
+		if mark := wired[sess]; mark != "" {
+			sess += " " + mark
+		}
 		rows = append(rows, []string{
-			stateLabel(a, now), a.Kind, a.Tmux.Session, task,
+			stateLabel(a, now), a.Kind, sess, task,
 			ShortenHome(a.CWD), Since(a.StateSince, now)})
 	}
 	widths := make([]int, len(rows[0]))

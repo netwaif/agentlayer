@@ -56,7 +56,7 @@ type usageMsg struct {
 type ctxMsg struct {
 	ctx       map[string]usage.CtxInfo
 	starter   []starter.Task
-	discord   map[string]bool   // CWD → Discord 연결 여부 (⌁ 마크)
+	discord   map[string]bool   // tmux 세션 → Discord 봇 여부 (⌁ 마크)
 	defModels map[string]string // CLI별 기본 모델 설정 (빈 값 = 미설정/자동)
 }
 
@@ -118,7 +118,7 @@ type Model struct {
 	usagePay        *usage.Payload
 	ctx             map[string]usage.CtxInfo // 에이전트 ID → 모델·ctx%
 	wtBranch        map[string]string        // worktree 경로 → 브랜치
-	discordWired    map[string]bool          // CWD → Discord 연결 (⌁)
+	discordWired    map[string]bool          // tmux 세션 → Discord 봇 (⌁)
 	starterTasks    []starter.Task           // MultiAgent 활성 작업
 	defModels       map[string]string        // CLI별 기본 모델 설정
 	devServers      []browser.DevServer      // 에이전트 폴더 아래 listen 중인 dev 서버 (🌐 뱃지·p)
@@ -304,13 +304,8 @@ func (m Model) ctxCmd() tea.Cmd {
 		dc := map[string]bool{}
 		if agents, err := st.List(); err == nil {
 			ctx = usage.AgentCtx(agents, usage.LoadSnapshots(snapDir), codexRoot, geminiDir)
-			wp := wiring.DefaultPaths()
-			for _, a := range agents {
-				if a.CWD == "" || dc[a.CWD] {
-					continue
-				}
-				w := wiring.Collect(wp, a.CWD, a.Tmux.Session, nil)
-				dc[a.CWD] = w.DiscordConnected()
+			for sess := range cli.WiredSessions(agents, nil) {
+				dc[sess] = true
 			}
 		}
 		return ctxMsg{ctx: ctx, starter: starter.ActiveTasks(starterRoot), discord: dc,

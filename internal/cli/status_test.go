@@ -42,7 +42,7 @@ func fixtureStore(t *testing.T) *state.Store {
 
 func TestStatusText(t *testing.T) {
 	var buf bytes.Buffer
-	if err := Status(&buf, fixtureStore(t), false, t0); err != nil {
+	if err := Status(&buf, fixtureStore(t), false, t0, nil); err != nil {
 		t.Fatal(err)
 	}
 	out := buf.String()
@@ -72,7 +72,7 @@ func TestStatusText(t *testing.T) {
 
 func TestStatusJSON(t *testing.T) {
 	var buf bytes.Buffer
-	if err := Status(&buf, fixtureStore(t), true, t0); err != nil {
+	if err := Status(&buf, fixtureStore(t), true, t0, nil); err != nil {
 		t.Fatal(err)
 	}
 	var agents []state.Agent
@@ -95,7 +95,7 @@ func TestStatusKoreanAlignment(t *testing.T) {
 	st.Save(&state.Agent{ID: "b", Kind: "codex", Task: "build", State: state.StateWorking,
 		Tmux: state.TmuxRef{Session: "codex-live"}, CWD: "/x/two", UpdatedAt: t0, StateSince: t0})
 	var buf bytes.Buffer
-	if err := Status(&buf, st, false, t0); err != nil {
+	if err := Status(&buf, st, false, t0, nil); err != nil {
 		t.Fatal(err)
 	}
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
@@ -128,10 +128,26 @@ func displayWidth(s string) int {
 func TestStatusEmpty(t *testing.T) {
 	st, _ := state.NewStore(t.TempDir())
 	var buf bytes.Buffer
-	if err := Status(&buf, st, false, t0); err != nil {
+	if err := Status(&buf, st, false, t0, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(buf.String(), "에이전트 없음") {
 		t.Errorf("빈 상태 안내: %q", buf.String())
+	}
+}
+
+func TestStatusTextDiscordMark(t *testing.T) {
+	var buf bytes.Buffer
+	st := fixtureStore(t)
+	agents, _ := st.List()
+	if len(agents) == 0 {
+		t.Fatal("픽스처 비어 있음")
+	}
+	sess := agents[0].Tmux.Session
+	if err := Status(&buf, st, false, t0, map[string]string{sess: "⌁봇방"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), sess+" ⌁봇방") {
+		t.Errorf("SESSION 열에 ⌁ 표시:\n%s", buf.String())
 	}
 }

@@ -507,7 +507,7 @@ func (m Model) viewBody() string {
 				cli.PadRight(a.Kind, 7), cli.PadRight(a.Tmux.Session, 20),
 				cli.PadRight(task, 30),
 				cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
-			if m.discordWired[a.CWD] {
+			if m.discordWired[a.Tmux.Session] {
 				rest += " ⌁"
 			}
 			if br, ok := m.wtBranch[a.CWD]; ok {
@@ -535,7 +535,7 @@ func (m Model) viewBody() string {
 			stateBadge(a, m.now), cli.PadRight(a.Kind, 7), cli.PadRight(a.Tmux.Session, 20),
 			cli.PadRight(task, 30),
 			cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
-		if m.discordWired[a.CWD] {
+		if m.discordWired[a.Tmux.Session] {
 			line += " " + styleDiscord.Render("⌁")
 		}
 		if br, ok := m.wtBranch[a.CWD]; ok {

@@ -37,17 +37,44 @@ type Bridge struct {
 
 // Info는 에이전트 하나의 배선 전체.
 type Info struct {
-	BotName      string // folder-bot 등록 이름 (미등록이면 빈 값)
-	Engine       string
-	Discord      *Discord // .discord-state 없으면 nil
-	Bridge       *Bridge  // codex 브리지로 연결된 경우
-	LaunchAgents []string // 이 세션·폴더를 언급하는 구동 유닛 라벨들 (plist 라벨 또는 systemd 유닛 이름)
+	BotName       string // folder-bot 등록 이름 (미등록이면 빈 값)
+	BotSession    string // folder-bot 등록의 tmux 세션 이름 (bots.json 정본)
+	Engine        string
+	Discord       *Discord // .discord-state 없으면 nil
+	Bridge        *Bridge  // codex 브리지로 연결된 경우
+	LaunchAgents  []string // 이 세션·폴더를 언급하는 구동 유닛 라벨들 (plist 라벨 또는 systemd 유닛 이름)
+	UnitBySession bool     // LaunchAgents 중 세션 이름으로 매칭된 것이 있는지 (폴더 경로만 매칭이면 false)
 }
 
-// DiscordConnected는 어떤 형태로든 Discord로 조종되는지 (⌁ 마크 기준).
+// DiscordConnected는 이 폴더가 어떤 형태로든 Discord와 배선돼 있는지 (info 명령의 "Discord" 줄 기준).
 func (i Info) DiscordConnected() bool {
 	if i.Discord != nil || i.Bridge != nil {
 		return true
+	}
+	for _, la := range i.LaunchAgents {
+		if strings.Contains(la, "discord") {
+			return true
+		}
+	}
+	return false
+}
+
+// DrivesSession은 이 tmux 세션 자체가 Discord로 조종되는 봇인지 (⌁ 마크 기준).
+// DiscordConnected가 "폴더가 배선됐나"라면 이것은 "이 세션이 그 봇인가"다 — 같은 폴더에서
+// 작업용으로 띄운 세션이나 봇이 아닌 죽은 세션엔 ⌁를 붙이지 않는다(WSL2 실측 2026-09-10).
+// 판정 소스: folder-bot 등록(bots.json의 session) > codex 브리지(폴더 단위) > 세션 이름을 적은 discord 구동 유닛.
+func (i Info) DrivesSession(session string) bool {
+	if session == "" {
+		return false
+	}
+	if i.BotName != "" {
+		return i.BotSession == session
+	}
+	if i.Bridge != nil {
+		return true
+	}
+	if !i.UnitBySession {
+		return false
 	}
 	for _, la := range i.LaunchAgents {
 		if strings.Contains(la, "discord") {
@@ -108,6 +135,7 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 			for name, e := range bots {
 				if e.Folder == folder || (session != "" && e.Session == session) {
 					info.BotName = name
+					info.BotSession = e.Session
 					info.Engine = e.Engine
 					break
 				}
@@ -189,6 +217,9 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 	}
 	for _, u := range unitTexts(p) {
 		matched := sessionRe != nil && sessionRe.MatchString(u.text)
+		if matched {
+			info.UnitBySession = true
+		}
 		if !matched {
 			for _, re := range pathRes {
 				if re.MatchString(u.text) {

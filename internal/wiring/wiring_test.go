@@ -243,3 +243,32 @@ func TestTmuxSessionAgentsSystemd(t *testing.T) {
 		t.Errorf("up.sh 없는 유닛은 new-session 판정 불가여야 함: %v", got)
 	}
 }
+
+func TestDrivesSessionOnlyBotSession(t *testing.T) {
+	// 같은 폴더의 작업용 세션(t8)엔 ⌁가 붙지 않는다 — bots.json의 session이 정본(WSL2 실측 2026-09-10)
+	p, folder := fixture(t)
+	if !Collect(p, folder, "collab-bot", nil).DrivesSession("collab-bot") {
+		t.Error("등록된 봇 세션은 ⌁")
+	}
+	work := Collect(p, folder, "t8", nil)
+	if !work.DiscordConnected() {
+		t.Error("폴더 자체는 배선됨(info용)")
+	}
+	if work.DrivesSession("t8") {
+		t.Error("같은 폴더의 작업용 세션은 ⌁ 아님")
+	}
+	// 등록 없이 .discord-state만 있는 폴더(하네스 잔재)의 세션도 ⌁ 아님
+	if (Info{Discord: &Discord{}}).DrivesSession("t7b") {
+		t.Error("폴더 파일만으론 세션 봇 판정 불가")
+	}
+	// 세션 이름을 적은 discord 구동 유닛은 ⌁, 폴더 경로만 매칭된 유닛은 아님
+	if !(Info{LaunchAgents: []string{"com.soonho.claude-discord"}, UnitBySession: true}).DrivesSession("t7b") {
+		t.Error("세션명 매칭 유닛은 ⌁")
+	}
+	if (Info{LaunchAgents: []string{"com.soonho.claude-discord"}}).DrivesSession("t7b") {
+		t.Error("경로만 매칭된 유닛은 ⌁ 아님")
+	}
+	if !(Info{Bridge: &Bridge{}}).DrivesSession("codex-live") {
+		t.Error("브리지는 ⌁")
+	}
+}

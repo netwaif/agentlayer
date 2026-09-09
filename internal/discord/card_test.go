@@ -51,7 +51,7 @@ func fixtureData() CardData {
 		Pay:    fixturePayload(),
 		Agents: agents,
 		Ctx:    ctx,
-		Wired:  map[string]string{"/Users/soonho/ai-folder/collab": "⌁collab방"},
+		Wired:  map[string]string{"collab-bot": "⌁collab방"},
 		Branches: map[string]string{
 			"/Users/soonho/ai-folder/collab": "agent/fix-card"},
 		DefModels: map[string]string{"claude": "claude-fable-5", "codex": "gpt-5.6-sol"},
