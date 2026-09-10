@@ -15,7 +15,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.4.2 릴리즈 완료(2026-09-10)** — ⌁ 마크 세션 단위(`wiring.Info.DrivesSession`·`cli.WiredSessions`), status 텍스트에도 ⌁. 짝: folder-bot v0.1.7·설치기 v0.1.20(모두 푸시·태그 완료). Win10 WSL2 실기 통과, 발견 4건 전부 반영. 멤버 공지는 사용자 결정으로 생략. VM `ubuntu-agent` 일시정지. 사용자 피드백: 출력 짧게·쉽게, "급하지 않다"는 판단 혼자 하지 말 것.
+**v1.4.2 릴리즈 완료(2026-09-10), 2026-09-11 재정박만 하고 마감(변경 없음)** — ⌁ 마크 세션 단위(`wiring.Info.DrivesSession`·`cli.WiredSessions`), status 텍스트에도 ⌁. 짝: folder-bot v0.1.7·설치기 v0.1.20(모두 푸시·태그 완료). Win10 WSL2 실기 통과, 발견 4건 전부 반영. 멤버 공지는 사용자 결정으로 생략. VM `ubuntu-agent` 일시정지. 사용자 피드백: 출력 짧게·쉽게, "급하지 않다"는 판단 혼자 하지 말 것.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
@@ -209,6 +209,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-10 Win10 WSL2 실기 결과 0~5절 통과. 발견 ①add `enable --now`→`enable`만(첫 기동은 start) ③SKILL.md에 `sudo systemctl restart user@$(id -u)` ④remove 뒤 빈 CLAUDE.md 삭제 → folder-bot v0.1.7(b5149e9), 설치기 pins 0.1.7·v0.1.20(f52dca5, 브랜치 master). 설치기 SESSION.md가 0.1.7로 예약했던 "systemd 없음 폴백"은 0.1.8로 밀림. 멤버 공지 생략(사용자: "공지 하도 많이 해서"). ⌁ 발견 ②는 설계 판단 보류.
 
 - 2026-09-10 **⌁ 마크 세션 단위로 변경 + v1.4.2 릴리즈**(사용자: "급한 건 아니라는 건 니 생각이지. 추천 방향으로 수정해"). 판정 = bots.json session 일치 > codex 브리지 > 세션명 매칭 discord 유닛(`UnitBySession`). `.discord-state`만 있는 폴더의 세션은 ⌁ 아님(`DiscordConnected`는 info 폴더 배선용으로 유지). `cli.Status` 시그니처에 `wired map[string]string` 추가. 릴리즈 절차 v1.4.1과 동일(분류기가 태그푸시+goreleaser 한 줄 묶음은 막고 따로 실행하면 통과). 교훈 재확인: 릴리즈는 수정과 한 묶음, "급하지 않음" 판단은 사용자 몫.
+- 2026-09-11 **마감**: 재정박만(git 트리 clean·v1.4.2 일치 확인). 작업 없음. 사용자 판단 대기 4건 그대로(⌁ TUI 눈 확인·orchestration-lite·README 제목·usage-coach 릴리즈).
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -361,3 +362,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-09: `internal/wiring/wiring.go`(`Paths.SystemdUserDir`·`unitText`·`unitTexts()`·`upShRe`), `internal/wiring/wiring_test.go`(`systemdFixture`+테스트 3), `internal/cli/infocmd.go`(`unitWord()`), `internal/cli/restorecmd.go`(건너뜀 문구). VM: `~/.local/bin/agentlayer` = dev 7b85739 빌드(릴리즈본 아님). 하네스 세션 지시문 scratchpad `folder-bot-linux-task.md`.
 - 2026-09-09(v1.4.1): 태그 v1.4.1(bbffd0f), GitHub 릴리즈 자산 5개, tap `Casks/agentlayer.rb` 1.4.1, `docs/linux-wsl2-verification.md`(9차), `README.md`(restore 줄), scratchpad `release-notes-v1.4.1.md`.
 - 2026-09-10(v1.4.2): 태그 v1.4.2(c937ba5), GitHub 릴리즈 자산 5개, tap `Casks/agentlayer.rb` 1.4.2. 코드: `internal/wiring/wiring.go`(BotSession·UnitBySession·DrivesSession), `internal/cli/status.go`(WiredSessions, Status wired 인자), `internal/ui/model.go`·`view.go`(discordWired 세션 키), `internal/discord/card.go`(Wired 세션 키), `main.go`, `internal/cli/helpcmd.go`. 테스트 `wiring_test.go` TestDrivesSessionOnlyBotSession, `status_test.go` TestStatusTextDiscordMark. 노트 scratchpad `release-notes-v1.4.2.md`. 외부: folder-bot b5149e9 v0.1.7, 설치기 f52dca5 v0.1.20(브랜치 master).
+- 2026-09-11: 변경 없음(SESSION.md만).
