@@ -104,6 +104,8 @@ func DefaultPaths() Paths {
 		BridgeRoots: []string{
 			filepath.Join(home, "ai-folder", "dev", "codex-discord"),
 			filepath.Join(home, "codex-discord"),
+			// 디스코드 하네스 설치기(harnessctl.py repos_dir)가 맥·리눅스·WSL2 공통으로 클론하는 자리
+			filepath.Join(home, ".local", "share", "discord-harness", "repos", "codex-discord"),
 		},
 	}
 }

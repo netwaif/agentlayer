@@ -272,3 +272,15 @@ func TestDrivesSessionOnlyBotSession(t *testing.T) {
 		t.Error("브리지는 ⌁")
 	}
 }
+
+func TestDefaultPathsIncludesInstallerBridgeRoot(t *testing.T) {
+	t.Setenv("HOME", "/h")
+	p := DefaultPaths()
+	want := "/h/.local/share/discord-harness/repos/codex-discord"
+	for _, r := range p.BridgeRoots {
+		if r == want {
+			return
+		}
+	}
+	t.Fatalf("BridgeRoots에 설치기 경로 없음: %v", p.BridgeRoots)
+}
