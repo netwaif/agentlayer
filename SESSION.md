@@ -15,13 +15,14 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.4.2 릴리즈 완료(2026-09-10), 2026-09-11 재정박만 하고 마감(변경 없음)** — ⌁ 마크 세션 단위(`wiring.Info.DrivesSession`·`cli.WiredSessions`), status 텍스트에도 ⌁. 짝: folder-bot v0.1.7·설치기 v0.1.20(모두 푸시·태그 완료). Win10 WSL2 실기 통과, 발견 4건 전부 반영. 멤버 공지는 사용자 결정으로 생략. VM `ubuntu-agent` 일시정지. 사용자 피드백: 출력 짧게·쉽게, "급하지 않다"는 판단 혼자 하지 말 것.
+**v1.4.2 릴리즈 뒤 wiring 소수정 1건 미릴리즈(2026-09-11 5b5d11a, 로컬 커밋·미푸시)** — `DefaultPaths().BridgeRoots`에 설치기 클론 경로 `~/.local/share/discord-harness/repos/codex-discord` 추가(설치기 경유 설치는 모든 OS에서 info 브리지 행이 비어 있었음, ⌁ 판정은 무관). 계기: discord-harness-installer 세션의 folder-bot 0.1.9·codex-discord 0.1.9(agy 엔진·컨테이너 systemd 없음 폴백) 사전 질문 A~D — 답장 완료, 그쪽 요청 wiring 변경은 없음. 짝: folder-bot v0.1.7·설치기 v0.1.20. VM `ubuntu-agent` 일시정지.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. 사용자 판단 대기 항목만 남음(아래). 코드 쪽 열린 일 없음. 릴리즈 뒤 확인거리: 맥 `brew upgrade agentlayer` 후 TUI에서 봇 폴더의 작업용 세션에 ⌁ 안 붙는지 눈으로 한 번(로컬 `go run . status`로는 확인됨: 봇 7개만 ⌁, 같은 폴더 죽은 sendmanual·academy 미표시).
-   사용자 판단 대기: 강의 커리용 `orchestration-lite` 스킬 / README 제목 "iTerm2+tmux"→"tmux" 정정.
+1. **v1.4.3 릴리즈 여부 판단(사용자)**: 5b5d11a(BridgeRoots) 하나뿐. folder-bot 0.1.9·codex-discord 0.1.9 묶음이 나올 때 같이 내는 게 자연스러움. 릴리즈 절차는 결정 기록 v1.4.1·v1.4.2 항목(태그→goreleaser→tap `Casks/agentlayer.rb`). 그 전까지 `git push` 미실행 상태.
+   컨테이너에 agentlayer를 넣게 되면 그때 추가할 규칙: 유닛 없이 `<세션>.tmux-cmd` 사이드카만 있는 세션도 restore의 구동 주체로 인정(`unitTexts`는 `.service` 경유로만 사이드카를 읽음). 지금은 안 만듦.
+   기존 사용자 판단 대기: 맥 `brew upgrade agentlayer` 후 TUI에서 봇 폴더 작업용 세션에 ⌁ 안 붙는지 눈 확인 / 강의용 `orchestration-lite` 스킬 / README 제목 "iTerm2+tmux"→"tmux".
 2. 곁가지: usage-coach는 v0.1.4 태그만 있고 GitHub 릴리즈 페이지 latest는 v0.1.3(2026-09-09 재확인, 설치기는 태그로 받아 무해) — 릴리즈 생성 여부는 사용자 판단 대기. my-videos `videos.json` W6C5IuDUFW8 등록 완료(2026-09-09 `sync_videos.py`, 총 33편).
 3. 후속 후보: 설치기 remove 끝에 `systemctl --user daemon-reload; reset-failed` 추가(WSL2 재확인 때 유닛 파일 삭제 뒤 런타임 잔상 3건 — codex-discord-tui RemainAfterExit는 stop 필요, rc2 때는 0건) /  `internal/discord/card.go`·`card_test.go` gofmt 미적용(기존, 내용 무관) / agy 권한 프롬프트 대기가 [WORK]로 보임(agy 훅에 승인 대기 이벤트 없음 — 표시 개선 여지) / 에이전트 브라우저 창 식별 강화 / FX iframe / mcp-serve resize 차단 / CfT 갱신 명령 / favicon 404 소음 / autopreview 포트 제외 / 관제탑 restore 체크리스트 키 / codex trusted_hash 자동 기록 / `agentlayer browser`(인자 없음) 재실행 시 붙어 있는 동작·`browser errors` Enter 대기 / 매뉴얼 "윈도우에서 시작하기" 장(멤버가 README를 어려워하면).
 4. 디스크: 내장 20GB 여유. 사용자 판단 대기 항목 — agy 대화 기록 6.4GB(`~/.gemini/antigravity-cli/{conversations,brain}`), codex 세션 6GB(`~/.codex/sessions/2026`, `.tmp/marketplaces`), Chrome 캐시 3.3GB(종료 후), VS Code 구버전 확장 0.55GB(`openai.chatgpt-26.825.41651`), Playwright chromium-1187 0.5GB, 영상·백업 7GB는 T7으로 이동. 리포트 `~/Downloads/ClaudeDir/disk_analysis_20260906.md`.
@@ -210,6 +211,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 
 - 2026-09-10 **⌁ 마크 세션 단위로 변경 + v1.4.2 릴리즈**(사용자: "급한 건 아니라는 건 니 생각이지. 추천 방향으로 수정해"). 판정 = bots.json session 일치 > codex 브리지 > 세션명 매칭 discord 유닛(`UnitBySession`). `.discord-state`만 있는 폴더의 세션은 ⌁ 아님(`DiscordConnected`는 info 폴더 배선용으로 유지). `cli.Status` 시그니처에 `wired map[string]string` 추가. 릴리즈 절차 v1.4.1과 동일(분류기가 태그푸시+goreleaser 한 줄 묶음은 막고 따로 실행하면 통과). 교훈 재확인: 릴리즈는 수정과 한 묶음, "급하지 않음" 판단은 사용자 몫.
 - 2026-09-11 **마감**: 재정박만(git 트리 clean·v1.4.2 일치 확인). 작업 없음. 사용자 판단 대기 4건 그대로(⌁ TUI 눈 확인·orchestration-lite·README 제목·usage-coach 릴리즈).
+- 2026-09-11 **discord-harness-installer 세션 cross-session 질문 A~D 답변(wiring 계약 확인)**. 배경: 헤르메스 컨테이너 `/opt/data/ai-company/부서/…` 폴더 봇 3개 추가, bots.json `engine`에 `agy` 추가, codex/agy 엔진 systemd 없음 폴백(데몬을 tmux 세션 `<이름>-daemon`으로), codex-discord 0.1.9 agy TUI. 답: A) `Info.Engine`은 `infocmd.go:53` 출력 외 분기 없음 → `agy` 무해 / B) 고아 사이드카는 `unitTexts`가 안 읽어 `LaunchAgents` 빔·`UnitBySession` false, ⌁는 bots.json 1순위라 유지, restore는 자기 관할로 복원하려 듦(컨테이너에 agentlayer 없어 무해) / C) `<이름>-daemon` pane은 `node src/index.mjs`가 어느 규칙에도 안 걸려 레코드 미생성. 단 pane 루트가 셸이어야 함 — node를 pane_pid로 직접 띄우면 데몬이 spawn한 codex·agy 자식이 `DescendantKind` 깊이 1에 걸려 유령 에이전트 됨. 이름 예약 없음 / D) **빈틈**: 설치기 `harnessctl.py repos_dir()`=`~/.local/share/discord-harness/repos/codex-discord`가 `BridgeRoots`에 없어 설치기 경유 설치는 info 브리지 행(데몬 생존·채널) 누락. 이쪽에서 추가(5b5d11a)+테스트 `TestDefaultPathsIncludesInstallerBridgeRoot`. 그쪽 부탁: `.env.<이름>`의 `*WORKDIR=`는 봇 폴더 절대경로 유지(`envPointsTo` 매칭 키).
+- 2026-09-11 **마감**: 5b5d11a 로컬 커밋만, 푸시·릴리즈 안 함(사용자 판단). 상대 세션 답장 msg_id 0baa0445.
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -363,3 +366,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-09(v1.4.1): 태그 v1.4.1(bbffd0f), GitHub 릴리즈 자산 5개, tap `Casks/agentlayer.rb` 1.4.1, `docs/linux-wsl2-verification.md`(9차), `README.md`(restore 줄), scratchpad `release-notes-v1.4.1.md`.
 - 2026-09-10(v1.4.2): 태그 v1.4.2(c937ba5), GitHub 릴리즈 자산 5개, tap `Casks/agentlayer.rb` 1.4.2. 코드: `internal/wiring/wiring.go`(BotSession·UnitBySession·DrivesSession), `internal/cli/status.go`(WiredSessions, Status wired 인자), `internal/ui/model.go`·`view.go`(discordWired 세션 키), `internal/discord/card.go`(Wired 세션 키), `main.go`, `internal/cli/helpcmd.go`. 테스트 `wiring_test.go` TestDrivesSessionOnlyBotSession, `status_test.go` TestStatusTextDiscordMark. 노트 scratchpad `release-notes-v1.4.2.md`. 외부: folder-bot b5149e9 v0.1.7, 설치기 f52dca5 v0.1.20(브랜치 master).
 - 2026-09-11: 변경 없음(SESSION.md만).
+- 2026-09-11(5b5d11a): `internal/wiring/wiring.go`(`DefaultPaths` BridgeRoots 3번째 항목), `internal/wiring/wiring_test.go`(`TestDefaultPathsIncludesInstallerBridgeRoot`). 참조한 외부 파일: `~/VSCodeWorkspace/discord-harness-installer/plugins/harness-installer/skills/configure-harness/generator/harnessctl.py`(`repos_dir`·`bridge_repo`), `~/ai-folder/dev/codex-discord/src/{codex.mjs,agy.mjs}`(spawn).
