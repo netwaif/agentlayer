@@ -15,13 +15,13 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**v1.4.3 릴리즈 완료(2026-09-12, 태그 9227c1e)** — BridgeRoots 설치기 경로(5b5d11a) + agent-browser 스킬 보강(9227c1e: type_text 입력 원칙·낡은 MCP 연결 진단·osascript 앱 이름). GitHub Latest, tap `Casks/agentlayer.rb` 1.4.3, brew 인식 확인. 짝: folder-bot v0.1.7·설치기 v0.1.20(변경 없음). 로컬 brew 설치본은 아직 v1.4.0(`agentlayer version`) — 업그레이드는 사용자 몫. VM `ubuntu-agent` 일시정지.
+**v1.4.3 릴리즈 완료(2026-09-12, 태그 9227c1e)** — BridgeRoots 설치기 경로(5b5d11a) + agent-browser 스킬 보강(9227c1e: type_text 입력 원칙·낡은 MCP 연결 진단·osascript 앱 이름). GitHub Latest, tap `Casks/agentlayer.rb` 1.4.3, brew 인식 확인. 짝: folder-bot v0.1.7·설치기 v0.1.20(변경 없음). 이 맥의 `~/.local/bin/agentlayer`는 brew가 아니라 소스 빌드 설치(brew cask 미설치) — v1.4.3(commit 9145e55)으로 재빌드 완료. VM `ubuntu-agent` 일시정지.
 
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **미릴리즈 없음.** 사용자 판단 대기: 맥 `brew upgrade agentlayer`(로컬 v1.4.0→1.4.3) 후 TUI에서 봇 폴더 작업용 세션에 ⌁ 안 붙는지 눈 확인 / 강의용 `orchestration-lite` 스킬 / README 제목 "iTerm2+tmux"→"tmux".
+1. **미릴리즈 없음.** 사용자 판단 대기: TUI에서 봇 폴더 작업용 세션에 ⌁ 안 붙는지 눈 확인 / 강의용 `orchestration-lite` 스킬 / README 제목 "iTerm2+tmux"→"tmux".
    컨테이너에 agentlayer를 넣게 되면 그때 추가할 규칙: 유닛 없이 `<세션>.tmux-cmd` 사이드카만 있는 세션도 restore의 구동 주체로 인정(`unitTexts`는 `.service` 경유로만 사이드카를 읽음). 지금은 안 만듦.
    봇 세션(7개, 09:19 기동)의 chrome-devtools MCP는 브라우저(10:38 재기동)보다 오래돼 click·screenshot 타임아웃 상태 — claude-discord만 `/mcp` 재연결함. 나머지 봇 세션도 브라우저 쓸 때 같은 증상이면 재연결(또는 세션 재시작).
 2. 곁가지: usage-coach는 v0.1.4 태그만 있고 GitHub 릴리즈 페이지 latest는 v0.1.3(2026-09-09 재확인, 설치기는 태그로 받아 무해) — 릴리즈 생성 여부는 사용자 판단 대기. my-videos `videos.json` W6C5IuDUFW8 등록 완료(2026-09-09 `sync_videos.py`, 총 33편).
@@ -215,6 +215,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-11 **discord-harness-installer 세션 cross-session 질문 A~D 답변(wiring 계약 확인)**. 배경: 헤르메스 컨테이너 `/opt/data/ai-company/부서/…` 폴더 봇 3개 추가, bots.json `engine`에 `agy` 추가, codex/agy 엔진 systemd 없음 폴백(데몬을 tmux 세션 `<이름>-daemon`으로), codex-discord 0.1.9 agy TUI. 답: A) `Info.Engine`은 `infocmd.go:53` 출력 외 분기 없음 → `agy` 무해 / B) 고아 사이드카는 `unitTexts`가 안 읽어 `LaunchAgents` 빔·`UnitBySession` false, ⌁는 bots.json 1순위라 유지, restore는 자기 관할로 복원하려 듦(컨테이너에 agentlayer 없어 무해) / C) `<이름>-daemon` pane은 `node src/index.mjs`가 어느 규칙에도 안 걸려 레코드 미생성. 단 pane 루트가 셸이어야 함 — node를 pane_pid로 직접 띄우면 데몬이 spawn한 codex·agy 자식이 `DescendantKind` 깊이 1에 걸려 유령 에이전트 됨. 이름 예약 없음 / D) **빈틈**: 설치기 `harnessctl.py repos_dir()`=`~/.local/share/discord-harness/repos/codex-discord`가 `BridgeRoots`에 없어 설치기 경유 설치는 info 브리지 행(데몬 생존·채널) 누락. 이쪽에서 추가(5b5d11a)+테스트 `TestDefaultPathsIncludesInstallerBridgeRoot`. 그쪽 부탁: `.env.<이름>`의 `*WORKDIR=`는 봇 폴더 절대경로 유지(`envPointsTo` 매칭 키).
 - 2026-09-11 **마감**: 5b5d11a 로컬 커밋만, 푸시·릴리즈 안 함(사용자 판단). 상대 세션 답장 msg_id 0baa0445.
 - 2026-09-12 **에이전트 브라우저 디스코드 전송 실패 진단 + v1.4.3 릴리즈**. claude-discord 세션(pid 996)이 디스코드 메시지창에 fill·execCommand·합성 paste·osascript로 전부 실패 → 이 세션은 `new_page`→`click(uid)`→`type_text(submitKey=Enter)`로 HJ DM 전송 성공. 원인: 그쪽 chrome-devtools-mcp(09:19 기동)가 붙은 브라우저가 죽고 10:38에 재기동 → 낡은 연결 재접속 상태라 evaluate_script만 정상, click "did not become interactive within the configured timeout"·`Page.captureScreenshot timed out`. `/mcp` 재연결로 즉시 해결(그쪽 #local-bot-test 검증). 배제: 백그라운드 탭(브라우저에 `--disable-renderer-backgrounding` 있어 비활성 탭에서도 click·screenshot 정상). osascript는 앱 이름이 `Google Chrome for Testing`(사용자 크롬 `Google Chrome`과 다름). 스킬 원본 `internal/cli/agent_browser_skill.md`에 세 절 추가(9227c1e). 릴리즈: 사용자 "릴리즈 해도 괜찮을 것 같으면 릴리즈 해. 나만 사용하는 게 아님" → 추천대로 v1.4.3(절차 v1.4.1과 동일, 13초). 릴리즈 노트 scratchpad `release-notes-v1.4.3.md`.
+- 2026-09-13 **마감**: 로컬 바이너리는 brew가 아님 — 사용자 "내 PC인데도 brew upgrade 해야 해? 소스가 여기 있는데" → `go build -ldflags "-X main.version=v1.4.3 -X main.commit=… -X main.date=…"` 후 `install -m 0755 agentlayer ~/.local/bin/agentlayer`(Makefile `make install`은 ldflags 없어 version이 devel로 나옴). 떠 있는 봇 세션 mcp-serve 7개는 옛 v1.4.0 프로세스 그대로(재시작 불필요). 이 세션 브라우저 탭은 닫음.
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -370,3 +371,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-11: 변경 없음(SESSION.md만).
 - 2026-09-11(5b5d11a): `internal/wiring/wiring.go`(`DefaultPaths` BridgeRoots 3번째 항목), `internal/wiring/wiring_test.go`(`TestDefaultPathsIncludesInstallerBridgeRoot`). 참조한 외부 파일: `~/VSCodeWorkspace/discord-harness-installer/plugins/harness-installer/skills/configure-harness/generator/harnessctl.py`(`repos_dir`·`bridge_repo`), `~/ai-folder/dev/codex-discord/src/{codex.mjs,agy.mjs}`(spawn).
 - 2026-09-12(v1.4.3): 태그 v1.4.3(9227c1e), GitHub 릴리즈 자산 5개, tap `Casks/agentlayer.rb` 1.4.3. 코드: `internal/cli/agent_browser_skill.md`(공통 규칙 type_text·filePath 2줄, "MCP 연결이 낡았을 때" 절, 하지 말 것 osascript 줄), `internal/cli/skills_test.go`(want 3개 추가), 설치본 `~/.claude/skills/agent-browser/SKILL.md` 동기화. 상대 세션(claude-discord)은 `~/.claude/skills/discord-bot-setup/references/browser-recipes.md`에 같은 내용 반영.
+- 2026-09-13: `~/.local/bin/agentlayer` 재빌드 설치(v1.4.3, 9145e55). 리포 변경 없음(SESSION.md만).
