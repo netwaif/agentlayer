@@ -14,6 +14,8 @@ description: AgentLayer 에이전트 전용 브라우저(chrome-devtools MCP로 
 - 앱 내장 브라우저 스킬(`browser:control-in-app-browser` 등 자체 런타임)은 쓰지 않는다 — 그건 이 브라우저를 모른다.
 - **창 크기를 바꾸지 않는다** — `resize_page`·`emulate`는 사람이 보고 있는 창을 흔든다. 반응형 확인이 필요하면 먼저 사용자에게 묻고, 끝나면 원래 크기로 되돌린다.
 - 아래 셸 명령은 `agentlayer browser …`다. 봇 세션처럼 PATH가 최소면 `~/.local/bin/agentlayer`로 부른다.
+- **글 입력은 `type_text`다** — `click(uid)`로 입력창을 포커스한 뒤 `type_text(text, submitKey="Enter")`. 디스코드 메시지창처럼 Slate·ProseMirror 계열 에디터는 `fill`·`execCommand('insertText')`·합성 `paste`·`Meta+v`가 DOM에만 들어가고 앱 상태(전송 버튼)에 반영되지 않는다. 필드마다 다르니 저장·전송 버튼이 살아나는지로 판별한다. `type_text`는 지연 로드 도구라 ToolSearch로 먼저 불러야 보인다.
+- `take_screenshot`의 `filePath`는 워크스페이스 안 경로만 받는다(scratchpad 등 밖이면 거부). 파일이 필요 없으면 인라인으로 받는다.
 
 ## 보기·찍기 — "스크린샷 확인해봐", "폰으로 보내줘"
 
@@ -25,6 +27,12 @@ description: AgentLayer 에이전트 전용 브라우저(chrome-devtools MCP로 
 - 사람에게 F12나 로그를 요구하지 말고 직접 읽는다. 자기 탭이면 `list_console_messages`(JS 예외·console.error)와 `list_network_requests`(404·CORS). 사람이 보고 있는 활성 탭이면 `agentlayer browser errors --reload`(탭을 리로드해 5초 수집, 예외·404를 줄 단위로 찍고 txt 경로를 stdout에 남김).
 - `--reload` 없는 `errors`는 사람이 Enter를 칠 때까지 기다리므로 에이전트가 부르면 안 된다.
 - 화면에 보이는 증상 하나에 콘솔 에러가 여럿인 경우가 흔하다 — **에러를 전부 짚고** 원인별로 고친 뒤 같은 탭을 리로드해 스스로 확인한다.
+
+### MCP 연결이 낡았을 때 — click 전부 타임아웃, screenshot 타임아웃, evaluate_script만 정상
+
+- 이 세 가지가 같이 보이면(`did not become interactive within the configured timeout`, `Page.captureScreenshot timed out`) 페이지가 아니라 **연결이 원인**이다. MCP가 붙은 뒤 브라우저가 죽고 다시 떠서 낡은 세션에 재접속된 상태다. 요소를 바꿔 가며 재시도하거나 우회 주입을 파지 않는다.
+- 확인: `ps -o lstart= -p $(pgrep -f 'Google Chrome for Testing.*remote-debugging-port=9222' | head -1)`(브라우저 기동)과 `ps -o lstart= -p $(pgrep -f 'chrome-devtools-mcp$' | head -1)`(MCP 기동)을 대조한다. 브라우저가 더 늦게 떴으면 확정.
+- 조치: 사용자에게 `/mcp`에서 chrome-devtools 재연결(또는 세션 재시작)을 요청한다. 재연결 뒤 `new_page`부터 다시 시작한다.
 
 ## 지목 받기 — "브라우저에서 지목할게"
 
@@ -55,3 +63,4 @@ description: AgentLayer 에이전트 전용 브라우저(chrome-devtools MCP로 
 - 묻지 않고 `resize_page`·`emulate`로 창 크기·기기 흉내 바꾸기 금지.
 - `errors`를 `--reload` 없이 부르기 금지(사람 입력을 기다리며 멈춘다).
 - 실사용 Chrome의 쿠키·프로필 변경 금지.
+- osascript로 창을 잡을 때 `tell application "Google Chrome"` 금지 — 그건 사용자 크롬이라 키 입력이 사용자 창으로 간다. 에이전트 브라우저는 `"Google Chrome for Testing"`이다. 어차피 MCP 재연결로 풀리는 문제에 osascript 우회를 쓰지 않는다.

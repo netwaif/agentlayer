@@ -85,7 +85,8 @@ func TestSkillsSeparateConcerns(t *testing.T) {
 	br := string(agentBrowserSkill)
 	for _, want := range []string{"chrome-devtools", "자기 탭", "control-in-app-browser", "shot <url>`", "`files`", "--notify",
 		"browser errors --reload", "list_console_messages", "cookies import", "cookies list", "cookies clear", "cookies export", "--env", "항상 허용",
-		"pick --once", "브라우저에서 지목할게", "스크린샷 확인해봐", "폰으로 보내줘"} {
+		"pick --once", "브라우저에서 지목할게", "스크린샷 확인해봐", "폰으로 보내줘",
+		"type_text", "Google Chrome for Testing", "did not become interactive"} {
 		if !strings.Contains(br, want) {
 			t.Errorf("agent-browser에 %q 없음", want)
 		}
