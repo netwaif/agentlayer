@@ -131,6 +131,7 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 	info := Info{}
 
 	// 1) folder-bot 등록 — folder 또는 session 일치
+	stateFolder := folder // .discord-state를 찾을 폴더
 	if b, err := os.ReadFile(p.BotsJSON); err == nil {
 		var bots map[string]botEntry
 		if json.Unmarshal(b, &bots) == nil {
@@ -139,14 +140,19 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 					info.BotName = name
 					info.BotSession = e.Session
 					info.Engine = e.Engine
+					if e.Folder != "" {
+						// 세션으로 매칭됐고 pane cwd가 봇 폴더와 다르면(리눅스 bot-up이 -c 없이 띄워
+						// pane 경로가 기동 셸 위치인 컨테이너 실측 2026-09-13) 등록된 봇 폴더에서 읽는다
+						stateFolder = e.Folder
+					}
 					break
 				}
 			}
 		}
 	}
 
-	// 2) Discord 채널 — 폴더의 .discord-state/access.json
-	if b, err := os.ReadFile(filepath.Join(folder, ".discord-state", "access.json")); err == nil {
+	// 2) Discord 채널 — 봇 폴더(등록돼 있으면 그것, 아니면 pane cwd)의 .discord-state/access.json
+	if b, err := os.ReadFile(filepath.Join(stateFolder, ".discord-state", "access.json")); err == nil {
 		var af accessFile
 		if json.Unmarshal(b, &af) == nil {
 			d := &Discord{DMPolicy: af.DMPolicy}

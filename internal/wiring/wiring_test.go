@@ -71,6 +71,11 @@ func TestCollectMatchBySessionName(t *testing.T) {
 	if info.BotName != "collab" {
 		t.Errorf("세션 이름 매칭: %+v", info)
 	}
+	// pane cwd가 봇 폴더가 아니어도(컨테이너: 기동 셸 위치) 등록된 봇 폴더의 .discord-state를 읽는다 —
+	// 아니면 info가 실제 연결된 봇에 "Discord 연결 없음"을 낸다
+	if info.Discord == nil || len(info.Discord.Channels) != 1 {
+		t.Errorf("등록 봇 폴더의 discord 배선 읽어야 함: %+v", info.Discord)
+	}
 }
 
 func TestCollectBridge(t *testing.T) {
