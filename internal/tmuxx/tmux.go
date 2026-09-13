@@ -38,20 +38,21 @@ func Bin() string {
 
 // Pane은 tmux pane 하나의 스냅샷.
 type Pane struct {
-	Session string
-	Window  int
-	PaneID  string // "%3"
-	Command string // pane_current_command
-	Path    string // pane_current_path
-	Title   string
-	PanePID int
+	Session    string
+	Window     int
+	WindowName string // 봇 스레드 창(t+6자리) 판별용
+	PaneID     string // "%3"
+	Command    string // pane_current_command
+	Path       string // pane_current_path
+	Title      string
+	PanePID    int
 }
 
 // 필드 순서는 parsePanes와 일치해야 한다. title은 탭을 품을 수 없다고
-// 가정하지 않고, 필드 개수를 고정(7)해 앞 5개 + 마지막(pid)을 떼어낸다.
-const panesFormat = "#{session_name}\t#{window_index}\t#{pane_id}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_title}\t#{pane_pid}"
+// 가정하지 않고, 필드 개수를 고정(8)해 앞 6개 + 마지막(pid)을 떼어낸다.
+const panesFormat = "#{session_name}\t#{window_index}\t#{window_name}\t#{pane_id}\t#{pane_current_command}\t#{pane_current_path}\t#{pane_title}\t#{pane_pid}"
 
-const numFields = 7
+const numFields = 8
 
 func parsePanes(out string) ([]Pane, error) {
 	var panes []Pane
@@ -63,16 +64,16 @@ func parsePanes(out string) ([]Pane, error) {
 		if len(parts) < numFields {
 			continue // 형식이 안 맞는 줄은 관제를 멈추게 하지 않는다
 		}
-		// title에 탭이 들어간 극단 케이스: 가운데(5번째~len-1)를 다시 합친다.
-		title := strings.Join(parts[5:len(parts)-1], "\t")
+		// title에 탭이 들어간 극단 케이스: 가운데(6번째~len-1)를 다시 합친다.
+		title := strings.Join(parts[6:len(parts)-1], "\t")
 		win, err := strconv.Atoi(parts[1])
 		if err != nil {
 			continue
 		}
 		pid, _ := strconv.Atoi(parts[len(parts)-1])
 		panes = append(panes, Pane{
-			Session: parts[0], Window: win, PaneID: parts[2],
-			Command: parts[3], Path: parts[4], Title: title, PanePID: pid,
+			Session: parts[0], Window: win, WindowName: parts[2], PaneID: parts[3],
+			Command: parts[4], Path: parts[5], Title: title, PanePID: pid,
 		})
 	}
 	return panes, nil

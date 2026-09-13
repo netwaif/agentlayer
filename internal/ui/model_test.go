@@ -698,3 +698,30 @@ func TestDevServersMsgOnlyUpdatesBadge(t *testing.T) {
 		t.Errorf("뱃지용 목록은 갱신돼야 함: %v", got)
 	}
 }
+
+// 봇 스레드 창: 저장소엔 메인·스레드 두 레코드지만 TUI 목록·집계는 접힌 한 행.
+func TestLoadAgentsFoldsBotThreadWindow(t *testing.T) {
+	st, _ := state.NewStore(t.TempDir())
+	st.Save(&state.Agent{ID: "claude-33", Kind: "claude", State: state.StateIdle,
+		Tmux:      state.TmuxRef{Session: "dev-claudecode", WindowName: "dev-claudecode", PaneID: "%33"},
+		UpdatedAt: t0, StateSince: t0})
+	st.Save(&state.Agent{ID: "claude-35", Kind: "claude", State: state.StateWorking, Task: "스레드 작업",
+		Tmux:      state.TmuxRef{Session: "dev-claudecode", WindowName: "t552990", PaneID: "%35"},
+		UpdatedAt: t0, StateSince: t0})
+	agents, err := loadAgents(st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(agents) != 1 || agents[0].ID != "claude-35" || agents[0].Threads != 1 {
+		t.Fatalf("접힌 1행(대표=WORK 스레드): %+v", agents)
+	}
+	m := fixtureModel(t)
+	m.agents = agents
+	v := m.View()
+	if !strings.Contains(v, "dev-claudecode (스레드 1)") {
+		t.Errorf("TUI 행에 스레드 배지:\n%s", v)
+	}
+	if strings.Count(v, "dev-claudecode") != 1 {
+		t.Errorf("TUI에 세션명 1회:\n%s", v)
+	}
+}

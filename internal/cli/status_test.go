@@ -151,3 +151,58 @@ func TestStatusTextDiscordMark(t *testing.T) {
 		t.Errorf("SESSION 열에 ⌁ 표시:\n%s", buf.String())
 	}
 }
+
+// 봇 스레드 창(2026-09-13 실측): 메인 pane과 스레드 pane이 같은 세션명으로 두 레코드 —
+// 텍스트 표는 봇당 1행에 "(스레드 1)"·급한 쪽 상태, JSON은 원본 레코드 그대로.
+func threadStore(t *testing.T) *state.Store {
+	t.Helper()
+	st, err := state.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []*state.Agent{
+		{ID: "claude-33", Kind: "claude", State: state.StateIdle, Task: "메인 대기",
+			Tmux: state.TmuxRef{Session: "dev-claudecode", Window: 0, WindowName: "dev-claudecode", PaneID: "%33"},
+			CWD:  "/opt/data/bots/dev", UpdatedAt: t0.Add(-time.Hour), StateSince: t0.Add(-time.Hour)},
+		{ID: "claude-35", Kind: "claude", State: state.StateWorking, Task: "스레드 작업",
+			Tmux: state.TmuxRef{Session: "dev-claudecode", Window: 1, WindowName: "t552990", PaneID: "%35"},
+			CWD:  "/opt/data/ai-company/dev/claude", UpdatedAt: t0.Add(-time.Minute), StateSince: t0.Add(-time.Minute)},
+	} {
+		if err := st.Save(a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return st
+}
+
+func TestStatusTextFoldsBotThreadWindow(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Status(&buf, threadStore(t), false, t0, map[string]string{"dev-claudecode": "⌁"}); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("헤더+1행이어야 함:\n%s", out)
+	}
+	row := lines[1]
+	for _, want := range []string{"[WORK]", "dev-claudecode (스레드 1) ⌁", "스레드 작업"} {
+		if !strings.Contains(row, want) {
+			t.Errorf("행에 %q 있어야 함: %q", want, row)
+		}
+	}
+}
+
+func TestStatusJSONKeepsThreadRecords(t *testing.T) {
+	var buf bytes.Buffer
+	if err := Status(&buf, threadStore(t), true, t0, nil); err != nil {
+		t.Fatal(err)
+	}
+	var agents []state.Agent
+	if err := json.Unmarshal(buf.Bytes(), &agents); err != nil {
+		t.Fatal(err)
+	}
+	if len(agents) != 2 || agents[1].Tmux.WindowName == "" && agents[0].Tmux.WindowName == "" {
+		t.Errorf("JSON은 원본 2건·window_name 포함: %+v", agents)
+	}
+}

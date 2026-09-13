@@ -203,6 +203,9 @@ func agentsContainer(d CardData, now time.Time) map[string]any {
 		line := stateEmoji[a.State]
 		if a.Tmux.Session != "" {
 			line += " **" + a.Tmux.Session + "**"
+			if b := a.ThreadBadge(); b != "" {
+				line += " (" + b + ")"
+			}
 		}
 		line += " `" + shorten(a.CWD) + "` — " + word
 		if a.State != state.StateIdle {
@@ -363,6 +366,8 @@ type CardData struct {
 
 // BuildCard는 카드 전체를 조립한다. Pay가 nil이면 에이전트 섹션만.
 func BuildCard(d CardData, now time.Time) []any {
+	// 봇 스레드 창(t+6자리)은 같은 세션의 메인 행에 접는다 — 행·집계 모두 접힌 기준.
+	d.Agents = state.Fold(d.Agents)
 	var comps []any
 	if d.Pay != nil {
 		for _, key := range []string{"claude", "codex", "antigravity"} {

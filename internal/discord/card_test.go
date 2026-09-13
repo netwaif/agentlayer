@@ -187,3 +187,32 @@ func TestCardStateRoundTrip(t *testing.T) {
 		t.Errorf("round-trip: %+v", s)
 	}
 }
+
+// 봇 스레드 창(2026-09-13): 같은 세션의 메인·스레드 pane은 카드에서 한 행 — 사용자가
+// "세션들이 중복돼서 나온다"고 지적한 것. 상태는 급한 쪽, 집계도 접힌 기준.
+func TestBuildCardFoldsBotThreadWindow(t *testing.T) {
+	d := CardData{Home: "/Users/soonho", Agents: []*state.Agent{
+		{ID: "claude-35", Kind: "claude", State: state.StateWorking, Task: "스레드 작업",
+			Tmux:       state.TmuxRef{Session: "dev-claudecode", Window: 1, WindowName: "t552990", PaneID: "%35"},
+			CWD:        "/opt/data/ai-company/dev/claude",
+			StateSince: t0.Add(-time.Minute), UpdatedAt: t0.Add(-time.Minute)},
+		{ID: "claude-33", Kind: "claude", State: state.StateIdle, Task: "메인 대기",
+			Tmux:       state.TmuxRef{Session: "dev-claudecode", Window: 0, WindowName: "dev-claudecode", PaneID: "%33"},
+			CWD:        "/opt/data/bots/dev",
+			StateSince: t0.Add(-time.Hour), UpdatedAt: t0.Add(-time.Hour)},
+	}}
+	b, err := json.Marshal(BuildCard(d, t0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	if n := strings.Count(s, "**dev-claudecode**"); n != 1 {
+		t.Errorf("세션 행은 1개여야 함(%d):\n%s", n, s)
+	}
+	if !strings.Contains(s, "**dev-claudecode** (스레드 1)") {
+		t.Errorf("스레드 배지 없음:\n%s", s)
+	}
+	if !strings.Contains(s, "작업중 1") || strings.Contains(s, "대기 1") {
+		t.Errorf("집계는 접힌 행 기준(작업중 1만):\n%s", s)
+	}
+}

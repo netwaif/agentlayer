@@ -41,9 +41,10 @@ func (s AgentState) Priority() int {
 
 // TmuxRef는 에이전트가 사는 tmux 좌표.
 type TmuxRef struct {
-	Session string `json:"session"`
-	Window  int    `json:"window"`
-	PaneID  string `json:"pane_id"` // "%3" 형식, tmux 서버 수명 내 고유
+	Session    string `json:"session"`
+	Window     int    `json:"window"`
+	WindowName string `json:"window_name,omitempty"` // 봇 스레드 창(t+6자리) 판별용
+	PaneID     string `json:"pane_id"`               // "%3" 형식, tmux 서버 수명 내 고유
 }
 
 // Agent는 관제 대상 에이전트 하나의 정본 레코드.
@@ -63,6 +64,8 @@ type Agent struct {
 	PID        int        `json:"pid,omitempty"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 	StateSince time.Time  `json:"state_since"`
+	// Threads는 표시용 — Fold가 이 행 뒤로 접은 스레드 pane 수. 저장하지 않는다.
+	Threads int `json:"-"`
 }
 
 // KindRank는 대시보드의 종류 그룹 순서: claude → codex → gemini → 기타.

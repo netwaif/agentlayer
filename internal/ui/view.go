@@ -504,7 +504,7 @@ func (m Model) viewBody() string {
 			// 상태 색은 살리면서 바가 중간에 끊기지 않게 한다.
 			st := stateText(a, m.now)
 			rest := fmt.Sprintf(" %s %s %s %s · %s",
-				cli.PadRight(a.Kind, 7), cli.PadRight(a.Tmux.Session, 20),
+				cli.PadRight(a.Kind, 7), cli.PadRight(cli.SessionLabel(a), 20),
 				cli.PadRight(task, 30),
 				cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
 			if m.discordWired[a.Tmux.Session] {
@@ -532,7 +532,7 @@ func (m Model) viewBody() string {
 			continue
 		}
 		line := fmt.Sprintf("  %s %s %s %s %s · %s",
-			stateBadge(a, m.now), cli.PadRight(a.Kind, 7), cli.PadRight(a.Tmux.Session, 20),
+			stateBadge(a, m.now), cli.PadRight(a.Kind, 7), cli.PadRight(cli.SessionLabel(a), 20),
 			cli.PadRight(task, 30),
 			cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
 		if m.discordWired[a.Tmux.Session] {

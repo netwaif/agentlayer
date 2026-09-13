@@ -313,6 +313,17 @@ func (m Model) ctxCmd() tea.Cmd {
 	}
 }
 
+// loadAgents는 TUI 목록용 조회 — 봇 스레드 창(t+6자리) pane은 같은 세션의 메인 행에
+// 접는다(state.Fold). 행·헤더 집계·커서 동작 모두 접힌 목록 기준이고, 접힌 행의 대표는
+// 급한 쪽 pane이라 Enter 점프도 그 pane으로 간다.
+func loadAgents(st *state.Store) ([]*state.Agent, error) {
+	agents, err := st.List()
+	if err != nil {
+		return nil, err
+	}
+	return state.Fold(agents), nil
+}
+
 // refreshCmd는 tmux 동기화 + 저장소 재조회를 백그라운드에서 수행한다.
 func (m Model) refreshCmd() tea.Cmd {
 	st, tm := m.store, m.tm
@@ -321,7 +332,7 @@ func (m Model) refreshCmd() tea.Cmd {
 		if panes, err := tm.ListPanes(); err == nil {
 			_ = scan.Sync(st, panes, now)
 		}
-		agents, err := st.List()
+		agents, err := loadAgents(st)
 		if err != nil {
 			return refreshMsg{agents: nil, now: now}
 		}

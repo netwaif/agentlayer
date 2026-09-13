@@ -272,3 +272,61 @@ func TestSyncResolvesNodeWrapperViaProcTable(t *testing.T) {
 		t.Errorf("잘못된 레코드: %+v", a)
 	}
 }
+
+// 봇 스레드 창(t+6자리) — 창 이름이 레코드에 실려야 표시 계층이 접을 수 있다.
+func TestSyncRecordsWindowName(t *testing.T) {
+	st := newStore(t)
+	p := claudePane()
+	p.WindowName = "t552990"
+	if err := Sync(st, []tmuxx.Pane{p}, t0); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.List()
+	if len(got) != 1 || got[0].Tmux.WindowName != "t552990" || !got[0].IsThread() {
+		t.Errorf("창 이름 미기록: %+v", got[0].Tmux)
+	}
+}
+
+// 스레드 창이 닫히면 메인이 살아 있는 한 DEAD 잔상을 남기지 않는다 —
+// cwd가 메인과 달라도(liveSlot 불일치) 같은 kind·세션의 산 pane이 근거.
+func TestSyncPurgesDeadThreadWhenSessionAlive(t *testing.T) {
+	st := newStore(t)
+	main := claudePane()
+	main.Session, main.Window, main.WindowName, main.PaneID = "dev-claudecode", 0, "dev-claudecode", "%33"
+	thr := main
+	thr.Window, thr.WindowName, thr.PaneID, thr.Path = 1, "t552990", "%35", "/tmp/thread-cwd"
+	if err := Sync(st, []tmuxx.Pane{main, thr}, t0); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.List(); len(got) != 2 {
+		t.Fatalf("레코드 2개(메인+스레드): %d", len(got))
+	}
+	// 스레드 창 닫힘
+	if err := Sync(st, []tmuxx.Pane{main}, t0.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.List()
+	if len(got) != 1 || got[0].ID != "claude-33" {
+		t.Errorf("죽은 스레드 레코드는 즉시 정리: %+v", got)
+	}
+}
+
+// 메인이 없어지면(스레드만 남음) 스레드는 정상 레코드로 남고, 메인의 DEAD 행은
+// 기존 규칙(같은 자리 부활)으로만 다룬다 — 스레드 규칙은 스레드 레코드에만 적용.
+func TestSyncKeepsDeadMainWhenOnlyThreadAlive(t *testing.T) {
+	st := newStore(t)
+	main := claudePane()
+	main.Session, main.Window, main.WindowName, main.PaneID = "dev-claudecode", 0, "dev-claudecode", "%33"
+	thr := main
+	thr.Window, thr.WindowName, thr.PaneID, thr.Path = 1, "t552990", "%35", "/tmp/thread-cwd"
+	if err := Sync(st, []tmuxx.Pane{main, thr}, t0); err != nil {
+		t.Fatal(err)
+	}
+	if err := Sync(st, []tmuxx.Pane{thr}, t0.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.List()
+	if len(got) != 2 {
+		t.Fatalf("메인 DEAD + 스레드 live 2개: %+v", got)
+	}
+}

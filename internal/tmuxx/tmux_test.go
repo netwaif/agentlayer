@@ -11,9 +11,9 @@ import (
 
 func TestParsePanes(t *testing.T) {
 	// 실측 환경(ai 세션 등)에서 가져온 형태의 샘플. 필드는 탭 구분.
-	out := "ai\t1\t%3\t2.1.241\t/Users/soonho/ai-folder/dev/agentlayer\t✳ 핸드오프 문서 확인\t70882\n" +
-		"codex-live\t0\t%1\tcodex\t/Users/soonho/ai-folder/codex-discord-workspace\tcodex-workspace | weekly 85% left\t555\n" +
-		"ai\t0\t%0\tpython3.11\t/Users/soonho\t\t123\n"
+	out := "ai\t1\tagentlayer\t%3\t2.1.241\t/Users/soonho/ai-folder/dev/agentlayer\t✳ 핸드오프 문서 확인\t70882\n" +
+		"codex-live\t1\tt999002\t%1\tcodex\t/Users/soonho/ai-folder/codex-discord-workspace\tcodex-workspace | weekly 85% left\t555\n" +
+		"ai\t0\tzsh\t%0\tpython3.11\t/Users/soonho\t\t123\n"
 	panes, err := parsePanes(out)
 	if err != nil {
 		t.Fatal(err)
@@ -22,9 +22,13 @@ func TestParsePanes(t *testing.T) {
 		t.Fatalf("pane 수 = %d, want 3", len(panes))
 	}
 	p := panes[0]
-	if p.Session != "ai" || p.Window != 1 || p.PaneID != "%3" ||
+	if p.Session != "ai" || p.Window != 1 || p.WindowName != "agentlayer" || p.PaneID != "%3" ||
 		p.Command != "2.1.241" || p.Title != "✳ 핸드오프 문서 확인" || p.PanePID != 70882 {
 		t.Errorf("파싱 불일치: %+v", p)
+	}
+	// 봇 스레드 창(t+6자리) 이름이 그대로 실린다
+	if panes[1].WindowName != "t999002" {
+		t.Errorf("스레드 창 이름 누락: %+v", panes[1])
 	}
 	if panes[2].Title != "" {
 		t.Errorf("빈 title 허용해야 함: %q", panes[2].Title)
@@ -33,7 +37,7 @@ func TestParsePanes(t *testing.T) {
 
 func TestParsePanesMalformedLineSkipped(t *testing.T) {
 	out := "ai\t1\t%3\n" + // 필드 부족 → skip
-		"ok\t0\t%1\tzsh\t/tmp\ttitle\t9\n"
+		"ok\t0\tzsh\t%1\tzsh\t/tmp\ttitle\t9\n"
 	panes, err := parsePanes(out)
 	if err != nil {
 		t.Fatal(err)

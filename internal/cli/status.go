@@ -108,13 +108,13 @@ func Status(w io.Writer, st *state.Store, jsonOut bool, now time.Time, wired map
 	// tabwriter는 한글(동아시아 폭 2칸)을 1칸으로 세서 열이 어긋난다 —
 	// runewidth 기반 수동 패딩으로 표시 폭을 맞춘다.
 	rows := [][]string{{"STATE", "AGENT", "SESSION", "TASK", "DIR", "SINCE"}}
-	for _, a := range agents {
+	for _, a := range state.Fold(agents) { // 봇 스레드 창은 메인 행에 접는다(JSON은 원본)
 		task := a.Headline()
 		if runewidth.StringWidth(task) > 40 {
 			task = runewidth.Truncate(task, 39, "…")
 		}
-		sess := a.Tmux.Session
-		if mark := wired[sess]; mark != "" {
+		sess := SessionLabel(a)
+		if mark := wired[a.Tmux.Session]; mark != "" {
 			sess += " " + mark
 		}
 		rows = append(rows, []string{
@@ -141,6 +141,15 @@ func Status(w io.Writer, st *state.Store, jsonOut bool, now time.Time, wired map
 		fmt.Fprintln(w, strings.TrimRight(line.String(), " "))
 	}
 	return nil
+}
+
+// SessionLabel은 SESSION 열 문구 — 세션 이름에 봇 스레드 배지("(스레드 1)")를 붙인다.
+// status·TUI가 같은 문구를 쓴다. 카드는 굵은 이름 뒤에 같은 배지를 따로 붙인다.
+func SessionLabel(a *state.Agent) string {
+	if b := a.ThreadBadge(); b != "" {
+		return a.Tmux.Session + " (" + b + ")"
+	}
+	return a.Tmux.Session
 }
 
 // PadRight는 표시 폭 기준으로 오른쪽 공백을 채운다 (한글 2칸 반영).

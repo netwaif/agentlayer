@@ -72,7 +72,8 @@ func Sync(st *state.Store, panes []tmuxx.Pane, now time.Time) error {
 	}
 	alive := make(map[string]bool)
 	occupied := make(map[string]bool)
-	var procs ProcTable // 래퍼 pane이 있을 때만 한 번 읽는다
+	liveSession := make(map[string]bool) // kind|세션 — 스레드 창 정리 근거
+	var procs ProcTable                  // 래퍼 pane이 있을 때만 한 번 읽는다
 	for _, p := range panes {
 		kind := DetectKind(p)
 		if kind == "" && IsWrapperCommand(p.Command) {
@@ -88,13 +89,14 @@ func Sync(st *state.Store, panes []tmuxx.Pane, now time.Time) error {
 		id := AgentID(kind, p)
 		alive[id] = true
 		occupied[liveSlot(kind, p.Session, p.Path)] = true
+		liveSession[kind+"|"+p.Session] = true
 		a, ok := byID[id]
 		if !ok {
 			a = &state.Agent{ID: id, Kind: kind, State: state.StateIdle,
 				UpdatedAt: now, StateSince: now}
 		}
 		// 좌표·환경은 항상 현실을 따른다. 의미 상태는 건드리지 않는다.
-		a.Tmux = state.TmuxRef{Session: p.Session, Window: p.Window, PaneID: p.PaneID}
+		a.Tmux = state.TmuxRef{Session: p.Session, Window: p.Window, WindowName: p.WindowName, PaneID: p.PaneID}
 		a.CWD = p.Path
 		a.PID = p.PanePID
 		if a.State == state.StateDead {
@@ -113,6 +115,12 @@ func Sync(st *state.Store, panes []tmuxx.Pane, now time.Time) error {
 		switch {
 		case a.State == state.StateDead && occupied[liveSlot(a.Kind, a.Tmux.Session, a.CWD)]:
 			// 같은 자리에 산 pane이 있다 — 세션이 밖에서 부활함. 이중 행 즉시 정리
+			if err := st.Delete(a.ID); err != nil {
+				return err
+			}
+		case a.IsThread() && liveSession[a.Kind+"|"+a.Tmux.Session]:
+			// 봇 스레드 창이 닫혔고 봇 본체는 살아 있다 — 스레드는 일회성이니 DEAD를
+			// 거치지 않고 바로 정리. cwd가 메인과 달라도(컨테이너) 같은 kind·세션의 산 pane이 근거다.
 			if err := st.Delete(a.ID); err != nil {
 				return err
 			}
