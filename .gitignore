@@ -1,2 +1,5 @@
 agentlayer
 dist/
+
+# superpowers SDD 작업폴더(원장·브리프·리뷰 패키지)
+.superpowers/
