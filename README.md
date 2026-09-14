@@ -158,6 +158,11 @@ agentlayer task done VIDEO-07
 - `task watch`는 정상 건을 한 줄 JSON으로 출력하고 `received/`로 옮긴다. 깨진 파일·심볼릭 링크·16KiB 초과는 `quarantine/`.
 - 세션 소실(dead)은 hook이 아니라 `status`·TUI 실행 때 판정되므로 보고되지 않는다 — `agentlayer status`로 본다.
 - 회사 폴더·총괄 절차·직원 등록은 별도 플러그인 `ai-company`가 만든다(이 바이너리는 배관만).
+- 보고 JSON의 상태 값은 원문 그대로다: `WORKING`·`WAITING`·`DONE_UNREAD`·`IDLE`·`ERROR`·`DEAD` (`from`/`to`).
+- `ERR`(비정상 종료)·`dead`는 `--force`로도 보내지 않는다.
+- 막 띄운 세션은 첫 hook이 오기 전까지 idle로 보인다 — 첫 지시는 TUI가 뜬 것을 확인한 뒤 보낸다.
+- inbox는 로컬 경로여야 한다(NAS·SMB 마운트 금지) — hook은 2초 안에 못 쓰면 보고를 포기하고 에이전트를 막지 않는다.
+- 여러 줄 본문(`-`)은 `\r`·제어문자를 제거하고 64KiB까지만 보낸다.
 
 ## Worktree 병렬 모드
 

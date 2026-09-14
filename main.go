@@ -72,21 +72,15 @@ func run(args []string) error {
 	case "info":
 		return runInfo(args[1:])
 	case "send":
-		st, err := state.NewStore(state.DefaultDir())
+		st, err := storeWithSync()
 		if err != nil {
 			return err
-		}
-		if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
-			_ = scan.Sync(st, panes, time.Now())
 		}
 		return cli.RunSend(os.Stdout, os.Stdin, st, tmuxx.Tmux{}, args[1:])
 	case "task":
-		st, err := state.NewStore(state.DefaultDir())
+		st, err := storeWithSync()
 		if err != nil {
 			return err
-		}
-		if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
-			_ = scan.Sync(st, panes, time.Now())
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
@@ -102,17 +96,28 @@ func run(args []string) error {
 	case "browser":
 		return cli.RunBrowser(os.Stdout, args[1:])
 	case "wt":
-		st, err := state.NewStore(state.DefaultDir())
+		st, err := storeWithSync()
 		if err != nil {
 			return err
-		}
-		if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
-			_ = scan.Sync(st, panes, time.Now())
 		}
 		return cli.RunWT(os.Stdout, state.DefaultDir(), st, tmuxx.Tmux{}, args[1:])
 	default:
 		return fmt.Errorf("알 수 없는 명령: %s\n'agentlayer help'로 전체 명령을 볼 수 있다", args[0])
 	}
+}
+
+// storeWithSync는 상태 저장소를 열고 tmux 현실과 최선 동기화를 시도한다(실패해도
+// 무시 — 저장된 상태만으로 계속 동작). wt·send·task 세 명령이 그대로 공유하던
+// 블록을 하나로 묶은 것뿐, 동작은 바뀌지 않는다.
+func storeWithSync() (*state.Store, error) {
+	st, err := state.NewStore(state.DefaultDir())
+	if err != nil {
+		return nil, err
+	}
+	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
+		_ = scan.Sync(st, panes, time.Now())
+	}
+	return st, nil
 }
 
 // buildVersion은 ldflags 주입값을 우선 쓰고, 비어 있으면
@@ -458,9 +463,18 @@ func runHook(args []string) error {
 			transitioned = true
 		}
 		notify.Notify(cfg, sender, a, prev, to)
-		if rep, ok := task.ReportFor(state.DefaultDir(), a, prev, to, time.Now()); ok {
-			if _, err := task.WriteReport(rep); err != nil {
-				fmt.Fprintln(os.Stderr, "agentlayer task report:", err) // hook은 에이전트를 막지 않는다
+		if rep, ok := task.ReportFor(st.Dir, a, prev, to, time.Now()); ok {
+			// hook은 에이전트를 절대 막지 않는다 — 보고 쓰기가 느려도(NAS·SMB
+			// inbox 등) 최대 2초만 기다리고 포기한다.
+			done := make(chan error, 1)
+			go func() { _, err := task.WriteReport(rep); done <- err }()
+			select {
+			case err := <-done:
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "agentlayer task report:", err)
+				}
+			case <-time.After(2 * time.Second):
+				fmt.Fprintln(os.Stderr, "agentlayer task report: 2초 안에 못 썼습니다 — inbox 경로가 로컬인지 확인하세요:", rep.Inbox)
 			}
 		}
 	})

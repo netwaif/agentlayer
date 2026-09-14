@@ -92,6 +92,30 @@ func ParseSendFlags(args []string) (SendOptions, []string, error) {
 	return o, nil, nil
 }
 
+// maxMessageBytes는 send 본문 상한(64KiB) — 훅·터미널 붙여넣기를 넘는
+// 비정상 입력이 pane을 오래 막지 않게 막는다.
+const maxMessageBytes = 64 * 1024
+
+// SanitizeMessage는 전송 본문을 정제한다: CRLF→LF, `\n`·`\t` 외 제어문자(0x20
+// 미만·0x7f) 제거. 길이 제한은 RunSend에서 별도로 검사한다(정제 전 바이트 수 기준).
+func SanitizeMessage(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if r == '\n' || r == '\t' {
+			b.WriteRune(r)
+			continue
+		}
+		if r < 0x20 || r == 0x7f {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 // RunSend: agentlayer send [--force] [--json] <세션[:창]> <메시지…|->
 func RunSend(w io.Writer, stdin io.Reader, st *state.Store, tm TextSender, args []string) error {
 	o, rest, err := ParseSendFlags(args)
@@ -112,6 +136,10 @@ func RunSend(w io.Writer, stdin io.Reader, st *state.Store, tm TextSender, args 
 		}
 		message = strings.TrimRight(string(b), "\n")
 	}
+	if len(message) > maxMessageBytes {
+		return errors.New("메시지가 너무 깁니다 (최대 64KiB)")
+	}
+	message = SanitizeMessage(message)
 	if strings.TrimSpace(message) == "" {
 		return errors.New("메시지가 비었습니다")
 	}

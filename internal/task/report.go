@@ -50,6 +50,11 @@ func ReportFor(stateDir string, a *state.Agent, prev, to state.AgentState, now t
 	if err != nil || !ok {
 		return nil, false
 	}
+	// 낡은 등록 방지: 같은 에이전트 ID를 새 세션이 재사용했을 수 있다(재시작 등).
+	// 등록 당시의 세션·pane과 지금 것이 다르면 엉뚱한 세션 앞으로 보고하지 않는다.
+	if as.Session != a.Tmux.Session || as.Pane != a.Tmux.PaneID {
+		return nil, false
+	}
 	r := &Report{Version: 1, ID: NewID(), TaskID: as.TaskID, Session: a.Tmux.Session, Window: a.Tmux.WindowName,
 		Kind: a.Kind, From: string(prev), To: string(to), Task: a.Task, CWD: a.CWD, At: now, Inbox: as.Inbox}
 	if to == state.StateWaiting {

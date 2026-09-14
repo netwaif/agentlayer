@@ -83,6 +83,9 @@ func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, no
 	if err != nil {
 		return err
 	}
+	if a.State == state.StateDead {
+		return errors.New("세션이 죽었습니다 — 'agentlayer restore' 뒤 다시 등록하세요")
+	}
 	as := task.Assignment{TaskID: pos[0], AgentID: a.ID, Session: a.Tmux.Session, Window: a.Tmux.WindowName,
 		Pane: a.Tmux.PaneID, Inbox: abs, AssignedAt: now}
 	if err := task.Assign(stateDir, as, replace); err != nil {
@@ -114,7 +117,11 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	for _, as := range list {
 		s := "gone"
 		if a, ok := byID[as.AgentID]; ok {
-			s = string(a.State)
+			if a.Tmux.Session != as.Session || a.Tmux.PaneID != as.Pane {
+				s = "stale" // 에이전트 ID는 살아 있지만 세션·pane이 등록 당시와 다름(재사용)
+			} else {
+				s = string(a.State)
+			}
 		}
 		rows = append(rows, row{as, s})
 	}

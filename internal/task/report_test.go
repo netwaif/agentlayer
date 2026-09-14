@@ -75,6 +75,22 @@ func TestReportForAssignedAndWrite(t *testing.T) {
 	}
 }
 
+// 에이전트 ID가 재사용됐지만(재시작 등) tmux 세션·pane이 등록 당시와 다르면
+// 낡은 등록으로 간주해 보고하지 않는다 — 엉뚱한 세션 앞으로 보고가 새지 않게.
+func TestReportForStaleAssignmentIsSilent(t *testing.T) {
+	stateDir, inbox := t.TempDir(), filepath.Join(t.TempDir(), "inbox")
+	if err := Assign(stateDir, Assignment{TaskID: "T-1", AgentID: "claude-%16", Session: "old-bot",
+		Window: "", Pane: "%16", Inbox: inbox}, false); err != nil {
+		t.Fatal(err)
+	}
+	// 같은 에이전트 ID지만 세션이 바뀐 상태(pane 번호는 우연히 같음)
+	a := &state.Agent{ID: "claude-%16", Kind: "claude",
+		Tmux: state.TmuxRef{Session: "new-bot", PaneID: "%16"}}
+	if _, ok := ReportFor(stateDir, a, state.StateWorking, state.StateDoneUnread, time.Now()); ok {
+		t.Error("세션이 바뀐 낡은 등록은 보고하지 않아야 함")
+	}
+}
+
 func TestNewIDIsHex32Unique(t *testing.T) {
 	a, b := NewID(), NewID()
 	if len(a) != 32 || a == b {

@@ -180,6 +180,39 @@ func TestSpawnShellWindowIntegration(t *testing.T) {
 	}
 }
 
+// SendText는 "-"로 시작하는 텍스트(Markdown 목록, YAML "---")를 플래그로
+// 오인하지 않고 그대로 pane에 넣어야 한다 ("--" 종결자 없으면 "invalid flag"로 실패).
+func TestSendTextLiteralLeadingDash(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux 없음")
+	}
+	sock := fmt.Sprintf("agentlayer-senddash-%d", os.Getpid())
+	run := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("tmux", append([]string{"-f", "/dev/null", "-L", sock}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("tmux %v: %v\n%s", args, err, out)
+		}
+	}
+	t.Cleanup(func() { exec.Command("tmux", "-f", "/dev/null", "-L", sock, "kill-server").Run() })
+	run("new-session", "-d", "-s", "senddash", "-x", "80", "-y", "24")
+
+	tm := Tmux{Args: []string{"-f", "/dev/null", "-L", sock}}
+	if err := tm.SendText("senddash", "- 목표: 리터럴 대시 확인"); err != nil {
+		t.Fatalf("리터럴 대시 텍스트 전송 실패: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		out, _ := tm.CapturePane("senddash", 24)
+		if strings.Contains(out, "- 목표: 리터럴 대시 확인") {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("대시로 시작하는 텍스트가 pane에 그대로 안 보임:\n%s", out)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func TestSendEnterDelayBounds(t *testing.T) {
 	if d := SendEnterDelay(0); d != 300*time.Millisecond {
 		t.Errorf("빈 텍스트 300ms: %v", d)

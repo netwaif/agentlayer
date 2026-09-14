@@ -278,7 +278,10 @@ func (t Tmux) NewWindowIn(session, name, dir string) (string, error) {
 // 문장이 입력줄에 남고 제출이 안 된다(2026-09-03 broadcast 실측 — Enter만 따로
 // 보내니 제출됨). codex-discord 브리지도 같은 이유로 붙여넣기 뒤 200ms+ 쉬고 Enter.
 func (t Tmux) SendText(paneID, text string) error {
-	if _, err := t.run("send-keys", "-t", paneID, "-l", text); err != nil {
+	// "--"는 이후 인자를 모두 리터럴로 취급하게 한다 — text가 "-"나 "---"로
+	// 시작해도(Markdown 목록, YAML 구분선) tmux가 플래그로 오인해 "invalid flag"로
+	// 실패하지 않는다.
+	if _, err := t.run("send-keys", "-t", paneID, "-l", "--", text); err != nil {
 		return err
 	}
 	time.Sleep(SendEnterDelay(len(text)))

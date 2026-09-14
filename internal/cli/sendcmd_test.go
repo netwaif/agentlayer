@@ -89,6 +89,29 @@ func TestParseSendFlags(t *testing.T) {
 	}
 }
 
+func TestSanitizeMessage(t *testing.T) {
+	if got := SanitizeMessage("첫 줄\r\n둘째 줄\r\n"); got != "첫 줄\n둘째 줄\n" {
+		t.Errorf("CRLF → LF: %q", got)
+	}
+	if got := SanitizeMessage("경고\x1b[31m빨강\x1b[0m"); got != "경고[31m빨강[0m" {
+		t.Errorf("이스케이프 문자 제거: %q", got)
+	}
+	if got := SanitizeMessage("탭\t개행\n유지"); got != "탭\t개행\n유지" {
+		t.Errorf("탭·개행은 보존: %q", got)
+	}
+}
+
+func TestRunSendRejectsOversizedBody(t *testing.T) {
+	st, _ := state.NewStore(t.TempDir())
+	_ = st.Save(mkAgent("claude", "collab-bot", "%1", state.StateIdle))
+	var out bytes.Buffer
+	big := strings.Repeat("a", 65537)
+	err := RunSend(&out, strings.NewReader(big), st, &fakeSender{}, []string{"collab-bot", "-"})
+	if err == nil || !strings.Contains(err.Error(), "너무 깁니다") {
+		t.Fatalf("64KiB 초과는 거부: %v", err)
+	}
+}
+
 func TestRunSendDeliversAndGates(t *testing.T) {
 	st, _ := state.NewStore(t.TempDir())
 	_ = st.Save(mkAgent("claude", "collab-bot", "%1", state.StateIdle))

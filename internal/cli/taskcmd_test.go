@@ -69,6 +69,55 @@ func TestRunTaskAssignListDone(t *testing.T) {
 	}
 }
 
+// dead 세션에는 업무를 배정할 수 없다 — 받을 곳이 없는 등록을 만들지 않는다.
+func TestRunTaskAssignRejectsDeadSession(t *testing.T) {
+	dir := t.TempDir()
+	st, _ := state.NewStore(dir)
+	_ = st.Save(mkAgent("claude", "dead-bot", "%4", state.StateDead))
+	inbox := filepath.Join(t.TempDir(), "inbox")
+	var out bytes.Buffer
+	err := RunTask(context.Background(), &out, st, dir, []string{"assign", "T-1", "dead-bot", "--inbox", inbox}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "죽었습니다") {
+		t.Fatalf("dead 세션 배정은 거부돼야 함: %v", err)
+	}
+	if _, ok, _ := task.Load(dir, "claude-%4"); ok {
+		t.Error("거부됐으면 등록 파일이 생기면 안 됨")
+	}
+}
+
+// 에이전트 레코드는 있지만(ID 재사용) 세션·pane이 등록 당시와 다르면 list가
+// 그 에이전트의 실제 상태 대신 "stale"을 보여야 한다 — 엉뚱한 세션으로 오인 방지.
+func TestRunTaskListMarksStaleWhenSessionPaneChanged(t *testing.T) {
+	dir := t.TempDir()
+	st, _ := state.NewStore(dir)
+	a := mkAgent("claude", "old-bot", "%16", state.StateIdle)
+	_ = st.Save(a)
+	inbox := filepath.Join(t.TempDir(), "inbox")
+	now := time.Now()
+	var out bytes.Buffer
+	if err := RunTask(context.Background(), &out, st, dir, []string{"assign", "T-1", "old-bot", "--inbox", inbox}, now); err != nil {
+		t.Fatal(err)
+	}
+	// 같은 ID의 레코드가 새 세션으로 바뀜(재시작 등)
+	a.Tmux.Session = "new-bot"
+	_ = st.Save(a)
+	out.Reset()
+	if err := RunTask(context.Background(), &out, st, dir, []string{"list", "--json"}, now); err != nil {
+		t.Fatal(err)
+	}
+	var rows []map[string]any
+	if err := json.Unmarshal(out.Bytes(), &rows); err != nil || len(rows) != 1 || rows[0]["state"] != "stale" {
+		t.Errorf("list --json state=stale 기대: %s err=%v", out.String(), err)
+	}
+	out.Reset()
+	if err := RunTask(context.Background(), &out, st, dir, []string{"list"}, now); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "stale") {
+		t.Errorf("표 출력에 stale 표시: %s", out.String())
+	}
+}
+
 func TestRunTaskWatchOncePrintsJSONLine(t *testing.T) {
 	inbox := t.TempDir()
 	id := strings.Repeat("f", 32)
