@@ -121,7 +121,7 @@ company/
 ├─ SESSION.md         loadout 세션 이어가기(총괄 세션용)
 ├─ 직원명부.json       {dept, name, tool(claude|codex|gemini), session, folder, mode(bot|on-demand)}
 ├─ 업무요청/  참고자료/  결과물/  docs/
-├─ tasks/<업무ID>/     task.md·log.md (discord-multiagent 형식 → agentlayer MultiAgent 패널에 표시)
+├─ tasks/<업무ID>/     task.md·log.md (discord-multiagent·mat 호환 형식. agentlayer 패널은 ~/VSCodeWorkspace/MultiAgent 고정 경로만 읽으므로 자동 표시되지 않음 — 후속: multiagent_roots 설정)
 ├─ runtime/inbox/{pending,received,quarantine}/
 └─ _templates/        task.md·업무요청.md·보고.md
 ```
