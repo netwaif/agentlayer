@@ -87,6 +87,23 @@ func TestWatchOnceEmitsAndReturns(t *testing.T) {
 	}
 }
 
+func TestPollPropagatesQuarantineRenameError(t *testing.T) {
+	inbox := t.TempDir()
+	writePending(t, inbox, "broken.json", "{not json")
+	quarantine := filepath.Join(inbox, "quarantine")
+	if err := os.MkdirAll(quarantine, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// quarantine/을 쓰기 금지로 만들어 os.Rename(f, quarantine/broken.json)이 실패하게 한다.
+	if err := os.Chmod(quarantine, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(quarantine, 0o700) })
+	if _, ok, err := Poll(inbox); ok || err == nil {
+		t.Fatalf("quarantine 이동 실패는 에러로 전파돼야 함: ok=%v err=%v", ok, err)
+	}
+}
+
 func TestWatchStopsOnContext(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
 	defer cancel()

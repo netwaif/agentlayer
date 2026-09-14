@@ -33,6 +33,11 @@ var idRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 // ValidID는 업무ID 규칙(영숫자·점·밑줄·하이픈, 1~64자).
 func ValidID(id string) bool { return idRe.MatchString(id) }
 
+// validAgentID는 에이전트 ID가 경로 조작 없이 파일명 한 조각으로 쓰일 수 있는지 확인한다.
+func validAgentID(id string) bool {
+	return id != "" && id != "." && id != ".." && filepath.Base(id) == id
+}
+
 // Dir은 업무 등록 파일 디렉터리.
 func Dir(stateDir string) string { return filepath.Join(stateDir, "tasks") }
 
@@ -45,8 +50,8 @@ func Assign(stateDir string, as Assignment, replace bool) error {
 	if !ValidID(as.TaskID) {
 		return fmt.Errorf("업무ID 형식 오류: %q (영숫자·점·밑줄·하이픈 1~64자)", as.TaskID)
 	}
-	if as.AgentID == "" {
-		return errors.New("에이전트 ID가 비었습니다")
+	if !validAgentID(as.AgentID) {
+		return fmt.Errorf("에이전트 ID 형식 오류: %q", as.AgentID)
 	}
 	if _, ok, err := Load(stateDir, as.AgentID); err != nil {
 		return err
@@ -61,6 +66,9 @@ func Assign(stateDir string, as Assignment, replace bool) error {
 
 // Load는 에이전트의 등록을 읽는다. 없으면 ok=false, 에러 없음.
 func Load(stateDir, agentID string) (*Assignment, bool, error) {
+	if !validAgentID(agentID) {
+		return nil, false, fmt.Errorf("에이전트 ID 형식 오류: %q", agentID)
+	}
 	b, err := os.ReadFile(path(stateDir, agentID))
 	if os.IsNotExist(err) {
 		return nil, false, nil
@@ -145,5 +153,9 @@ func writeAtomic(p string, v any) error {
 		os.Remove(tmp.Name())
 		return err
 	}
-	return os.Rename(tmp.Name(), p)
+	if err := os.Rename(tmp.Name(), p); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return nil
 }

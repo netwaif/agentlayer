@@ -75,3 +75,13 @@ func TestListEmptyDir(t *testing.T) {
 		t.Fatalf("tasks/ 없음 → 빈 목록: %v %v", list, err)
 	}
 }
+
+func TestAssignAndLoadRejectPathTraversalAgentID(t *testing.T) {
+	dir := t.TempDir()
+	if err := Assign(dir, sample("T-9", "../x"), false); err == nil {
+		t.Error("경로 조작 AgentID는 Assign이 거부해야 함")
+	}
+	if _, ok, err := Load(dir, "../x"); ok || err == nil {
+		t.Errorf("경로 조작 AgentID는 Load가 거부해야 함: ok=%v err=%v", ok, err)
+	}
+}

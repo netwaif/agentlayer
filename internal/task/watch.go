@@ -30,7 +30,9 @@ func Poll(inbox string) (*Report, bool, error) {
 	for _, f := range files {
 		r, verr := readReport(f)
 		if verr != nil {
-			_ = os.Rename(f, filepath.Join(inbox, "quarantine", filepath.Base(f)))
+			if err := os.Rename(f, filepath.Join(inbox, "quarantine", filepath.Base(f))); err != nil {
+				return nil, false, err
+			}
 			continue
 		}
 		if err := os.Rename(f, filepath.Join(inbox, "received", filepath.Base(f))); err != nil {
