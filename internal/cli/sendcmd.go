@@ -75,20 +75,21 @@ type SendOptions struct {
 // ParseSendFlags는 --force·--json만 받고 나머지를 위치 인자로 돌려준다.
 func ParseSendFlags(args []string) (SendOptions, []string, error) {
 	var o SendOptions
-	var rest []string
-	for _, a := range args {
-		switch {
-		case a == "--force":
+	i := 0
+	for ; i < len(args); i++ {
+		switch args[i] {
+		case "--force":
 			o.Force = true
-		case a == "--json":
+		case "--json":
 			o.JSON = true
-		case strings.HasPrefix(a, "--") && len(rest) == 0:
-			return o, nil, fmt.Errorf("알 수 없는 플래그: %s", a)
 		default:
-			rest = append(rest, a)
+			if strings.HasPrefix(args[i], "--") {
+				return o, nil, fmt.Errorf("알 수 없는 플래그: %s", args[i])
+			}
+			return o, append([]string{}, args[i:]...), nil
 		}
 	}
-	return o, rest, nil
+	return o, nil, nil
 }
 
 // RunSend: agentlayer send [--force] [--json] <세션[:창]> <메시지…|->

@@ -79,6 +79,14 @@ func TestParseSendFlags(t *testing.T) {
 	if _, _, err := ParseSendFlags([]string{"--nope"}); err == nil {
 		t.Error("모르는 플래그는 오류")
 	}
+	if o, rest, err := ParseSendFlags([]string{"bot", "please", "--force", "here"}); err != nil || o.Force || len(rest) != 4 ||
+		rest[0] != "bot" || rest[1] != "please" || rest[2] != "--force" || rest[3] != "here" {
+		t.Errorf("첫 위치 인자 뒤 --force는 본문: %+v %v %v", o, rest, err)
+	}
+	if o, rest, err := ParseSendFlags([]string{"--json", "bot", "--force"}); err != nil || !o.JSON || o.Force ||
+		len(rest) != 2 || rest[0] != "bot" || rest[1] != "--force" {
+		t.Errorf("첫 위치 인자 뒤 --force는 본문(플래그 선행): %+v %v %v", o, rest, err)
+	}
 }
 
 func TestRunSendDeliversAndGates(t *testing.T) {
