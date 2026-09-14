@@ -15,7 +15,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-v1.5.0 릴리즈 준비 완료 — 브랜치 worktree-ai-company-stage1에 send·task assign/list/done/watch·훅 자동 보고(DONE·WAIT·ERR) 구현, 리뷰 통과, 실측 결과: `make install` 정상(버전 줄+`send`·`task` help 두 줄 확인), lab-worker tmux 한 바퀴에서 assign→list→send→`task watch --once`가 `{"version":1,...,"task_id":"LAB-1",...,"to":"DONE_UNREAD",...}` 한 줄 수신·`received/` 파일 1개, DONE 상태에서 send 게이트 통과 확인. WAIT 경로는 lab-worker가 auto mode라 권한 프롬프트 없이 파일이 바로 쓰여 WAITING 보고는 미관측(브리프의 auto-mode 폴백 케이스, 정리 완료). 태그·goreleaser는 main 머지 뒤 실행 예정. 이 맥 `~/.local/bin/agentlayer`는 브랜치 빌드.
+v1.5.0 릴리즈 준비 완료 — 브랜치 worktree-ai-company-stage1에 send·task assign/list/done/watch·훅 자동 보고(DONE·WAIT·ERR) 구현, 리뷰 통과, 실측 결과: `make install` 정상(버전 줄+`send`·`task` help 두 줄 확인), lab-worker tmux 한 바퀴에서 assign→list→send→`task watch --once`가 `{"version":1,...,"task_id":"LAB-1",...,"to":"DONE_UNREAD",...}` 한 줄 수신·`received/` 파일 1개, DONE 상태에서 send 게이트 통과 확인. WAIT 경로는 재실측(non-auto 세션)에서 `"to":"WAITING","ask":"Claude needs your permission"` 한 줄로 관측 확인(거부·정리 완료). 태그·goreleaser는 main 머지 뒤 실행 예정. 이 맥 `~/.local/bin/agentlayer`는 브랜치 빌드.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
@@ -217,6 +217,7 @@ v1.5.0 릴리즈 준비 완료 — 브랜치 worktree-ai-company-stage1에 send�
 - 2026-09-14 **AI 회사 1단계 설계 결정 4건**: 직원층=기존 봇 등록(신설은 총괄 하나만) / 총괄=`~/ai-folder/company` 새 folder-bot, 그 폴더가 곧 회사 루트 / 배선=agentlayer 배관(send·task·훅 보고)+ai-company 플러그인 생성기 채택(SendMessage 지침만 방식은 기각) / dead 세션 보고는 v1 범위 밖(scan 전이가 붙을 때 추가).
 - 2026-09-14 **SDD 실행**: 계획 7작업을 서브에이전트 배치 3회로 구현, 리뷰에서 계획 코드 결함 4건 수정 — `writeAtomic` temp 파일 누수, quarantine rename 에러 삼킴, AgentID 경로 검증 누락, send 플래그가 위치 인자 뒤에서도 인식되던 문제(본문 속 `--force`가 게이트를 우회).
 - 2026-09-14 **Task 7 실측(lab-worker tmux, `~/ai-folder/demo`)**: `make install` 정상(버전 줄 + `send`·`task` help 두 줄 확인). `task assign LAB-1 lab-worker`→`task list`→`send`("LAB_OK" 지시)→`task watch --once`가 `{"version":1,"id":"e76718ea210fa4a740abf88903073142","task_id":"LAB-1","session":"lab-worker","window":"2.1.270","kind":"claude","from":"WORKING","to":"DONE_UNREAD",...}` 한 줄 수신, `received/`에 파일 1개 확인. DONE 상태에서 `send lab-worker "x"` 게이트 통과 확인. WAIT 경로: `~/lab-out.txt`에 쓰게 시켰으나 세션이 auto mode(⏵⏵ auto mode on)라 권한 프롬프트 없이 "Allowed by auto mode classifier"로 즉시 기록됨 — WAITING 보고는 미관측(브리프에 적힌 auto-mode 폴백 케이스, 정상). `lab-out.txt` 삭제·`lab-worker` 세션 kill·`task done LAB-1`로 정리 완료(기존 세션은 손대지 않음).
+- 2026-09-14 **Fix round 1**: WAIT 경로 재실측(`claude --permission-mode default`, LAB-2) — `task watch --once`가 `{"version":1,...,"task_id":"LAB-2",...,"from":"WORKING","to":"WAITING","ask":"Claude needs your permission",...}` 한 줄 관측, pane에 실제 권한 프롬프트("Do you want to proceed?") 확인 후 승인 없이 `tmux kill-session`으로 거부·정리. 기동 직후 send 유실 가설(lab-timing 세션, launch 2초 뒤 idle 상태에서 즉시 send)은 이번 재현에서 기각 — EARLY_OK·LATE_OK 둘 다 pane에 정상 반영됨(README 수정 없음, Task 7 1회차의 유실은 재현 안 되는 일시적 현상으로 결론).
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
