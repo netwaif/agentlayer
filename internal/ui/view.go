@@ -485,7 +485,8 @@ func (m Model) viewBody() string {
 	if s := m.starterLine(); s != "" {
 		b.WriteString(s + "\n")
 	}
-	b.WriteString(styleHeader.Render("STATE    "+cli.PadRight("AGENT", 8)+cli.PadRight("SESSION", 21)+cli.PadRight("TASK", 31)+"DIR·SINCE") + "\n")
+	sw := m.sessionColWidth()
+	b.WriteString(styleHeader.Render("STATE    "+cli.PadRight("AGENT", 8)+cli.PadRight("SESSION", sw+1)+cli.PadRight("TASK", 31)+"DIR·SINCE") + "\n")
 
 	// 행을 먼저 만들고 화면 높이에 맞는 창만 출력한다 (커서 추적 스크롤).
 	var rows []string
@@ -504,7 +505,7 @@ func (m Model) viewBody() string {
 			// 상태 색은 살리면서 바가 중간에 끊기지 않게 한다.
 			st := stateText(a, m.now)
 			rest := fmt.Sprintf(" %s %s %s %s · %s",
-				cli.PadRight(a.Kind, 7), cli.PadRight(cli.SessionLabel(a), 20),
+				cli.PadRight(a.Kind, 7), cli.PadRight(cli.SessionLabel(a), sw),
 				cli.PadRight(task, 30),
 				cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
 			if m.discordWired[a.Tmux.Session] {
@@ -532,7 +533,7 @@ func (m Model) viewBody() string {
 			continue
 		}
 		line := fmt.Sprintf("  %s %s %s %s %s · %s",
-			stateBadge(a, m.now), cli.PadRight(a.Kind, 7), cli.PadRight(cli.SessionLabel(a), 20),
+			stateBadge(a, m.now), cli.PadRight(a.Kind, 7), cli.PadRight(cli.SessionLabel(a), sw),
 			cli.PadRight(task, 30),
 			cli.ShortenHome(a.CWD), cli.Since(a.StateSince, m.now))
 		if m.discordWired[a.Tmux.Session] {
@@ -624,4 +625,18 @@ func helpLine(items ...[2]string) string {
 		parts = append(parts, styleHelpKey.Render(it[0])+" "+styleHelpTxt.Render(it[1]))
 	}
 	return strings.Join(parts, styleHelp.Render(" · "))
+}
+
+// sessionColWidth는 SESSION 열 너비 — 가장 긴 세션 문구("이름 (스레드 N)")에 맞춘다.
+// 텍스트 status처럼 동적으로 잡되, 기본 20칸 아래로 줄이지 않고 36칸 위로는 늘리지 않는다
+// (그 이상은 TASK·DIR이 화면 밖으로 밀리므로 잘리는 쪽이 낫다).
+func (m Model) sessionColWidth() int {
+	const minW, maxW = 20, 36
+	w := minW
+	for _, a := range m.agents {
+		if lw := runewidth.StringWidth(cli.SessionLabel(a)); lw > w {
+			w = lw
+		}
+	}
+	return min(w, maxW)
 }

@@ -66,3 +66,37 @@ func TestClampLinesANSI(t *testing.T) {
 		t.Errorf("폭 이내 줄이 변형됨")
 	}
 }
+
+// SESSION 열은 가장 긴 세션 문구("이름 (스레드 N)")에 맞춰 넓어져 DIR 열이 밀리지 않는다.
+// 고정 20칸이던 때는 "search-youtube-bot (스레드 1)"이 DIR을 8칸 밀어 행마다 열이 어긋났다.
+func TestSessionColumnWidensForThreadBadge(t *testing.T) {
+	m := fixtureModel(t)
+	m.width, m.height = 200, 30
+	m.agents[0].Tmux.Session = "search-youtube-bot"
+	m.agents[0].Threads = 1
+	m.agents[0].CWD = "/Users/soonho/a"
+	m.agents[1].CWD = "/Users/soonho/b"
+	m.cursor = 1 // 0번(긴 문구)은 일반 행, 1번은 선택 행 — 둘 다 같은 열에 DIR이 와야 한다
+
+	if got, want := m.sessionColWidth(), ansi.StringWidth("search-youtube-bot (스레드 1)"); got != want {
+		t.Fatalf("sessionColWidth = %d, want %d", got, want)
+	}
+	var cols []int
+	for _, ln := range strings.Split(m.View(), "\n") {
+		plain := ansi.Strip(ln)
+		if i := strings.Index(plain, "~/a"); i >= 0 {
+			cols = append(cols, ansi.StringWidth(plain[:i]))
+		}
+		if i := strings.Index(plain, "~/b"); i >= 0 {
+			cols = append(cols, ansi.StringWidth(plain[:i]))
+		}
+	}
+	if len(cols) != 2 || cols[0] != cols[1] {
+		t.Fatalf("DIR 열 시작 위치가 행마다 달라야 안 됨: %v", cols)
+	}
+
+	m.agents[0].Tmux.Session = strings.Repeat("x", 60)
+	if got := m.sessionColWidth(); got != 36 {
+		t.Fatalf("상한 36칸이어야 함, got %d", got)
+	}
+}
