@@ -36,6 +36,15 @@ func TestHelpTextMentionsKeyFlags(t *testing.T) {
 	}
 }
 
+func TestHelpMentionsSendAndTask(t *testing.T) {
+	h := HelpText()
+	for _, want := range []string{"send <세션[:창]>", "task assign"} {
+		if !strings.Contains(h, want) {
+			t.Errorf("도움말에 %q 누락", want)
+		}
+	}
+}
+
 func TestHelpTextTerminalLabelByOS(t *testing.T) {
 	if !strings.HasPrefix(helpText("darwin"), "agentlayer — iTerm2+tmux") {
 		t.Error("darwin 첫 줄은 iTerm2+tmux")

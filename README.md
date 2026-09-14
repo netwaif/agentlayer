@@ -138,6 +138,27 @@ agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참
 - `browser_fx`(선택): 에이전트가 브라우저를 조작할 때 AI 커서·테두리 글로우를
   그린다. 기본 `true`. `false`면 효과만 꺼진다(아래 "조작 효과")
 
+## 세션 지시·업무 보고 (AI 회사 배관)
+
+총괄 세션이 직원 세션에 일을 주고, 직원이 멈추면(끝남·승인 대기·에러) 자동으로 보고받는 최소 배관이다.
+직원 지침에 보고 명령이 필요 없다 — 상태 전이가 곧 보고다.
+
+```bash
+agentlayer send collab-bot "협업 제안 3건 요약해줘"          # idle·DONE 세션에만 들어간다
+agentlayer send search-youtube-bot:t170966 - < 업무요청.md   # 스레드 창(t+6자리)에 여러 줄 본문
+agentlayer task assign VIDEO-07 search-youtube-bot:t170966 --inbox ~/ai-folder/company/runtime/inbox
+agentlayer task list
+agentlayer task watch ~/ai-folder/company/runtime/inbox     # 총괄이 Monitor로 띄워 두는 상주 수신
+agentlayer task done VIDEO-07
+```
+
+- `send`는 `WORK`(작업 중)·`WAIT`(승인창)에는 넣지 않는다. `--force`로 강제. `dead`는 거부.
+- 등록된 세션의 `DONE`·`WAIT`·`ERR` 전이를 hook이 `<inbox>/pending/<id>.json`으로 쓴다
+  (`task_id`·세션·창·이전/현재 상태·요약·승인 문구·cwd·시각). heartbeat·승인됨·읽음은 무음.
+- `task watch`는 정상 건을 한 줄 JSON으로 출력하고 `received/`로 옮긴다. 깨진 파일·심볼릭 링크·16KiB 초과는 `quarantine/`.
+- 세션 소실(dead)은 hook이 아니라 `status`·TUI 실행 때 판정되므로 보고되지 않는다 — `agentlayer status`로 본다.
+- 회사 폴더·총괄 절차·직원 등록은 별도 플러그인 `ai-company`가 만든다(이 바이너리는 배관만).
+
 ## Worktree 병렬 모드
 
 같은 저장소에서 여러 에이전트(claude/codex/gemini 혼합 자유)가 서로 파일을

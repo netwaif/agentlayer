@@ -30,6 +30,8 @@ func helpText(goos string) string {
   wake-all       전 세션에 "이어서하자" 전달  [--yes] [--except 이름,..] [--watch] [--timeout 10m]
   close-all      전 세션에 "세션 마감" 전달  (플래그는 wake-all과 동일)
   broadcast <메시지>  전 세션에 임의 메시지 전달
+  send <세션[:창]> <메시지|->  세션 하나에 지시 전달 (idle·DONE만; --force로 강제, '-'는 stdin 본문)
+  task assign|list|done|watch  업무↔세션 등록·상주 수신 — 등록된 세션의 DONE·WAIT·ERR 전이가 hook에서 <inbox>/pending/ 에 자동 보고됨
   wt <명령>      worktree 워커 관리 (new·list·diff·test·review·send·merge·clean) — 'agentlayer wt'로 상세
   browser [open|pick|shot|errors|preview|cookies|mcp]  에이전트 전용 브라우저 (기동/탭 열기/요소찍기/캡처/콘솔에러/wt 프리뷰/쿠키 import·list·clear·export/MCP 연동 명령)
   version        버전 정보 (-v/--version)

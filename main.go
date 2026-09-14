@@ -3,14 +3,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,6 +26,7 @@ import (
 	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/starter"
 	"github.com/netwaif/agentlayer/internal/state"
+	"github.com/netwaif/agentlayer/internal/task"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/ui"
 	"github.com/netwaif/agentlayer/internal/usage"
@@ -67,6 +71,26 @@ func run(args []string) error {
 		return runRestore(args[1:])
 	case "info":
 		return runInfo(args[1:])
+	case "send":
+		st, err := state.NewStore(state.DefaultDir())
+		if err != nil {
+			return err
+		}
+		if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
+			_ = scan.Sync(st, panes, time.Now())
+		}
+		return cli.RunSend(os.Stdout, os.Stdin, st, tmuxx.Tmux{}, args[1:])
+	case "task":
+		st, err := state.NewStore(state.DefaultDir())
+		if err != nil {
+			return err
+		}
+		if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
+			_ = scan.Sync(st, panes, time.Now())
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return cli.RunTask(ctx, os.Stdout, st, state.DefaultDir(), args[1:], time.Now())
 	case "wake-all", "close-all", "broadcast":
 		return runAll(args[0], args[1:])
 	case "version", "--version", "-v":
@@ -434,6 +458,11 @@ func runHook(args []string) error {
 			transitioned = true
 		}
 		notify.Notify(cfg, sender, a, prev, to)
+		if rep, ok := task.ReportFor(state.DefaultDir(), a, prev, to, time.Now()); ok {
+			if _, err := task.WriteReport(rep); err != nil {
+				fmt.Fprintln(os.Stderr, "agentlayer task report:", err) // hook은 에이전트를 막지 않는다
+			}
+		}
 	})
 	// 전이가 실제로 있었으면 카드 즉시 갱신을 백그라운드로 발사한다.
 	// hook은 에이전트를 막으면 안 되므로 기다리지 않는다(detached).
