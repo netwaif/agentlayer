@@ -261,6 +261,40 @@ func TestTaskDoneMarksCompanyTask(t *testing.T) {
 	}
 }
 
+// task.md에 yaml status: 줄이 없으면 board.SetStatus가 ErrNoStatus로 실패한다 — 이때 task done은
+// 오류를 반환해야 하고, 등록을 먼저 지우면 안 된다(재시도할 수 있어야 함).
+func TestTaskDoneSetStatusFailureKeepsRegistration(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
+	root := t.TempDir()
+	dir := filepath.Join(root, "tasks", "LAB-1")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// yaml 블록이 없어 SetStatus가 ErrNoStatus로 실패한다.
+	if err := os.WriteFile(filepath.Join(dir, "task.md"), []byte("# LAB-1\n본문만 있고 yaml 없음\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inbox := filepath.Join(root, "runtime", "inbox")
+	if err := os.MkdirAll(inbox, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"assign", "LAB-1", "collab-bot", "--inbox", inbox}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"done", "LAB-1"}, time.Now()); err == nil {
+		t.Error("SetStatus 실패는 task done 오류여야 함")
+	}
+	list, _ := task.List(stateDir)
+	if len(list) != 1 {
+		t.Errorf("실패 시 등록은 남아 있어야 함: %v", list)
+	}
+}
+
 func TestTaskDoneGoneNeedsRoot(t *testing.T) {
 	stateDir := t.TempDir()
 	st, _ := state.NewStore(stateDir)

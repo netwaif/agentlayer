@@ -59,13 +59,14 @@ func taskDone(w io.Writer, stateDir string, args []string, now time.Time) error 
 	}
 	id := pos[0]
 	// 등록에서 루트·inbox를 얻는다(있으면). 없으면 --root가 있어야 보드를 닫을 수 있다.
-	inbox := ""
+	inbox, found := "", false
 	list, err := task.List(stateDir)
 	if err != nil {
 		return err
 	}
 	for _, as := range list {
 		if as.TaskID == id {
+			found = true
 			inbox = as.Inbox
 			if root == "" {
 				if r, _ := as.BoardRootID(); r != "" {
@@ -74,16 +75,15 @@ func taskDone(w io.Writer, stateDir string, args []string, now time.Time) error 
 			}
 		}
 	}
-	found, err := task.Done(stateDir, id)
-	if err != nil {
-		return err
-	}
 	if root == "" {
-		if found {
-			fmt.Fprintf(w, "업무 %s 등록 해제 (보드 연결 없음)\n", id)
-			return nil
+		if !found {
+			return fmt.Errorf("업무 %q이 등록돼 있지 않습니다 — 보드만 닫으려면 --root <회사루트>", id)
 		}
-		return fmt.Errorf("업무 %q이 등록돼 있지 않습니다 — 보드만 닫으려면 --root <회사루트>", id)
+		if _, err := task.Done(stateDir, id); err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "업무 %s 등록 해제 (보드 연결 없음)\n", id)
+		return nil
 	}
 	if abs, err := filepath.Abs(root); err == nil {
 		root = abs
@@ -91,11 +91,16 @@ func taskDone(w io.Writer, stateDir string, args []string, now time.Time) error 
 	if inbox == "" {
 		inbox = filepath.Join(root, "runtime", "inbox")
 	}
+	// 보드를 먼저 닫는다 — 실패하면 등록을 그대로 둬 재시도할 수 있게 한다(등록 해제가 먼저면
+	// SetStatus·WriteReport 실패 시 root·inbox를 잃어버려 복구가 어려워진다).
 	ready, err := task.MarkDone(root, id, inbox, now)
 	if err != nil {
 		return err
 	}
 	if found {
+		if _, err := task.Done(stateDir, id); err != nil {
+			return err
+		}
 		fmt.Fprintf(w, "업무 %s 등록 해제 · task.md done\n", id)
 	} else {
 		fmt.Fprintf(w, "업무 %s task.md done (등록은 없었음)\n", id)

@@ -173,3 +173,33 @@ func TestMarkDoneWithoutTaskFileFails(t *testing.T) {
 		t.Error("task.md 없으면 에러")
 	}
 }
+
+// 이미 done인 업무에 MarkDone을 다시 걸어도(재시도·중복 호출) [COMPLETE]가 두 번 쌓이거나
+// 이미 배정 가능해진 자식에게 READY가 다시 나가면 안 된다.
+func TestMarkDoneIsIdempotent(t *testing.T) {
+	root := t.TempDir()
+	inbox := filepath.Join(root, "runtime", "inbox")
+	writeCompanyTask(t, root, "A", "reviewing", "[]")
+	writeCompanyTask(t, root, "C", "pending", "[A]")
+	now := time.Now()
+	if _, err := MarkDone(root, "A", inbox, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := Poll(inbox); err != nil || !ok {
+		t.Fatalf("첫 MarkDone은 READY를 내야 함: ok=%v err=%v", ok, err)
+	}
+	ready, err := MarkDone(root, "A", inbox, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ready) != 0 {
+		t.Errorf("이미 done이면 ready는 비어야 함: %v", ready)
+	}
+	lg, _ := os.ReadFile(filepath.Join(root, "tasks", "A", "log.md"))
+	if strings.Count(string(lg), "[COMPLETE]") != 1 {
+		t.Errorf("[COMPLETE]는 한 번만 기록돼야 함:\n%s", lg)
+	}
+	if _, ok, _ := Poll(inbox); ok {
+		t.Error("두 번째 MarkDone은 READY를 다시 쓰면 안 됨")
+	}
+}

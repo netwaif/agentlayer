@@ -68,8 +68,17 @@ func ApplyTransition(stateDir string, a *state.Agent, prev, to state.AgentState,
 }
 
 // MarkDone은 업무를 done으로 닫고([COMPLETE]), 그 결과 부모가 전부 done이 된 pending 자식마다
-// inbox에 READY 이벤트를 쓴다. inbox가 비면 이벤트는 쓰지 않는다. 돌려주는 값은 이벤트를 쓴 자식 ID들.
+// inbox에 READY 이벤트를 쓴다. inbox가 비면 이벤트는 쓰지 않는다. 이미 done인 업무는 아무것도 쓰지
+// 않고 (nil, nil)을 돌려준다 — 재실행해도 안전하다(중복 [COMPLETE]·중복 READY 없음). 돌려주는 값은
+// 이벤트를 쓴 자식 ID들.
 func MarkDone(root, id, inbox string, now time.Time) ([]string, error) {
+	tf, err := board.ReadTaskFile(root, id)
+	if err != nil {
+		return nil, err
+	}
+	if tf.Status == "done" {
+		return nil, nil
+	}
 	if err := board.SetStatus(root, id, "done", now); err != nil {
 		return nil, err
 	}
