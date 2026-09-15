@@ -138,6 +138,8 @@ agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참
   MCP 설정이 이 주소를 고정으로 보므로 바꾸면 `agentlayer browser mcp`를 다시 등록
 - `browser_fx`(선택): 에이전트가 브라우저를 조작할 때 AI 커서·테두리 글로우를
   그린다. 기본 `true`. `false`면 효과만 꺼진다(아래 "조작 효과")
+- `company_root`(선택): AI 회사 루트(`tasks/`·`runtime/inbox/`가 있는 폴더). 비면 등록된 업무의 `<root>/runtime/inbox` 경로에서 유추한다.
+- `board_stale_ready`(선택, 기본 `30m`, 하한 `1m`): 업무 보드에서 ready·blocked 카드가 이 시간 넘게 방치되면 ⚠(Go duration 문자열).
 
 ## 세션 지시·업무 보고 (AI 회사 배관)
 
