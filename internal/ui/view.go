@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/usage"
@@ -342,6 +343,32 @@ func (m Model) starterLine() string {
 	return styleHelp.Render("MultiAgent: ") + strings.Join(parts, styleHelp.Render(" · "))
 }
 
+// boardLine은 업무 보드 집계 한 줄 — ready·running·blocked·review 카드 수(todo·done은 생략)와,
+// 방치 카드(ready·blocked가 board_stale_ready를 넘김)가 있으면 ⚠ N. 카드가 없으면(회사 루트
+// 없음 포함) 빈 문자열.
+func (m Model) boardLine() string {
+	if len(m.boardCards) == 0 {
+		return ""
+	}
+	counts := board.Counts(m.boardCards)
+	parts := []string{
+		fmt.Sprintf("ready %d", counts[board.ColReady]),
+		fmt.Sprintf("running %d", counts[board.ColRunning]),
+		fmt.Sprintf("blocked %d", counts[board.ColBlocked]),
+		fmt.Sprintf("review %d", counts[board.ColReview]),
+	}
+	stale := 0
+	for _, c := range m.boardCards {
+		if board.StaleReady(c, m.now, m.boardStale) {
+			stale++
+		}
+	}
+	if stale > 0 {
+		parts = append(parts, fmt.Sprintf("⚠ %d", stale))
+	}
+	return styleHelp.Render("보드: ") + strings.Join(parts, styleHelp.Render(" · "))
+}
+
 // usageView는 u 키로 전환하는 사용량 전용 화면 — Discord 카드와 같은 정보.
 func (m Model) usageView() string {
 	var b strings.Builder
@@ -485,6 +512,9 @@ func (m Model) viewBody() string {
 	if s := m.starterLine(); s != "" {
 		b.WriteString(s + "\n")
 	}
+	if s := m.boardLine(); s != "" {
+		b.WriteString(s + "\n")
+	}
 	sw := m.sessionColWidth()
 	b.WriteString(styleHeader.Render("STATE    "+cli.PadRight("AGENT", 8)+cli.PadRight("SESSION", sw+1)+cli.PadRight("TASK", 31)+"DIR·SINCE") + "\n")
 
@@ -615,7 +645,7 @@ func helpLine(items ...[2]string) string {
 	if len(items) == 0 {
 		items = [][2]string{
 			{"j/k", "이동"}, {"enter", "점프+읽음"}, {"o", "읽음"}, {"i", "상세"},
-			{"g", "git"}, {"b", "지목"}, {"s", "캡처"}, {"p", "프리뷰"},
+			{"g", "git"}, {"b", "지목"}, {"s", "캡처"}, {"p", "프리뷰"}, {"t", "업무 보드"},
 			{"u", "사용량"}, {"W", "전체기상"}, {"C", "전체마감"},
 			{"B", "전체지시"}, {"r", "새로고침"}, {"q", "종료"},
 		}

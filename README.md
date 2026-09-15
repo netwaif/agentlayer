@@ -66,7 +66,7 @@ agentlayer는 tmux 설정을 자동으로 수정하지 않는다.
 ## 사용
 
 ```bash
-agentlayer            # TUI 관제탑 (j/k 이동, enter 점프+읽음, o 읽음, b 지목, s 캡처, p 프리뷰, u 사용량 뷰, r 새로고침, q 종료)
+agentlayer            # TUI 관제탑 (j/k 이동, enter 점프+읽음, o 읽음, b 지목, s 캡처, p 프리뷰, t 업무 보드, u 사용량 뷰, r 새로고침, q 종료)
 agentlayer status     # plain 표 — SSH·스크립트용
 agentlayer status --json
 agentlayer card       # Discord 상태 카드 업서트 (주기 실행용) / --out은 JSON만

@@ -3,6 +3,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/browser"
 	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/config"
@@ -54,10 +56,12 @@ type usageMsg struct {
 // ctxMsg는 빠른 로컬 수집 결과 — 파일 읽기뿐이라 즉시 뜬다.
 // coach가 느려도 이 정보(모델·ctx·⌁·기본모델·MultiAgent)는 기다리지 않는다.
 type ctxMsg struct {
-	ctx       map[string]usage.CtxInfo
-	starter   []starter.Task
-	discord   map[string]bool   // tmux 세션 → Discord 봇 여부 (⌁ 마크)
-	defModels map[string]string // CLI별 기본 모델 설정 (빈 값 = 미설정/자동)
+	ctx        map[string]usage.CtxInfo
+	starter    []starter.Task
+	discord    map[string]bool   // tmux 세션 → Discord 봇 여부 (⌁ 마크)
+	defModels  map[string]string // CLI별 기본 모델 설정 (빈 값 = 미설정/자동)
+	boardCards []board.Card      // 업무 보드 카드 (회사 루트 없으면 nil)
+	boardStale time.Duration     // board_stale_ready — ⚠ 판정 기준
 }
 
 // jumpDoneMsg는 점프 실행 후 종료 신호.
@@ -123,6 +127,9 @@ type Model struct {
 	defModels       map[string]string        // CLI별 기본 모델 설정
 	devServers      []browser.DevServer      // 에이전트 폴더 아래 listen 중인 dev 서버 (🌐 뱃지·p)
 	browserPort     int                      // 전용 Chrome CDP 포트 — dev 서버 목록에서 제외
+	boardCards      []board.Card             // 업무 보드 카드 (헤더 집계 줄용, 회사 루트 없으면 nil)
+	boardStale      time.Duration            // board_stale_ready — ⚠ 판정 기준
+	cfg             *config.Config           // New()에서 한 번 로드 (previewInterval·browserPort와 동일, 핫리로드 없음)
 	// 주입점 (테스트용)
 	devScan       func(paths map[string]string) []browser.DevServer        // dev 서버 스캔
 	openPreview   func(servers []browser.DevServer) error                  // p: 프리뷰 창 열기
@@ -203,7 +210,8 @@ func New(st *state.Store, tm tmuxx.Tmux) Model {
 		codexRoot:   usage.CodexSessionsRoot(),
 		geminiDir:   usage.GeminiDir(),
 		starterRoot: root,
-		homeDir:     home}
+		homeDir:     home,
+		cfg:         cfg}
 }
 
 func (m Model) Init() tea.Cmd {
@@ -298,7 +306,7 @@ func (m Model) usageCmd() tea.Cmd {
 // 어떤 소스가 없어도 관제는 계속된다.
 func (m Model) ctxCmd() tea.Cmd {
 	snapDir, codexRoot, geminiDir, st := m.snapshotDir, m.codexRoot, m.geminiDir, m.store
-	starterRoot, home := m.starterRoot, m.homeDir
+	starterRoot, home, cfg := m.starterRoot, m.homeDir, m.cfg
 	return func() tea.Msg {
 		ctx := map[string]usage.CtxInfo{}
 		dc := map[string]bool{}
@@ -308,8 +316,10 @@ func (m Model) ctxCmd() tea.Cmd {
 				dc[sess] = true
 			}
 		}
+		// 회사 루트를 못 찾으면(err/root=="") cards는 nil — boardLine()이 줄을 생략한다.
+		_, cards, _ := cli.LoadBoard(st, st.Dir, cfg, time.Now())
 		return ctxMsg{ctx: ctx, starter: starter.ActiveTasks(starterRoot), discord: dc,
-			defModels: usage.DefaultModels(home)}
+			defModels: usage.DefaultModels(home), boardCards: cards, boardStale: cfg.BoardStaleLimit()}
 	}
 }
 
@@ -395,6 +405,28 @@ func (m Model) attachCmd(a *state.Agent) tea.Cmd {
 	return tea.ExecProcess(c, func(err error) tea.Msg { return attachDoneMsg{err: err} })
 }
 
+// boardCmd는 agentlayer board를 서브프로세스로 실행해 보드 HTML을 만들고 전용 브라우저로 연다
+// (browserCmd와 같은 메커니즘 — 바이너리를 서브프로세스로 spawn). browser pick/shot과 달리
+// board는 대화형이 아니므로 터미널을 넘기는 tea.ExecProcess 대신 출력을 캡처해 notice로
+// 보여준다 — 회사 루트를 못 찾았을 때의 CLI 에러 문구(company_root 언급)가 그대로 전달된다.
+func (m Model) boardCmd() tea.Cmd {
+	return func() tea.Msg {
+		bin, err := os.Executable()
+		if err != nil {
+			bin = "agentlayer"
+		}
+		out, err := exec.Command(bin, "board").CombinedOutput()
+		text := strings.TrimSpace(string(out))
+		if err != nil {
+			if text == "" {
+				text = err.Error()
+			}
+			return noticeMsg{err: errors.New(text)}
+		}
+		return noticeMsg{text: "업무 보드 열림"}
+	}
+}
+
 // startResume은 y 확인된 죽은 세션의 대화를 새 창에서 되살리고 그리로 이동한다.
 // tmux 안(팝업): 활성 클라이언트의 세션에 명시 타겟으로 창 생성(자동 활성) 후
 // TUI 종료. 밖: 원 세션이 살아 있으면 거기 만들어 attach, 없으면 CLI 안내 폴백.
@@ -475,6 +507,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.discordWired = msg.discord
 		}
 		m.defModels = msg.defModels
+		m.boardCards = msg.boardCards
+		m.boardStale = msg.boardStale
 		return m, nil
 
 	case refreshMsg:
@@ -673,6 +707,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.browserCmd("browser", "shot", "--send", "--agent", a.ID)
 			}
 			return m, nil
+		case "t": // 업무 보드를 전용 브라우저 창으로
+			m.err = nil
+			return m, m.boardCmd()
 		case "p": // 선택 에이전트 폴더의 dev 서버를 전용 브라우저 창으로
 			a := m.selected()
 			servers := m.serversFor(a)

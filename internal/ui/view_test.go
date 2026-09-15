@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/netwaif/agentlayer/internal/board"
 )
 
 // 좁은 터미널에서 어떤 줄도 화면 폭을 넘으면 안 된다 — 넘으면 터미널 래핑으로
@@ -64,6 +66,43 @@ func TestClampLinesANSI(t *testing.T) {
 	}
 	if short := "짧은 줄"; clampLines(short, 20) != short {
 		t.Errorf("폭 이내 줄이 변형됨")
+	}
+}
+
+// boardLine은 열별 집계 + 방치 카드(⚠)를 한 줄로 보여주고, 카드가 없으면 빈 문자열이다.
+func TestBoardLineRendersCounts(t *testing.T) {
+	m := fixtureModel(t)
+	m.boardStale = 30 * time.Minute
+	m.boardCards = []board.Card{
+		{ID: "a1", Column: board.ColReady, Ready: t0.Add(-time.Hour)}, // 30분 넘게 방치 → ⚠
+		{ID: "a2", Column: board.ColRunning},
+		{ID: "a3", Column: board.ColBlocked, Updated: t0},
+		{ID: "a4", Column: board.ColReview},
+		{ID: "a5", Column: board.ColTodo},
+		{ID: "a6", Column: board.ColDone},
+	}
+	v := m.boardLine()
+	for _, want := range []string{"보드:", "ready 1", "running 1", "blocked 1", "review 1", "⚠ 1"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("보드 줄에 %q 없음: %q", want, v)
+		}
+	}
+	if strings.Contains(v, "todo") || strings.Contains(v, "done 1") {
+		t.Errorf("todo/done은 표시하지 않아야 함: %q", v)
+	}
+}
+
+func TestBoardLineEmptyWithoutCards(t *testing.T) {
+	m := fixtureModel(t)
+	m.boardCards = nil
+	if v := m.boardLine(); v != "" {
+		t.Errorf("카드 없으면 빈 문자열이어야 함: %q", v)
+	}
+}
+
+func TestHelpLineListsBoardKey(t *testing.T) {
+	if v := helpLine(); !strings.Contains(v, "업무 보드") {
+		t.Errorf("도움말에 업무 보드 없음: %q", v)
 	}
 }
 

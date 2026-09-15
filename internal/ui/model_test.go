@@ -632,6 +632,16 @@ func TestShotKeyRunsShotSendForSelected(t *testing.T) {
 	}
 }
 
+// t 키는 업무 보드(agentlayer board) 실행 명령을 돌려줘야 한다 — 실제 서브프로세스는
+// 실행하지 않고(테스트 환경엔 바이너리가 없다) cmd가 non-nil인지만 확인한다.
+func TestBoardKeyReturnsCmd(t *testing.T) {
+	m := fixtureModel(t)
+	_, cmd := m.Update(key("t"))
+	if cmd == nil {
+		t.Fatal("t 키는 업무 보드 명령을 반환해야 함")
+	}
+}
+
 func TestHelpLineListsBrowserKeys(t *testing.T) {
 	v := fixtureModel(t).View()
 	for _, k := range []string{"지목", "캡처", "프리뷰"} {
