@@ -37,6 +37,10 @@ type Config struct {
 	BrowserPort int `json:"browser_port,omitempty"`
 	// 에이전트가 브라우저를 조작할 때 AI 커서·테두리 글로우를 그린다. 기본 켜짐.
 	BrowserFx *bool `json:"browser_fx,omitempty"`
+	// AI 회사 루트(tasks/·runtime/inbox/가 있는 폴더). 비면 등록된 업무의 inbox 경로에서 유추한다.
+	CompanyRoot string `json:"company_root,omitempty"`
+	// 업무 보드에서 ready·blocked 카드가 이 시간 넘게 방치되면 ⚠ (Go duration, 기본 30m, 하한 1m).
+	BoardStaleReady string `json:"board_stale_ready,omitempty"`
 }
 
 const (
@@ -81,6 +85,23 @@ func (c *Config) BrowserFxEnabled() bool {
 		return true
 	}
 	return *c.BrowserFx
+}
+
+const (
+	defaultBoardStale = 30 * time.Minute
+	minBoardStale     = time.Minute
+)
+
+// BoardStaleLimit는 board_stale_ready를 반영한 방치 기준. 파싱 불가·0 이하는 기본값, 하한 미만은 하한.
+func (c *Config) BoardStaleLimit() time.Duration {
+	d, err := time.ParseDuration(c.BoardStaleReady)
+	if err != nil || d <= 0 {
+		return defaultBoardStale
+	}
+	if d < minBoardStale {
+		return minBoardStale
+	}
+	return d
 }
 
 // BrowserPortOrDefault는 browser_port를 반영한 디버깅 포트. 범위 밖(0 이하·65535 초과)은 기본값.

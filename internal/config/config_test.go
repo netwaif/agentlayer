@@ -125,3 +125,13 @@ func TestBrowserFxEnabled(t *testing.T) {
 		t.Fatal("false면 꺼짐")
 	}
 }
+
+func TestBoardStaleLimit(t *testing.T) {
+	cases := map[string]time.Duration{"": 30 * time.Minute, "bad": 30 * time.Minute, "10s": time.Minute, "2h": 2 * time.Hour}
+	for in, want := range cases {
+		c := &Config{BoardStaleReady: in}
+		if got := c.BoardStaleLimit(); got != want {
+			t.Errorf("%q: %v, want %v", in, got, want)
+		}
+	}
+}
