@@ -900,7 +900,7 @@ func companyRoot(t *testing.T, id string) string {
 func TestTaskAssignLinksTaskDirAndMarksInProgress(t *testing.T) {
 	stateDir := t.TempDir()
 	st, _ := state.NewStore(stateDir)
-	_ = st.Put(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
 		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
 	root := companyRoot(t, "LAB-1")
 	var out bytes.Buffer
@@ -926,7 +926,7 @@ func TestTaskAssignLinksTaskDirAndMarksInProgress(t *testing.T) {
 func TestTaskAssignWithoutTaskFileWarnsButRegisters(t *testing.T) {
 	stateDir := t.TempDir()
 	st, _ := state.NewStore(stateDir)
-	_ = st.Put(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
 		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
 	var out bytes.Buffer
 	err := RunTask(context.Background(), &out, st, stateDir,
@@ -946,7 +946,7 @@ func TestTaskAssignWithoutTaskFileWarnsButRegisters(t *testing.T) {
 func TestTaskAssignExplicitRoot(t *testing.T) {
 	stateDir := t.TempDir()
 	st, _ := state.NewStore(stateDir)
-	_ = st.Put(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
 		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
 	root := companyRoot(t, "LAB-1")
 	var out bytes.Buffer
@@ -1304,7 +1304,7 @@ func TestRunSendLogsToLinkedTask(t *testing.T) {
 	st, _ := state.NewStore(stateDir)
 	a := &state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
 		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}}
-	_ = st.Put(a)
+	_ = st.Save(a)
 	root := t.TempDir()
 	dir := filepath.Join(root, "tasks", "LAB-1")
 	_ = os.MkdirAll(dir, 0o755)
@@ -1325,7 +1325,7 @@ func TestRunSendLogsToLinkedTask(t *testing.T) {
 func TestRunSendUnlinkedWritesNoLog(t *testing.T) {
 	stateDir := t.TempDir()
 	st, _ := state.NewStore(stateDir)
-	_ = st.Put(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
 		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
 	var out bytes.Buffer
 	if err := RunSend(&out, nil, st, stateDir, &fakeSender{}, []string{"collab-bot", "hi"}); err != nil {
@@ -1475,7 +1475,7 @@ func TestMarkDoneWithoutTaskFileFails(t *testing.T) {
 func TestTaskDoneMarksCompanyTask(t *testing.T) {
 	stateDir := t.TempDir()
 	st, _ := state.NewStore(stateDir)
-	_ = st.Put(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
 		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
 	root := companyRoot(t, "LAB-1")
 	inbox := filepath.Join(root, "runtime", "inbox")
@@ -1882,12 +1882,12 @@ func boardContainer(b *BoardData, now time.Time) map[string]any {
 			lines = append(lines, "-# "+truncateRunes(l, 60))
 		}
 	}
-	return map[string]any{"type": typeContainer, "accent_color": accentInt("#5865F2"),
+	return map[string]any{"type": typeContainer, "accent_color": accent("#5865F2"),
 		"components": []any{map[string]any{"type": typeText, "content": strings.Join(lines, "\n")}}}
 }
 ```
 
-(`typeContainer`·`accentInt`·`since`·`truncateRunes`의 실제 이름은 `agentsContainer`의 반환부(`card.go:260-300`)를 보고 같은 것을 쓴다. accent 색은 AgentLoops 하우스 팔레트에서 이미 카드가 쓰는 색 중 하나를 고른다 — 새 색 도입 금지.)
+(`typeContainer`·`accent`·`since`·`truncateRunes`는 이미 card.go에 있다 — 실제 시그니처는 `agentsContainer`의 반환부(`card.go:260-300`)를 보고 같은 것을 쓴다. accent 색은 AgentLoops 하우스 팔레트에서 이미 카드가 쓰는 색 중 하나를 고른다 — 새 색 도입 금지.)
 
 `main.go` publishCard — `build` 클로저 앞에:
 
@@ -2003,7 +2003,7 @@ import (
 func TestRunBoardJSONAndOut(t *testing.T) {
 	stateDir := t.TempDir()
 	st, _ := state.NewStore(stateDir)
-	_ = st.Put(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateWorking,
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateWorking,
 		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
 	root := companyRoot(t, "LAB-1")
 	_ = task.Assign(stateDir, task.Assignment{TaskID: "LAB-1", AgentID: "claude-%1", Session: "collab-bot", Pane: "%1",
