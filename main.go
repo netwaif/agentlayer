@@ -463,6 +463,17 @@ func runHook(args []string) error {
 			transitioned = true
 		}
 		notify.Notify(cfg, sender, a, prev, to)
+		// 회사 보드: 등록된 업무면 task.md status·log.md를 먼저 갱신(2초 상한, 실패는 stderr만)
+		bdone := make(chan error, 1)
+		go func() { _, err := task.ApplyTransition(st.Dir, a, prev, to, time.Now()); bdone <- err }()
+		select {
+		case err := <-bdone:
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "agentlayer board:", err)
+			}
+		case <-time.After(2 * time.Second):
+			fmt.Fprintln(os.Stderr, "agentlayer board: 2초 안에 task.md를 못 썼습니다")
+		}
 		if rep, ok := task.ReportFor(st.Dir, a, prev, to, time.Now()); ok {
 			// hook은 에이전트를 절대 막지 않는다 — 보고 쓰기가 느려도(NAS·SMB
 			// inbox 등) 최대 2초만 기다리고 포기한다.

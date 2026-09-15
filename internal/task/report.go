@@ -24,6 +24,7 @@ type Report struct {
 	Task    string    `json:"task,omitempty"`
 	Ask     string    `json:"ask,omitempty"`
 	CWD     string    `json:"cwd,omitempty"`
+	TaskDir string    `json:"task_dir,omitempty"`
 	At      time.Time `json:"at"`
 	Inbox   string    `json:"-"`
 }
@@ -56,7 +57,7 @@ func ReportFor(stateDir string, a *state.Agent, prev, to state.AgentState, now t
 		return nil, false
 	}
 	r := &Report{Version: 1, ID: NewID(), TaskID: as.TaskID, Session: a.Tmux.Session, Window: a.Tmux.WindowName,
-		Kind: a.Kind, From: string(prev), To: string(to), Task: a.Task, CWD: a.CWD, At: now, Inbox: as.Inbox}
+		Kind: a.Kind, From: string(prev), To: string(to), Task: a.Task, CWD: a.CWD, TaskDir: as.TaskDir, At: now, Inbox: as.Inbox}
 	if to == state.StateWaiting {
 		r.Ask = a.Ask
 	}

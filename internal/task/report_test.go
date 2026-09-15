@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,6 +89,18 @@ func TestReportForStaleAssignmentIsSilent(t *testing.T) {
 		Tmux: state.TmuxRef{Session: "new-bot", PaneID: "%16"}}
 	if _, ok := ReportFor(stateDir, a, state.StateWorking, state.StateDoneUnread, time.Now()); ok {
 		t.Error("세션이 바뀐 낡은 등록은 보고하지 않아야 함")
+	}
+}
+
+func TestReportCarriesTaskDir(t *testing.T) {
+	stateDir, root, a := linkedAgent(t)
+	rep, ok := ReportFor(stateDir, a, state.StateWorking, state.StateDoneUnread, time.Now())
+	if !ok || rep.TaskDir != filepath.Join(root, "tasks", "LAB-1") {
+		t.Errorf("rep=%+v ok=%v", rep, ok)
+	}
+	b, _ := json.Marshal(rep)
+	if !strings.Contains(string(b), `"task_dir"`) {
+		t.Errorf("JSON에 task_dir 없음: %s", b)
 	}
 }
 
