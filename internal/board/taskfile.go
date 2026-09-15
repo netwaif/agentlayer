@@ -78,12 +78,12 @@ func ReadTaskFile(root, id string) (TaskFile, error) {
 			inYAML, inParents = false, false
 		case !inYAML:
 		case inParents && strings.HasPrefix(trimmed, "- "):
-			tf.Parents = append(tf.Parents, strings.TrimSpace(strings.TrimPrefix(trimmed, "- ")))
+			tf.Parents = append(tf.Parents, stripComment(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
 		case strings.HasPrefix(trimmed, "status:"):
 			inParents = false
-			tf.Status = strings.TrimSpace(strings.TrimPrefix(trimmed, "status:"))
+			tf.Status = stripComment(strings.TrimSpace(strings.TrimPrefix(trimmed, "status:")))
 		case strings.HasPrefix(trimmed, "parents:"):
-			rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "parents:"))
+			rest := stripComment(strings.TrimSpace(strings.TrimPrefix(trimmed, "parents:")))
 			tf.Parents = parseInlineList(rest)
 			inParents = rest == "" // 여러 줄 리스트가 이어진다
 		default:
@@ -91,6 +91,16 @@ func ReadTaskFile(root, id string) (TaskFile, error) {
 		}
 	}
 	return tf, nil
+}
+
+// stripComment는 " #…"(공백+해시 → 줄 끝) 형태의 인라인 yaml 주석을 잘라낸다. status:·parents:
+// 값과 여러 줄 "- item"에서 쓴다. yaml 파서가 아니라 줄 단위 규칙이므로 값 문자열 안에 " #"가
+// 들어 있는 경우까지는 다루지 않는다(이 파일들의 실제 사용 범위에서는 없다).
+func stripComment(s string) string {
+	if i := strings.Index(s, " #"); i >= 0 {
+		s = s[:i]
+	}
+	return strings.TrimSpace(s)
 }
 
 // parseInlineList는 "[A, B]" 또는 "A, B"를 항목 목록으로. 빈 값·"[]"는 nil.
@@ -107,7 +117,9 @@ func parseInlineList(s string) []string {
 }
 
 // SetStatus는 ```yaml 블록의 status: 줄만 바꾸고(updated: 줄이 있으면 오늘 날짜로) 원자적으로 쓴다.
-// 다른 바이트는 그대로 — 총괄이 쓴 본문을 훅이 망치면 안 된다.
+// 다른 바이트는 그대로 — 총괄이 쓴 본문을 훅이 망치면 안 된다. status: 줄 자체는 통째로
+// "status: <새 값>"으로 교체하므로, 그 줄에 " #…" 인라인 주석이 있었다면 함께 사라진다(그
+// 한 줄만의 트레이드오프 — ReadTaskFile은 어차피 주석을 잘라내고 읽으므로 무해하다).
 func SetStatus(root, id, status string, now time.Time) error {
 	if !ValidID(id) {
 		return ErrBadID

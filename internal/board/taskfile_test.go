@@ -54,6 +54,31 @@ func TestReadTaskFileParentsMultilineList(t *testing.T) {
 	}
 }
 
+// 인라인 yaml 주석(" #…")은 status:·parents:(한 줄·여러 줄 모두)에서 잘려나가야 한다.
+func TestReadTaskFileStripsInlineComments(t *testing.T) {
+	root := t.TempDir()
+	writeTask(t, root, "C1", "# C1\n```yaml\nstatus: pending  # 주석\nparents: [A, B]  # 설명\n```\n")
+	tf, err := ReadTaskFile(root, "C1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tf.Status != "pending" {
+		t.Errorf("status = %q, want 주석 없이 pending", tf.Status)
+	}
+	if strings.Join(tf.Parents, ",") != "A,B" {
+		t.Errorf("parents = %v, want [A B]", tf.Parents)
+	}
+
+	writeTask(t, root, "C2", "# C2\n```yaml\nstatus: pending\nparents:\n  - A  # 설명\n  - B\n```\n")
+	tf, err = ReadTaskFile(root, "C2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(tf.Parents, ",") != "A,B" {
+		t.Errorf("여러 줄 리스트 parents = %v, want [A B]", tf.Parents)
+	}
+}
+
 func TestReadTaskFileNoYAMLIsUnknownAndTitleFallsBackToID(t *testing.T) {
 	root := t.TempDir()
 	writeTask(t, root, "X", "no heading here\n")
