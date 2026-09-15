@@ -56,15 +56,24 @@ func ApplyTransition(stateDir string, a *state.Agent, prev, to state.AgentState,
 				text = "입력 대기(승인창 아님)"
 			}
 		case "REPORT":
-			text = "DONE: " + a.Headline()
+			text = "DONE: " + headlineOrPlaceholder(a)
 		default:
-			text = a.Headline()
+			text = headlineOrPlaceholder(a)
 		}
 		if err := board.AppendLog(root, id, tag, text, now); err != nil {
 			return false, err
 		}
 	}
 	return true, nil
+}
+
+// headlineOrPlaceholder는 a.Headline()이 비어 있으면(Ask도 Task도 없는 드문 경우) "(요약 없음)"을
+// 대신 돌려준다 — [REPORT] DONE: 이나 [ERROR] 뒤에 끝공백만 남은 줄이 log.md에 쌓이면 안 된다.
+func headlineOrPlaceholder(a *state.Agent) string {
+	if h := a.Headline(); h != "" {
+		return h
+	}
+	return "(요약 없음)"
 }
 
 // MarkDone은 업무를 done으로 닫고([COMPLETE]), 그 결과 부모가 전부 done이 된 pending 자식마다

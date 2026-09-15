@@ -92,6 +92,35 @@ func TestApplyTransitionWaitWithoutAskLogsIdleEcho(t *testing.T) {
 	}
 }
 
+// 헤드라인(Ask도 Task도 없음)이 비어 있으면 [REPORT] DONE:·[ERROR]가 끝공백만 남은 줄이 아니라
+// "(요약 없음)"을 남겨야 한다.
+func TestApplyTransitionEmptyHeadlineLogsPlaceholder(t *testing.T) {
+	stateDir, root, a := linkedAgent(t, "") // Ask=""
+	a.Task = ""                             // Task도 비움 → Headline() == ""
+	now := time.Now()
+
+	applied, err := ApplyTransition(stateDir, a, state.StateWorking, state.StateDoneUnread, now)
+	if err != nil || !applied {
+		t.Fatalf("applied=%v err=%v", applied, err)
+	}
+	_, lg := readTask(t, root)
+	if !strings.Contains(lg, "[REPORT] DONE: (요약 없음)") {
+		t.Errorf("DONE 로그에 (요약 없음) 없음: %s", lg)
+	}
+	if strings.Contains(lg, "DONE: \n") || strings.Contains(lg, "DONE: ]") {
+		t.Errorf("끝공백만 남은 로그: %s", lg)
+	}
+
+	applied, err = ApplyTransition(stateDir, a, state.StateWorking, state.StateError, now)
+	if err != nil || !applied {
+		t.Fatalf("applied=%v err=%v", applied, err)
+	}
+	_, lg = readTask(t, root)
+	if !strings.Contains(lg, "[ERROR] (요약 없음)") {
+		t.Errorf("ERROR 로그에 (요약 없음) 없음: %s", lg)
+	}
+}
+
 func TestApplyTransitionUnlinkedIsNoop(t *testing.T) {
 	stateDir, root, a := linkedAgent(t, "폴더 밖 읽어도 될까요?")
 	as, _, _ := Load(stateDir, a.ID)
