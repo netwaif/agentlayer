@@ -76,7 +76,7 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		return cli.RunSend(os.Stdout, os.Stdin, st, tmuxx.Tmux{}, args[1:])
+		return cli.RunSend(os.Stdout, os.Stdin, st, state.DefaultDir(), tmuxx.Tmux{}, args[1:])
 	case "task":
 		st, err := storeWithSync()
 		if err != nil {

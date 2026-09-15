@@ -2,10 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/netwaif/agentlayer/internal/state"
+	"github.com/netwaif/agentlayer/internal/task"
 )
 
 type fakeSender struct {
@@ -102,23 +106,25 @@ func TestSanitizeMessage(t *testing.T) {
 }
 
 func TestRunSendRejectsOversizedBody(t *testing.T) {
-	st, _ := state.NewStore(t.TempDir())
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
 	_ = st.Save(mkAgent("claude", "collab-bot", "%1", state.StateIdle))
 	var out bytes.Buffer
 	big := strings.Repeat("a", 65537)
-	err := RunSend(&out, strings.NewReader(big), st, &fakeSender{}, []string{"collab-bot", "-"})
+	err := RunSend(&out, strings.NewReader(big), st, stateDir, &fakeSender{}, []string{"collab-bot", "-"})
 	if err == nil || !strings.Contains(err.Error(), "너무 깁니다") {
 		t.Fatalf("64KiB 초과는 거부: %v", err)
 	}
 }
 
 func TestRunSendDeliversAndGates(t *testing.T) {
-	st, _ := state.NewStore(t.TempDir())
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
 	_ = st.Save(mkAgent("claude", "collab-bot", "%1", state.StateIdle))
 	_ = st.Save(mkAgent("claude", "busy-bot", "%2", state.StateWorking))
 	var out bytes.Buffer
 	f := &fakeSender{}
-	if err := RunSend(&out, nil, st, f, []string{"collab-bot", "주제", "3개"}); err != nil {
+	if err := RunSend(&out, nil, st, stateDir, f, []string{"collab-bot", "주제", "3개"}); err != nil {
 		t.Fatal(err)
 	}
 	if f.pane != "%1" || f.text != "주제 3개" {
@@ -126,16 +132,16 @@ func TestRunSendDeliversAndGates(t *testing.T) {
 	}
 	out.Reset()
 	f = &fakeSender{}
-	err := RunSend(&out, nil, st, f, []string{"busy-bot", "x"})
+	err := RunSend(&out, nil, st, stateDir, f, []string{"busy-bot", "x"})
 	if err == nil || f.calls != 0 {
 		t.Fatalf("WORKING은 거부(전송 0회): err=%v calls=%d", err, f.calls)
 	}
-	if err := RunSend(&out, nil, st, f, []string{"--force", "busy-bot", "x"}); err != nil || f.calls != 1 {
+	if err := RunSend(&out, nil, st, stateDir, f, []string{"--force", "busy-bot", "x"}); err != nil || f.calls != 1 {
 		t.Fatalf("--force면 전송: %v %d", err, f.calls)
 	}
 	// stdin 본문
 	f = &fakeSender{}
-	if err := RunSend(&out, strings.NewReader("첫 줄\n둘째 줄\n"), st, f, []string{"collab-bot", "-"}); err != nil {
+	if err := RunSend(&out, strings.NewReader("첫 줄\n둘째 줄\n"), st, stateDir, f, []string{"collab-bot", "-"}); err != nil {
 		t.Fatal(err)
 	}
 	if f.text != "첫 줄\n둘째 줄" {
@@ -143,16 +149,64 @@ func TestRunSendDeliversAndGates(t *testing.T) {
 	}
 	// --json
 	out.Reset()
-	if err := RunSend(&out, nil, st, &fakeSender{}, []string{"--json", "collab-bot", "x"}); err != nil {
+	if err := RunSend(&out, nil, st, stateDir, &fakeSender{}, []string{"--json", "collab-bot", "x"}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), `"sent":true`) || !strings.Contains(out.String(), `"pane":"%1"`) {
 		t.Errorf("json 출력: %s", out.String())
 	}
-	if err := RunSend(&out, nil, st, &fakeSender{fail: true}, []string{"collab-bot", "x"}); err == nil {
+	if err := RunSend(&out, nil, st, stateDir, &fakeSender{fail: true}, []string{"collab-bot", "x"}); err == nil {
 		t.Error("전송 실패는 에러")
 	}
-	if err := RunSend(&out, nil, st, f, []string{"collab-bot"}); err == nil {
+	if err := RunSend(&out, nil, st, stateDir, f, []string{"collab-bot"}); err == nil {
 		t.Error("메시지 없으면 오류")
+	}
+}
+
+func TestLogExcerpt(t *testing.T) {
+	if got := LogExcerpt("a\nb"); got != "a⏎b (3자)" {
+		t.Errorf("got %q", got)
+	}
+	long := strings.Repeat("가", 1001)
+	got := LogExcerpt(long)
+	if !strings.HasPrefix(got, strings.Repeat("가", 1000)+"…") || !strings.HasSuffix(got, "(1001자)") {
+		t.Errorf("절단 실패: len=%d tail=%q", len([]rune(got)), got[len(got)-12:])
+	}
+}
+
+func TestRunSendLogsToLinkedTask(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	a := &state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}}
+	_ = st.Save(a)
+	root := t.TempDir()
+	dir := filepath.Join(root, "tasks", "LAB-1")
+	_ = os.MkdirAll(dir, 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "task.md"), []byte("# LAB-1\n```yaml\nstatus: in_progress\n```\n"), 0o644)
+	_ = task.Assign(stateDir, task.Assignment{TaskID: "LAB-1", AgentID: a.ID, Session: "collab-bot", Pane: "%1",
+		Inbox: filepath.Join(root, "runtime", "inbox"), TaskDir: dir, AssignedAt: time.Now()}, false)
+	var out bytes.Buffer
+	fake := &fakeSender{}
+	if err := RunSend(&out, nil, st, stateDir, fake, []string{"collab-bot", "네, 읽어도 됩니다"}); err != nil {
+		t.Fatal(err)
+	}
+	lg, _ := os.ReadFile(filepath.Join(dir, "log.md"))
+	if !strings.Contains(string(lg), "[SEND] 네, 읽어도 됩니다 (10자)") {
+		t.Errorf("log.md:\n%s", lg)
+	}
+}
+
+func TestRunSendUnlinkedWritesNoLog(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
+	var out bytes.Buffer
+	if err := RunSend(&out, nil, st, stateDir, &fakeSender{}, []string{"collab-bot", "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(stateDir, "tasks")); !os.IsNotExist(err) {
+		t.Errorf("tasks/ 디렉터리가 생기면 안 됨: %v", err)
 	}
 }

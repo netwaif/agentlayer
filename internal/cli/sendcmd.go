@@ -5,9 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/state"
+	"github.com/netwaif/agentlayer/internal/task"
 )
 
 // TextSender는 pane에 지시를 넣는 최소 인터페이스 — tmuxx.Tmux가 만족하고 테스트는 페이크.
@@ -116,8 +120,21 @@ func SanitizeMessage(s string) string {
 	return b.String()
 }
 
+// maxLogRunes — log.md에 남기는 send 본문 상한. 넘으면 절단 + …
+const maxLogRunes = 1000
+
+// LogExcerpt는 log.md 한 줄용 발췌: 개행 ⏎, 1000자 절단, 끝에 "(n자)".
+func LogExcerpt(msg string) string {
+	n := len([]rune(msg))
+	flat := strings.ReplaceAll(msg, "\n", "⏎")
+	if r := []rune(flat); len(r) > maxLogRunes {
+		flat = string(r[:maxLogRunes]) + "…"
+	}
+	return fmt.Sprintf("%s (%d자)", flat, n)
+}
+
 // RunSend: agentlayer send [--force] [--json] <세션[:창]> <메시지…|->
-func RunSend(w io.Writer, stdin io.Reader, st *state.Store, tm TextSender, args []string) error {
+func RunSend(w io.Writer, stdin io.Reader, st *state.Store, stateDir string, tm TextSender, args []string) error {
 	o, rest, err := ParseSendFlags(args)
 	if err != nil {
 		return err
@@ -157,6 +174,13 @@ func RunSend(w io.Writer, stdin io.Reader, st *state.Store, tm TextSender, args 
 	}
 	if err := tm.SendText(a.Tmux.PaneID, message); err != nil {
 		return fmt.Errorf("%s 전송 실패: %w", a.Tmux.Session, err)
+	}
+	// 회사 업무가 등록된 세션이면 총괄의 지시·답변을 log.md에 남긴다([ASK] 뒤의 [SEND]가 Q&A 한 쌍).
+	if as, ok, _ := task.Load(stateDir, a.ID); ok && as.TaskDir != "" && as.Session == a.Tmux.Session && as.Pane == a.Tmux.PaneID {
+		root, id := filepath.Dir(filepath.Dir(as.TaskDir)), filepath.Base(as.TaskDir)
+		if err := board.AppendLog(root, id, "SEND", LogExcerpt(message), time.Now()); err != nil {
+			fmt.Fprintln(w, "  ⚠ log.md 기록 실패:", err)
+		}
 	}
 	if o.JSON {
 		return json.NewEncoder(w).Encode(map[string]any{"session": a.Tmux.Session, "window": a.Tmux.WindowName,
