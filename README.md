@@ -78,6 +78,7 @@ agentlayer wake-all   # 모든 claude·codex 세션에 "세션 이어서하자" 
 agentlayer close-all  # "세션 마감하자" 전송 → 전원 완료(DONE)까지 감시 → 요약
 agentlayer broadcast "<메시지>"   # 임의 메시지 일괄 전송 (--except로 제외, --yes로 무확인)
 agentlayer info <세션>            # 배선 상세 카드: 폴더·엔진·Discord 채널·구동 주체·resume 경로
+agentlayer board [--out 경로] [--json] [--no-open]   # 회사 업무 보드 HTML을 전용 브라우저로
 agentlayer wt ...     # worktree 병렬 모드 (아래 참고)
 agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참고)
 ```
@@ -163,6 +164,21 @@ agentlayer task done VIDEO-07
 - 막 띄운 세션은 첫 hook이 오기 전까지 idle로 보인다 — 첫 지시는 TUI가 뜬 것을 확인한 뒤 보낸다.
 - inbox는 로컬 경로여야 한다(NAS·SMB 마운트 금지) — hook은 2초 안에 못 쓰면 보고를 포기하고 에이전트를 막지 않는다.
 - 여러 줄 본문(`-`)은 `\r`·제어문자를 제거하고 64KiB까지만 보낸다.
+
+### 업무 보드 (칸반 라이트)
+
+회사 루트(`tasks/<업무ID>/task.md`·`log.md`)를 agentlayer가 자동으로 갱신하고 보여 준다. 상태값은 mat과 같은
+`pending / in_progress / waiting_<세션> / reviewing / done`이고, 보드 6열은 여기서 파생한다
+(`ready` = pending이면서 `parents:`가 전부 done).
+
+- `task assign` → `in_progress` + `[ASSIGN]`, 훅 WAIT → `waiting_<세션>` + `[ASK]`, WORK 복귀 → `in_progress`, DONE → `reviewing` + `[REPORT]`, ERR → `[ERROR]`(status 유지).
+- `agentlayer send`로 등록 세션에 보낸 지시는 `[SEND]`로 남는다 — `[ASK]` 뒤의 `[SEND]`가 Q&A 한 쌍.
+- `task done <ID>` → `done` + `[COMPLETE]`, 그 결과 부모가 전부 끝난 자식마다 수신함에 `to: READY` 이벤트.
+- ready·blocked가 30분(`board_stale_ready`) 넘게 방치되면 ⚠.
+- 디스코드 카드에 "업무 보드" 절, `agentlayer board`는 6열 HTML을 전용 브라우저로 연다(`--json`·`--out`).
+- 회사 루트는 `company_root` 설정이 없으면 등록된 업무의 `<root>/runtime/inbox`에서 유추한다.
+
+task.md는 `status:`·`updated:` 줄만 agentlayer가 건드린다. 총괄은 status를 손으로 고치지 말 것(훅과 충돌).
 
 ## Worktree 병렬 모드
 
