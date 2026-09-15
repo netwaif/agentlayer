@@ -10,12 +10,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
 )
 
 const taskUsage = `사용법:
-  agentlayer task assign <업무ID> <세션[:창]> --inbox <폴더> [--replace]
+  agentlayer task assign <업무ID> <세션[:창]> --inbox <폴더> [--root <회사루트>] [--replace]
   agentlayer task list [--json]
   agentlayer task done <업무ID>
   agentlayer task watch <inbox> [--once] [--interval 200ms]`
@@ -52,7 +53,7 @@ func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string,
 
 func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, now time.Time) error {
 	var pos []string
-	var inbox string
+	var inbox, root string
 	replace := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -61,6 +62,12 @@ func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, no
 				return errors.New("--inbox 뒤에 폴더가 필요합니다")
 			}
 			inbox = args[i+1]
+			i++
+		case "--root":
+			if i+1 >= len(args) {
+				return errors.New("--root 뒤에 회사 루트가 필요합니다")
+			}
+			root = args[i+1]
 			i++
 		case "--replace":
 			replace = true
@@ -75,6 +82,12 @@ func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, no
 	if err != nil {
 		return err
 	}
+	if root != "" {
+		root, err = filepath.Abs(root)
+		if err != nil {
+			return err
+		}
+	}
 	agents, err := st.List()
 	if err != nil {
 		return err
@@ -88,11 +101,31 @@ func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, no
 	}
 	as := task.Assignment{TaskID: pos[0], AgentID: a.ID, Session: a.Tmux.Session, Window: a.Tmux.WindowName,
 		Pane: a.Tmux.PaneID, Inbox: abs, AssignedAt: now}
+	if root == "" {
+		root = board.InferRoot(abs)
+	}
+	warn := ""
+	if root != "" {
+		if _, err := board.ReadTaskFile(root, pos[0]); err == nil {
+			as.TaskDir = board.TaskDir(root, pos[0])
+		}
+	}
+	if as.TaskDir == "" {
+		warn = "  ⚠ tasks/" + pos[0] + "/task.md가 없어 보드에 표시되지 않음"
+	}
 	if err := task.Assign(stateDir, as, replace); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "업무 %s → %s %s [%s] 등록. 보고는 %s/pending/ 에 떨어집니다.\n",
-		as.TaskID, SessionLabel(a), a.Tmux.PaneID, a.State, ShortenHome(abs))
+	if as.TaskDir != "" {
+		if err := board.SetStatus(root, pos[0], "in_progress", now); err != nil {
+			fmt.Fprintln(w, "  ⚠ task.md status 갱신 실패:", err)
+		}
+		if err := board.AppendLog(root, pos[0], "ASSIGN", SessionLabel(a), now); err != nil {
+			fmt.Fprintln(w, "  ⚠ log.md 기록 실패:", err)
+		}
+	}
+	fmt.Fprintf(w, "업무 %s → %s %s [%s] 등록. 보고는 %s/pending/ 에 떨어집니다.%s\n",
+		as.TaskID, SessionLabel(a), a.Tmux.PaneID, a.State, ShortenHome(abs), warn)
 	return nil
 }
 

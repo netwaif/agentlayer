@@ -85,3 +85,16 @@ func TestAssignAndLoadRejectPathTraversalAgentID(t *testing.T) {
 		t.Errorf("경로 조작 AgentID는 Load가 거부해야 함: ok=%v err=%v", ok, err)
 	}
 }
+
+func TestAssignmentTaskDirRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	as := Assignment{TaskID: "A", AgentID: "claude-%1", Session: "s", Pane: "%1", Inbox: "/x/runtime/inbox",
+		TaskDir: "/x/tasks/A", AssignedAt: time.Now()}
+	if err := Assign(dir, as, false); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := Load(dir, "claude-%1")
+	if err != nil || !ok || got.TaskDir != "/x/tasks/A" {
+		t.Errorf("got %+v ok=%v err=%v", got, ok, err)
+	}
+}

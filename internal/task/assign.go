@@ -17,12 +17,14 @@ import (
 
 // Assignment는 세션(pane) 하나 ↔ 업무 하나. 파일은 <state>/tasks/<agent-id>.json.
 type Assignment struct {
-	TaskID     string    `json:"task_id"`
-	AgentID    string    `json:"agent_id"`
-	Session    string    `json:"session"`
-	Window     string    `json:"window,omitempty"`
-	Pane       string    `json:"pane"`
-	Inbox      string    `json:"inbox"`
+	TaskID  string `json:"task_id"`
+	AgentID string `json:"agent_id"`
+	Session string `json:"session"`
+	Window  string `json:"window,omitempty"`
+	Pane    string `json:"pane"`
+	Inbox   string `json:"inbox"`
+	// TaskDir은 회사 루트의 tasks/<업무ID>/ — 있으면 훅이 task.md status·log.md를 자동 갱신한다.
+	TaskDir    string    `json:"task_dir,omitempty"`
 	AssignedAt time.Time `json:"assigned_at"`
 }
 

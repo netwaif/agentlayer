@@ -135,3 +135,84 @@ func TestRunTaskWatchOncePrintsJSONLine(t *testing.T) {
 		t.Errorf("한 줄 JSON: %q", line)
 	}
 }
+
+func companyRoot(t *testing.T, id string) string {
+	t.Helper()
+	root := t.TempDir()
+	dir := filepath.Join(root, "tasks", id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "# " + id + "\n```yaml\nstatus: pending\nupdated: 2026-01-01\nparents: []\n```\n"
+	if err := os.WriteFile(filepath.Join(dir, "task.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "runtime", "inbox"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestTaskAssignLinksTaskDirAndMarksInProgress(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
+	root := companyRoot(t, "LAB-1")
+	var out bytes.Buffer
+	err := RunTask(context.Background(), &out, st, stateDir,
+		[]string{"assign", "LAB-1", "collab-bot", "--inbox", filepath.Join(root, "runtime", "inbox")}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	as, ok, _ := task.Load(stateDir, "claude-%1")
+	if !ok || as.TaskDir != filepath.Join(root, "tasks", "LAB-1") {
+		t.Errorf("TaskDir = %q", as.TaskDir)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "tasks", "LAB-1", "task.md"))
+	if !strings.Contains(string(b), "status: in_progress") {
+		t.Errorf("status 미전이:\n%s", b)
+	}
+	lg, _ := os.ReadFile(filepath.Join(root, "tasks", "LAB-1", "log.md"))
+	if !strings.Contains(string(lg), "[ASSIGN] collab-bot") {
+		t.Errorf("log 미기록: %s", lg)
+	}
+}
+
+func TestTaskAssignWithoutTaskFileWarnsButRegisters(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
+	var out bytes.Buffer
+	err := RunTask(context.Background(), &out, st, stateDir,
+		[]string{"assign", "NOFILE", "collab-bot", "--inbox", t.TempDir()}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	as, ok, _ := task.Load(stateDir, "claude-%1")
+	if !ok || as.TaskDir != "" {
+		t.Errorf("TaskDir는 비어야 함: %q", as.TaskDir)
+	}
+	if !strings.Contains(out.String(), "보드에 표시되지 않음") {
+		t.Errorf("경고 문구 없음: %s", out.String())
+	}
+}
+
+func TestTaskAssignExplicitRoot(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
+	root := companyRoot(t, "LAB-1")
+	var out bytes.Buffer
+	err := RunTask(context.Background(), &out, st, stateDir,
+		[]string{"assign", "LAB-1", "collab-bot", "--inbox", t.TempDir(), "--root", root}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	as, _, _ := task.Load(stateDir, "claude-%1")
+	if as.TaskDir != filepath.Join(root, "tasks", "LAB-1") {
+		t.Errorf("--root 무시됨: %q", as.TaskDir)
+	}
+}
