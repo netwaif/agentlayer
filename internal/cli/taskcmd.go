@@ -120,7 +120,7 @@ func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, no
 		if err := board.SetStatus(root, pos[0], "in_progress", now); err != nil {
 			fmt.Fprintln(w, "  ⚠ task.md status 갱신 실패:", err)
 		}
-		if err := board.AppendLog(root, pos[0], "ASSIGN", SessionLabel(a), now); err != nil {
+		if err := board.AppendLog(root, pos[0], "ASSIGN", targetLabel(a.Tmux.Session, a.Tmux.WindowName), now); err != nil {
 			fmt.Fprintln(w, "  ⚠ log.md 기록 실패:", err)
 		}
 	}
@@ -170,13 +170,19 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	}
 	fmt.Fprintln(w, PadRight("업무ID", 24)+PadRight("세션", 30)+PadRight("상태", 8)+"경과")
 	for _, r := range rows {
-		label := r.Session
-		if r.Window != "" {
-			label += ":" + r.Window
-		}
+		label := targetLabel(r.Session, r.Window)
 		fmt.Fprintln(w, PadRight(r.TaskID, 24)+PadRight(label, 30)+PadRight(stateWord(r.State), 8)+Since(r.AssignedAt, now))
 	}
 	return nil
+}
+
+// targetLabel은 "세션[:창]" 표기 — 스레드 창(t+6자리)이면 창 이름까지 붙인다.
+// task assign의 [ASSIGN] 로그, task list 표가 같은 문구를 쓴다.
+func targetLabel(session, window string) string {
+	if window != "" {
+		return session + ":" + window
+	}
+	return session
 }
 
 // stateWord는 status 표의 단어와 맞춘다(idle·WAIT·DONE·WORK·ERR·dead).

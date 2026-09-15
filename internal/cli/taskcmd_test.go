@@ -216,3 +216,23 @@ func TestTaskAssignExplicitRoot(t *testing.T) {
 		t.Errorf("--root 무시됨: %q", as.TaskDir)
 	}
 }
+
+// [ASSIGN] 로그는 "세션[:창]" — 봇 스레드 창일 때 SessionLabel의 "(스레드 N)" 배지가 아니라
+// task list와 같은 <세션[:창]> 문구를 써야 한다(설계 1.2).
+func TestTaskAssignLogIncludesThreadWindow(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", WindowName: "t123456", PaneID: "%1"}})
+	root := companyRoot(t, "LAB-1")
+	var out bytes.Buffer
+	err := RunTask(context.Background(), &out, st, stateDir,
+		[]string{"assign", "LAB-1", "collab-bot:t123456", "--inbox", filepath.Join(root, "runtime", "inbox")}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	lg, _ := os.ReadFile(filepath.Join(root, "tasks", "LAB-1", "log.md"))
+	if !strings.Contains(string(lg), "[ASSIGN] collab-bot:t123456") {
+		t.Errorf("log에 창 이름 누락: %s", lg)
+	}
+}
