@@ -537,19 +537,26 @@ func browserOpen(out io.Writer, args []string) error {
 	if len(args) != 1 || args[0] == "" {
 		return fmt.Errorf("사용법: agentlayer browser open <url>")
 	}
-	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
-	if err != nil {
-		return err
-	}
-	page, err := b.Page(proto.TargetCreateTarget{URL: args[0]})
-	if err != nil {
-		return err
-	}
-	if _, err := page.Activate(); err != nil {
+	if err := OpenInBrowser(args[0]); err != nil {
 		return err
 	}
 	fmt.Fprintln(out, "열림:", args[0])
 	return nil
+}
+
+// OpenInBrowser는 지정한 url을 에이전트 전용 브라우저(browser-profile) 새 탭으로 연다.
+// board 등 다른 커맨드가 재사용할 수 있게 export.
+func OpenInBrowser(url string) error {
+	b, err := browser.Connect(state.DefaultDir(), config.Load().BrowserPortOrDefault())
+	if err != nil {
+		return err
+	}
+	page, err := b.Page(proto.TargetCreateTarget{URL: url})
+	if err != nil {
+		return err
+	}
+	_, err = page.Activate()
+	return err
 }
 
 // browserCookies: agentlayer browser cookies import|list|clear|export

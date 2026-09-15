@@ -96,6 +96,12 @@ func run(args []string) error {
 		return nil
 	case "browser":
 		return cli.RunBrowser(os.Stdout, args[1:])
+	case "board":
+		st, err := storeWithSync()
+		if err != nil {
+			return err
+		}
+		return cli.RunBoard(os.Stdout, st, state.DefaultDir(), config.Load(), cli.OpenInBrowser, args[1:], time.Now())
 	case "wt":
 		st, err := storeWithSync()
 		if err != nil {

@@ -2,6 +2,12 @@
 package cli
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/board"
@@ -9,6 +15,8 @@ import (
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
 )
+
+const boardUsage = "사용법: agentlayer board [--out <경로>] [--json] [--no-open]"
 
 // LoadBoard는 회사 루트를 찾아 카드를 읽는다. 루트를 못 찾으면 ("", nil, nil).
 func LoadBoard(st *state.Store, stateDir string, cfg *config.Config, now time.Time) (root string, cards []board.Card, err error) {
@@ -39,4 +47,57 @@ func LoadBoard(st *state.Store, stateDir string, cfg *config.Config, now time.Ti
 		return "", nil, err
 	}
 	return root, cards, nil
+}
+
+// RunBoard: agentlayer board — HTML을 <state>/board.html에 쓰고 전용 브라우저로 연다.
+// --out은 파일만, --json은 카드 배열만(stdout), --no-open은 파일만 쓰고 경로 출력.
+func RunBoard(w io.Writer, st *state.Store, stateDir string, cfg *config.Config, open func(url string) error, args []string, now time.Time) error {
+	out, asJSON, noOpen := "", false, false
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			asJSON = true
+		case "--no-open":
+			noOpen = true
+		case "--out":
+			if i+1 >= len(args) {
+				return errors.New(boardUsage)
+			}
+			out = args[i+1]
+			i++
+		default:
+			return fmt.Errorf("알 수 없는 인자: %s\n%s", args[i], boardUsage)
+		}
+	}
+	root, cards, err := LoadBoard(st, stateDir, cfg, now)
+	if err != nil {
+		return err
+	}
+	if root == "" {
+		return errors.New("회사 루트를 찾지 못했습니다 — 업무를 하나 등록하거나(task assign --inbox <root>/runtime/inbox) 설정 company_root를 지정하세요: " + config.Path())
+	}
+	if asJSON {
+		if cards == nil {
+			cards = []board.Card{}
+		}
+		return json.NewEncoder(w).Encode(cards)
+	}
+	page := board.HTML(board.CompanyName(root), cards, now, cfg.BoardStaleLimit())
+	path := out
+	if path == "" {
+		path = filepath.Join(stateDir, "board.html")
+	}
+	if err := os.WriteFile(path, page, 0o644); err != nil {
+		return err
+	}
+	if out != "" || noOpen {
+		fmt.Fprintln(w, "보드:", ShortenHome(path))
+		return nil
+	}
+	url := "file://" + path
+	if err := open(url); err != nil {
+		return fmt.Errorf("브라우저 열기 실패(%v) — 파일은 %s", err, ShortenHome(path))
+	}
+	fmt.Fprintln(w, "열림:", ShortenHome(path))
+	return nil
 }
