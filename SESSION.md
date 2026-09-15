@@ -21,10 +21,11 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
 1. **4단계 사슬 시연**: `#company` 채널에 "직원 사업운영 매니저(collab-bot)에게 '도구 없이 OK라고만 답해'를 업무 LAB-1로 보내고 보고를 기다려 줘. 끝나면 task done까지 해 줘" → 총괄이 스레드·assign --root·send·수신·done까지 사용자 개입 0회(승인 제외)면 성공. 관제탑 `t` 키·헤더 `보드:` 줄·카드 "업무 보드" 절로 이동 확인. (실측 잔재 LAB-1·LAB-2는 삭제됨)
-2. **v1.6.0 공지**(디스코드 멤버 + 유튜브 커뮤니티, 메모리 feedback-announce-two-channels) — 릴리즈 노트는 GitHub 릴리즈 페이지가 정본.
+2. **v1.6.0·v1.6.1 공지**(디스코드 멤버 + 유튜브 커뮤니티, 메모리 feedback-announce-two-channels) — 릴리즈 노트는 GitHub 릴리즈 페이지가 정본.
 3. 플러그인 설치 안내 경로 검증(`/plugin marketplace add netwaif/ai-company` → `/plugin install ai-company@ai-company`, 기존 사용자는 업데이트 뒤 `companyctl install` 재실행).
 4. 파킹된 후속 후보(최종 리뷰 Minor, 우선순위 낮음): `cli.LoadBoard`가 agents를 다시 읽음(card 경로 2회 스캔) / CRLF task.md / 카드 webhook `allowed_mentions` 없음(보드 절이 에이전트 문구 노출) / HTML done 열 무제한 / MarkDone 자식 루프 첫 WriteReport 실패에서 중단 / `ReadTaskFile` 제목 탐지가 yaml 안 `# ` 줄도 잡음 / `send --json` 외 경고는 stdout.
-5. 기존 이월 항목 유지(사용자 판단 대기): 강의용 `orchestration-lite` 스킬 / README·help 제목 "iTerm2+tmux"→"tmux" / usage-coach 릴리즈 페이지 latest v0.1.3 / 디스크 정리(`~/Downloads/ClaudeDir/disk_analysis_20260906.md`) / 촬영 뒤 정리(8080 python 서버, picks/, demo 저장소 reset) / 설치기 remove daemon-reload / agy 권한 프롬프트 [WORK] 표시 / 매뉴얼 "윈도우에서 시작하기" 장.
+5. `go test ./...` 전체 실행 시 `internal/{ui,usage,wiring,wt}` 멈춤·좀비 원인 조사(루트 e2e와 동시 실행 충돌 의심, 메모리 go-test-full-suite-hangs) — 그전까지 패키지별 실행.
+6. 기존 이월 항목 유지(사용자 판단 대기): 강의용 `orchestration-lite` 스킬 / README·help 제목 "iTerm2+tmux"→"tmux" / usage-coach 릴리즈 페이지 latest v0.1.3 / 디스크 정리(`~/Downloads/ClaudeDir/disk_analysis_20260906.md`) / 촬영 뒤 정리(8080 python 서버, picks/, demo 저장소 reset) / 설치기 remove daemon-reload / agy 권한 프롬프트 [WORK] 표시 / 매뉴얼 "윈도우에서 시작하기" 장.
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
