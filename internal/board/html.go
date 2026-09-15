@@ -54,9 +54,9 @@ h1{font-size:18px;margin:0 0 4px}.meta{color:#8B93A7;font-size:12px;margin-botto
 				s = append(s, html.EscapeString(c.Session))
 			}
 			if c.State != "" {
-				s = append(s, c.State+" "+ago(c.Updated, now))
+				s = append(s, html.EscapeString(c.State)+" "+Ago(c.Updated, now))
 			} else if col == ColReady {
-				s = append(s, "ready "+ago(c.Ready, now))
+				s = append(s, "ready "+Ago(c.Ready, now))
 			}
 			if len(c.Parents) > 0 {
 				s = append(s, "← "+html.EscapeString(strings.Join(c.Parents, ", ")))
@@ -75,7 +75,9 @@ h1{font-size:18px;margin:0 0 4px}.meta{color:#8B93A7;font-size:12px;margin-botto
 	return []byte(sb.String())
 }
 
-func ago(t, now time.Time) string {
+// Ago는 t~now 경과를 "방금"·"N분"·"N시간"·"N일"로. t가 제로값이면 "".
+// board(HTML)·discord(카드) 양쪽이 같은 표현을 쓰는 단일 지점 — internal/discord/card.go의 since는 이걸 감싼다.
+func Ago(t, now time.Time) string {
 	if t.IsZero() {
 		return ""
 	}

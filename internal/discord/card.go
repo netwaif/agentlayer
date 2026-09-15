@@ -339,18 +339,12 @@ func truncateRunes(s string, n int) string {
 	return string(r[:n]) + "…"
 }
 
+// since는 board.Ago를 감싼다 — 중복 구현 방지(같은 임계값·같은 한국어 표기의 단일 지점).
+// board.Ago는 from이 제로값이면 ""를 돌려주는데, 이전 since 구현은 그 경우를 다루지
+// 않았다(항상 큰 "N일" 값을 냈다) — 이 파일의 호출부는 전부 실제 시각을 넘겨서 차이가
+// 관찰되지 않으므로 board.Ago의 동작을 그대로 따른다.
 func since(from, now time.Time) string {
-	d := now.Sub(from)
-	switch {
-	case d < time.Minute:
-		return "방금"
-	case d < time.Hour:
-		return fmt.Sprintf("%d분", int(d.Minutes()))
-	case d < 24*time.Hour:
-		return fmt.Sprintf("%d시간", int(d.Hours()))
-	default:
-		return fmt.Sprintf("%d일", int(d.Hours()/24))
-	}
+	return board.Ago(from, now)
 }
 
 // BoardData는 업무 보드 절 재료. nil이면 절 생략(회사가 없는 사용자에겐 아무것도 안 보임).
