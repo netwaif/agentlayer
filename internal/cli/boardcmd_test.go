@@ -44,6 +44,40 @@ func TestLoadBoardFindsRootAndOneCard(t *testing.T) {
 	}
 }
 
+// 총괄이 마지막 업무를 task done으로 닫으면 등록이 하나도 안 남는다 — task assign이 기억해 둔
+// 루트로 LoadBoard가 여전히 회사를 찾아야 한다(company.json).
+func TestLoadBoardFindsRootAfterLastRegistrationDone(t *testing.T) {
+	stateDir := t.TempDir()
+	st, err := state.NewStore(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}}); err != nil {
+		t.Fatal(err)
+	}
+	root := companyRoot(t, "LAB-1")
+	var out bytes.Buffer
+	if err := RunTask(context.Background(), &out, st, stateDir,
+		[]string{"assign", "LAB-1", "collab-bot", "--inbox", filepath.Join(root, "runtime", "inbox")}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"done", "LAB-1"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if list, err := task.List(stateDir); err != nil || len(list) != 0 {
+		t.Fatalf("등록이 남아있으면 이 테스트의 전제가 깨짐: list=%v err=%v", list, err)
+	}
+	gotRoot, _, err := LoadBoard(st, stateDir, &config.Config{}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotRoot != root {
+		t.Errorf("root = %q, want 기억된 %q", gotRoot, root)
+	}
+}
+
 func TestLoadBoardNoRegistrationsReturnsEmptyRoot(t *testing.T) {
 	stateDir := t.TempDir()
 	st, err := state.NewStore(stateDir)

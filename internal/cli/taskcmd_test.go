@@ -136,6 +136,20 @@ func TestRunTaskWatchOncePrintsJSONLine(t *testing.T) {
 	}
 }
 
+// targetLabel은 창이 봇 스레드 규약(t+6자리)일 때만 창 이름을 붙인다 — claude가 창 이름을
+// 자기 버전으로 바꿔버리는 al-lab 같은 tmux 세션에서는 세션만 보여야 한다.
+func TestTargetLabel(t *testing.T) {
+	if got := targetLabel("al-lab", "2.1.272"); got != "al-lab" {
+		t.Errorf("targetLabel(al-lab, 2.1.272) = %q, want al-lab", got)
+	}
+	if got := targetLabel("collab-bot", "t123456"); got != "collab-bot:t123456" {
+		t.Errorf("targetLabel(collab-bot, t123456) = %q, want collab-bot:t123456", got)
+	}
+	if got := targetLabel("collab-bot", ""); got != "collab-bot" {
+		t.Errorf("targetLabel(collab-bot, \"\") = %q, want collab-bot", got)
+	}
+}
+
 func companyRoot(t *testing.T, id string) string {
 	t.Helper()
 	root := t.TempDir()

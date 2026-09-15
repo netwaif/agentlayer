@@ -28,9 +28,10 @@ func LoadBoard(st *state.Store, stateDir string, cfg *config.Config, now time.Ti
 	var links []board.Link
 	for _, as := range list {
 		inboxes = append(inboxes, as.Inbox)
-		links = append(links, board.Link{TaskID: as.TaskID, Session: as.Session, Window: as.Window, AgentID: as.AgentID})
+		links = append(links, board.Link{TaskID: as.TaskID, Session: as.Session, Window: as.Window, AgentID: as.AgentID,
+			Thread: state.IsThreadWindow(as.Window)})
 	}
-	root = board.Root(cfg.CompanyRoot, inboxes)
+	root = board.Root(cfg.CompanyRoot, inboxes, board.RememberedRoot(stateDir))
 	if root == "" {
 		return "", nil, nil
 	}
@@ -77,7 +78,8 @@ func RunBoard(w io.Writer, st *state.Store, stateDir string, cfg *config.Config,
 		return err
 	}
 	if root == "" {
-		return errors.New("회사 루트를 찾지 못했습니다 — 업무를 하나 등록하거나(task assign --inbox <root>/runtime/inbox) 설정 company_root를 지정하세요: " + config.Path())
+		return errors.New("회사 루트를 찾지 못했습니다 — 업무를 하나 등록하면(task assign --inbox <root>/runtime/inbox) " +
+			"그 루트를 기억해 두므로 이후 등록이 모두 사라져도 보드가 유지됩니다. 설정 company_root를 지정해도 됩니다: " + config.Path())
 	}
 	if _, err := os.Stat(filepath.Join(root, "tasks")); os.IsNotExist(err) {
 		return fmt.Errorf("회사 루트에 tasks/ 폴더가 없습니다: %s (company_root 확인)", root)

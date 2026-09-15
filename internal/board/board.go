@@ -39,7 +39,12 @@ type Card struct {
 }
 
 // Link는 업무 등록의 board용 축약 — task 패키지가 board를 import하므로 역방향 의존을 피한다.
-type Link struct{ TaskID, Session, Window, AgentID string }
+// Thread는 Window가 봇 스레드 창(state.IsThreadWindow) 규약인지 — board는 state를 import하지
+// 않으므로(의존 방향 유지) 호출자(cli.LoadBoard)가 판정해서 넘긴다.
+type Link struct {
+	TaskID, Session, Window, AgentID string
+	Thread                           bool
+}
 
 // columnOf는 status → 열. ready는 부모가 전부 done일 때만.
 func columnOf(status string, parents []string, done map[string]bool) (string, bool) {
@@ -106,7 +111,7 @@ func Load(root string, links []Link, states map[string]string, now time.Time) ([
 		}
 		if l, ok := byTask[id]; ok {
 			c.Session = l.Session
-			if l.Window != "" {
+			if l.Thread && l.Window != "" {
 				c.Session += ":" + l.Window
 			}
 			c.State = states[l.AgentID]
@@ -160,10 +165,13 @@ func InferRoot(inbox string) string {
 	return filepath.Dir(filepath.Dir(inbox))
 }
 
-// Root는 설정값 우선, 없으면 inbox 목록에서 첫 유추 성공 값. 설정 0개로 동작하기 위한 단일 지점.
-// 설정값이 "~" 또는 "~/…"로 시작하면 셸이 없는 환경(설정 파일 읽기)이라 OS가 대신 펼쳐주지 않으므로
-// 여기서 os.UserHomeDir()로 직접 펼친다.
-func Root(configured string, inboxes []string) string {
+// Root는 우선순위 configured(설정값) → inboxes 유추 → remembered(기억된 루트) → "". 설정 0개로
+// 동작하기 위한 단일 지점. 설정값이 "~" 또는 "~/…"로 시작하면 셸이 없는 환경(설정 파일 읽기)이라
+// OS가 대신 펼쳐주지 않으므로 여기서 os.UserHomeDir()로 직접 펼친다.
+//
+// remembered는 등록이 하나도 없을 때(총괄이 마지막 업무를 done으로 닫은 직후 등) 쓰인다 —
+// RememberedRoot(stateDir)를 호출자가 넘긴다.
+func Root(configured string, inboxes []string, remembered string) string {
 	if configured != "" {
 		return expandHome(configured)
 	}
@@ -172,7 +180,60 @@ func Root(configured string, inboxes []string) string {
 			return r
 		}
 	}
-	return ""
+	return remembered
+}
+
+// companyPath는 RememberRoot가 쓰고 RememberedRoot가 읽는 파일 경로.
+func companyPath(stateDir string) string { return filepath.Join(stateDir, "company.json") }
+
+// RememberRoot는 회사 루트를 <stateDir>/company.json에 원자적으로 기록한다(temp→rename, 0600 —
+// 다른 상태 파일들과 같은 권한). task assign·task done이 루트를 찾을 때마다 불러 두면, 등록이
+// 전부 사라져도(예: 마지막 업무 done) 다음 Root() 호출이 마지막 루트를 기억한다.
+func RememberRoot(stateDir, root string) error {
+	b, err := json.Marshal(struct {
+		Root string `json:"root"`
+	}{root})
+	if err != nil {
+		return err
+	}
+	p := companyPath(stateDir)
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(p), ".company.json.*.tmp")
+	if err != nil {
+		return err
+	}
+	if _, err := tmp.Write(b); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return os.Rename(tmp.Name(), p)
+}
+
+// RememberedRoot는 RememberRoot가 저장한 회사 루트를 읽는다. 파일이 없거나 깨졌으면 "".
+func RememberedRoot(stateDir string) string {
+	b, err := os.ReadFile(companyPath(stateDir))
+	if err != nil {
+		return ""
+	}
+	var v struct {
+		Root string `json:"root"`
+	}
+	if json.Unmarshal(b, &v) != nil {
+		return ""
+	}
+	return v.Root
 }
 
 // expandHome은 선행 "~" 또는 "~/…"를 os.UserHomeDir()로 펼친다. 홈을 못 얻거나 패턴이 아니면 그대로.

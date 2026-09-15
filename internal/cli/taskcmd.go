@@ -91,6 +91,11 @@ func taskDone(w io.Writer, stateDir string, args []string, now time.Time) error 
 	if abs, err := filepath.Abs(root); err == nil {
 		root = abs
 	}
+	// 이 루트를 기억해 둔다 — 이 done으로 등록이 마지막 하나였다면 board.Root가 유추할
+	// inbox가 더는 없으니, 기억한 값이 그 자리를 대신한다.
+	if err := board.RememberRoot(stateDir, root); err != nil {
+		fmt.Fprintln(w, "  ⚠ 회사 루트 기억 실패:", err)
+	}
 	if inbox == "" {
 		inbox = filepath.Join(root, "runtime", "inbox")
 	}
@@ -183,6 +188,11 @@ func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, no
 		return err
 	}
 	if as.TaskDir != "" {
+		// 이 루트를 기억해 둔다 — 나중에 등록이 전부 사라져도(task done으로 마지막 업무를
+		// 닫는 등) board.Root가 여전히 이 루트를 찾을 수 있게.
+		if err := board.RememberRoot(stateDir, root); err != nil {
+			fmt.Fprintln(w, "  ⚠ 회사 루트 기억 실패:", err)
+		}
 		if err := board.SetStatus(root, pos[0], "in_progress", now); err != nil {
 			fmt.Fprintln(w, "  ⚠ task.md status 갱신 실패:", err)
 		}
@@ -242,10 +252,11 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	return nil
 }
 
-// targetLabel은 "세션[:창]" 표기 — 스레드 창(t+6자리)이면 창 이름까지 붙인다.
-// task assign의 [ASSIGN] 로그, task list 표가 같은 문구를 쓴다.
+// targetLabel은 "세션[:창]" 표기 — 스레드 창(state.IsThreadWindow, t+6자리)일 때만 창 이름을
+// 붙인다. claude 등은 창 이름을 자기 버전으로 바꿔버려(al-lab:2.1.272) 그 밖의 창 이름은 의미가
+// 없다. task assign의 [ASSIGN] 로그, task list 표가 같은 문구를 쓴다.
 func targetLabel(session, window string) string {
-	if window != "" {
+	if state.IsThreadWindow(window) {
 		return session + ":" + window
 	}
 	return session

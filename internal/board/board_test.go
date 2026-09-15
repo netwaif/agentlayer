@@ -4,6 +4,7 @@ package board
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -47,7 +48,7 @@ func TestLoadAttachesSessionStateAndLastLog(t *testing.T) {
 	root := t.TempDir()
 	writeTask(t, root, "A", task("in_progress", "[]"))
 	_ = AppendLog(root, "A", "ASK", "질문?", now)
-	links := []Link{{TaskID: "A", Session: "collab-bot", Window: "t123456", AgentID: "claude-%3"}}
+	links := []Link{{TaskID: "A", Session: "collab-bot", Window: "t123456", AgentID: "claude-%3", Thread: true}}
 	cards, err := Load(root, links, map[string]string{"claude-%3": "WAIT"}, now)
 	if err != nil {
 		t.Fatal(err)
@@ -122,14 +123,79 @@ func TestInferRootAndRoot(t *testing.T) {
 	if InferRoot("/Users/x/somewhere") != "" {
 		t.Error("규약 밖 경로는 빈 문자열")
 	}
-	if Root("/cfg", []string{"/a/runtime/inbox"}) != "/cfg" {
+	if Root("/cfg", []string{"/a/runtime/inbox"}, "/remembered") != "/cfg" {
 		t.Error("설정이 우선")
 	}
-	if Root("", []string{"/nope", "/a/runtime/inbox"}) != "/a" {
-		t.Error("첫 유추 성공 값")
+	if Root("", []string{"/nope", "/a/runtime/inbox"}, "/remembered") != "/a" {
+		t.Error("유추가 기억된 값보다 우선")
 	}
-	if Root("", nil) != "" {
+	if Root("", nil, "/remembered") != "/remembered" {
+		t.Error("설정·유추 둘 다 없으면 기억된 값")
+	}
+	if Root("", nil, "") != "" {
 		t.Error("아무것도 없으면 빈 문자열")
+	}
+}
+
+func TestRememberRootRoundTripAndPriority(t *testing.T) {
+	stateDir := t.TempDir()
+	if got := RememberedRoot(stateDir); got != "" {
+		t.Errorf("아직 기록 전이면 빈 문자열: %q", got)
+	}
+	if err := RememberRoot(stateDir, "/company/root"); err != nil {
+		t.Fatal(err)
+	}
+	if got := RememberedRoot(stateDir); got != "/company/root" {
+		t.Errorf("RememberedRoot = %q", got)
+	}
+	p := filepath.Join(stateDir, "company.json")
+	fi, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Errorf("company.json mode = %v, want 0600", fi.Mode().Perm())
+	}
+	entries, _ := os.ReadDir(stateDir)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".company.json") && strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("임시 파일 잔재: %s", e.Name())
+		}
+	}
+	// 우선순위: 기억된 값은 설정값·유추보다 낮다.
+	if Root("/cfg", nil, "/company/root") != "/cfg" {
+		t.Error("설정값이 기억된 값보다 우선")
+	}
+	if Root("", []string{"/a/runtime/inbox"}, "/company/root") != "/a" {
+		t.Error("유추가 기억된 값보다 우선")
+	}
+	if Root("", nil, RememberedRoot(stateDir)) != "/company/root" {
+		t.Error("설정·유추 없으면 기억된 값")
+	}
+}
+
+func TestRememberedRootCorruptFileIsEmpty(t *testing.T) {
+	stateDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(stateDir, "company.json"), []byte("{깨진"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := RememberedRoot(stateDir); got != "" {
+		t.Errorf("깨진 파일은 빈 문자열: %q", got)
+	}
+}
+
+// board 카드의 Session 열은 Link.Thread가 false면 창 이름을 붙이지 않는다(claude가 창 이름을
+// 자기 버전으로 바꾸는 경우 등 의미 없는 창).
+func TestLoadOmitsWindowWhenNotThread(t *testing.T) {
+	root := t.TempDir()
+	writeTask(t, root, "A", task("in_progress", "[]"))
+	links := []Link{{TaskID: "A", Session: "al-lab", Window: "2.1.272", AgentID: "claude-%1", Thread: false}}
+	cards, err := Load(root, links, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cards[0].Session != "al-lab" {
+		t.Errorf("Session = %q, want 창 이름 없이 al-lab", cards[0].Session)
 	}
 }
 
@@ -140,13 +206,13 @@ func TestRootExpandsHomeTilde(t *testing.T) {
 	if err != nil {
 		t.Skip("홈 디렉터리를 못 구함")
 	}
-	if got := Root("~/company", nil); got != filepath.Join(home, "company") {
+	if got := Root("~/company", nil, ""); got != filepath.Join(home, "company") {
 		t.Errorf("Root(~/company) = %q, want %q", got, filepath.Join(home, "company"))
 	}
-	if got := Root("~", nil); got != home {
+	if got := Root("~", nil, ""); got != home {
 		t.Errorf("Root(~) = %q, want %q", got, home)
 	}
-	if got := Root("/abs/company", nil); got != "/abs/company" {
+	if got := Root("/abs/company", nil, ""); got != "/abs/company" {
 		t.Errorf("절대경로는 그대로: %q", got)
 	}
 }
