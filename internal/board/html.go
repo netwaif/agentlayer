@@ -40,7 +40,7 @@ h1{font-size:18px;margin:0 0 4px}.meta{color:#8B93A7;font-size:12px;margin-botto
 			}
 			sb.WriteString("<div class=\"card\"><div class=\"id\">" + html.EscapeString(c.ID))
 			if c.Unknown {
-				sb.WriteString(" <span class=\"warn\" title=\"status 값을 해석하지 못함\">?</span>")
+				sb.WriteString(" <span class=\"warn\" title=\"status 값을 해석하지 못함: " + html.EscapeString(c.Status) + "\">?</span>")
 			}
 			if StaleReady(c, now, stale) {
 				sb.WriteString(" <span class=\"warn\">⚠</span>")

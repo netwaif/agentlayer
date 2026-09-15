@@ -179,6 +179,7 @@ agentlayer task done VIDEO-07
 - ready·blocked가 30분(`board_stale_ready`) 넘게 방치되면 ⚠.
 - 디스코드 카드에 "업무 보드" 절, `agentlayer board`는 6열 HTML을 전용 브라우저로 연다(`--json`·`--out`).
 - 회사 루트는 `company_root` 설정이 없으면 등록된 업무의 `<root>/runtime/inbox`에서 유추한다.
+- 등록 없이 회사 루트를 바로 지정하려면 `task assign … --root <회사루트>`, 닫을 때는 `task done <ID> --root <회사루트>`(등록이 이미 해제됐을 때 필수).
 
 task.md는 `status:`·`updated:` 줄만 agentlayer가 건드린다. 총괄은 status를 손으로 고치지 말 것(훅과 충돌).
 

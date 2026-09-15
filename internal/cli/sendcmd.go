@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -178,7 +179,12 @@ func RunSend(w io.Writer, stdin io.Reader, st *state.Store, stateDir string, tm 
 	if as, ok, _ := task.Load(stateDir, a.ID); ok && as.TaskDir != "" && as.Session == a.Tmux.Session && as.Pane == a.Tmux.PaneID {
 		root, id := as.BoardRootID()
 		if err := board.AppendLog(root, id, "SEND", LogExcerpt(message), time.Now()); err != nil {
-			fmt.Fprintln(w, "  ⚠ log.md 기록 실패:", err)
+			// --json이면 w는 파서가 읽는 출력 — 경고를 섞으면 JSON이 깨진다. stderr로 보낸다.
+			warnOut := w
+			if o.JSON {
+				warnOut = os.Stderr
+			}
+			fmt.Fprintln(warnOut, "  ⚠ log.md 기록 실패:", err)
 		}
 	}
 	if o.JSON {

@@ -69,12 +69,18 @@ func RunBoard(w io.Writer, st *state.Store, stateDir string, cfg *config.Config,
 			return fmt.Errorf("알 수 없는 인자: %s\n%s", args[i], boardUsage)
 		}
 	}
+	if asJSON && out != "" {
+		return errors.New("--json과 --out은 같이 쓸 수 없습니다")
+	}
 	root, cards, err := LoadBoard(st, stateDir, cfg, now)
 	if err != nil {
 		return err
 	}
 	if root == "" {
 		return errors.New("회사 루트를 찾지 못했습니다 — 업무를 하나 등록하거나(task assign --inbox <root>/runtime/inbox) 설정 company_root를 지정하세요: " + config.Path())
+	}
+	if _, err := os.Stat(filepath.Join(root, "tasks")); os.IsNotExist(err) {
+		return fmt.Errorf("회사 루트에 tasks/ 폴더가 없습니다: %s (company_root 확인)", root)
 	}
 	if asJSON {
 		if cards == nil {

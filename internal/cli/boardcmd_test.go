@@ -101,6 +101,31 @@ func TestRunBoardJSONAndOut(t *testing.T) {
 	}
 }
 
+// --json과 --out은 같이 쓸 수 없다 — 둘 다 "출력 목적지"라 하나만 의미가 있다.
+func TestRunBoardJSONAndOutTogetherIsError(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	var out bytes.Buffer
+	err := RunBoard(&out, st, stateDir, &config.Config{}, func(string) error { return nil },
+		[]string{"--json", "--out", filepath.Join(t.TempDir(), "b.html")}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "--json과 --out은 같이 쓸 수 없습니다") {
+		t.Errorf("--json+--out은 오류여야 함: %v", err)
+	}
+}
+
+// company_root가 지정됐지만 그 아래 tasks/ 폴더가 없으면(오타·잘못된 경로) 조용히 빈 보드를
+// 만들지 말고 경로를 짚어 알려야 한다.
+func TestRunBoardMissingTasksDirExplains(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	root := t.TempDir() // tasks/ 없음
+	var out bytes.Buffer
+	err := RunBoard(&out, st, stateDir, &config.Config{CompanyRoot: root}, func(string) error { return nil }, nil, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "tasks/ 폴더가 없습니다") || !strings.Contains(err.Error(), root) {
+		t.Errorf("tasks/ 없으면 경로를 짚어 알려야 함: %v", err)
+	}
+}
+
 func TestRunBoardWithoutCompanyExplains(t *testing.T) {
 	stateDir := t.TempDir()
 	st, _ := state.NewStore(stateDir)

@@ -82,7 +82,11 @@ func MarkDone(root, id, inbox string, now time.Time) ([]string, error) {
 	if err := board.SetStatus(root, id, "done", now); err != nil {
 		return nil, err
 	}
-	if err := board.AppendLog(root, id, "COMPLETE", "", now); err != nil {
+	title := tf.Title
+	if title == "" {
+		title = "완료"
+	}
+	if err := board.AppendLog(root, id, "COMPLETE", title, now); err != nil {
 		return nil, err
 	}
 	cards, err := board.Load(root, nil, nil, now)

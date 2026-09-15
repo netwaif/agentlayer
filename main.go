@@ -276,7 +276,9 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 	}
 	// 업무 보드: 설정 company_root 또는 등록된 업무의 inbox에서 루트를 유추
 	var boardData *discord.BoardData
-	if root, cards, err := cli.LoadBoard(st, st.Dir, cfg, now); err == nil && root != "" {
+	if root, cards, err := cli.LoadBoard(st, st.Dir, cfg, now); err != nil {
+		fmt.Fprintln(os.Stderr, "agentlayer card: 업무 보드 생략:", err)
+	} else if root != "" {
 		boardData = &discord.BoardData{Name: board.CompanyName(root), Cards: cards, StaleLimit: cfg.BoardStaleLimit()}
 	}
 	build := func(pay *usage.Payload) []any {
@@ -476,7 +478,10 @@ func runHook(args []string) error {
 			transitioned = true
 		}
 		notify.Notify(cfg, sender, a, prev, to)
-		// 회사 보드: 등록된 업무면 task.md status·log.md를 먼저 갱신(2초 상한, 실패는 stderr만)
+		// 회사 보드 갱신 + 보고 쓰기가 함께 쓰는 2초 예산 하나(각각 2초씩이 아니다) — 훅이
+		// 에이전트를 막는 시간의 상한은 이 콜백 전체로 2초여야 한다.
+		deadline := time.Now().Add(2 * time.Second)
+		// 회사 보드: 등록된 업무면 task.md status·log.md를 먼저 갱신(공유 예산, 실패는 stderr만)
 		bdone := make(chan error, 1)
 		go func() { _, err := task.ApplyTransition(st.Dir, a, prev, to, time.Now()); bdone <- err }()
 		select {
@@ -484,12 +489,12 @@ func runHook(args []string) error {
 			if err != nil {
 				fmt.Fprintln(os.Stderr, "agentlayer board:", err)
 			}
-		case <-time.After(2 * time.Second):
-			fmt.Fprintln(os.Stderr, "agentlayer board: 2초 안에 task.md를 못 썼습니다")
+		case <-time.After(time.Until(deadline)):
+			fmt.Fprintln(os.Stderr, "agentlayer board: 2초 예산 안에 task.md를 못 썼습니다")
 		}
 		if rep, ok := task.ReportFor(st.Dir, a, prev, to, time.Now()); ok {
 			// hook은 에이전트를 절대 막지 않는다 — 보고 쓰기가 느려도(NAS·SMB
-			// inbox 등) 최대 2초만 기다리고 포기한다.
+			// inbox 등) 위 예산에서 남은 시간만 기다리고 포기한다(둘을 합쳐 2초).
 			done := make(chan error, 1)
 			go func() { _, err := task.WriteReport(rep); done <- err }()
 			select {
@@ -497,8 +502,8 @@ func runHook(args []string) error {
 				if err != nil {
 					fmt.Fprintln(os.Stderr, "agentlayer task report:", err)
 				}
-			case <-time.After(2 * time.Second):
-				fmt.Fprintln(os.Stderr, "agentlayer task report: 2초 안에 못 썼습니다 — inbox 경로가 로컬인지 확인하세요:", rep.Inbox)
+			case <-time.After(time.Until(deadline)):
+				fmt.Fprintln(os.Stderr, "agentlayer task report: 2초 예산 안에 못 썼습니다 — inbox 경로가 로컬인지 확인하세요:", rep.Inbox)
 			}
 		}
 	})

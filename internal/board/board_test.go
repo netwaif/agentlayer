@@ -133,6 +133,24 @@ func TestInferRootAndRoot(t *testing.T) {
 	}
 }
 
+// company_root가 "~" 또는 "~/…"로 시작하면 os.UserHomeDir()로 직접 펼쳐야 한다 — 설정 파일을 읽는
+// 경로라 셸이 대신 펼쳐주지 않는다.
+func TestRootExpandsHomeTilde(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("홈 디렉터리를 못 구함")
+	}
+	if got := Root("~/company", nil); got != filepath.Join(home, "company") {
+		t.Errorf("Root(~/company) = %q, want %q", got, filepath.Join(home, "company"))
+	}
+	if got := Root("~", nil); got != home {
+		t.Errorf("Root(~) = %q, want %q", got, home)
+	}
+	if got := Root("/abs/company", nil); got != "/abs/company" {
+		t.Errorf("절대경로는 그대로: %q", got)
+	}
+}
+
 func TestCompanyName(t *testing.T) {
 	root := t.TempDir()
 	if CompanyName(root) != filepath.Base(root) {

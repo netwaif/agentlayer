@@ -11,12 +11,12 @@ func TestHTMLHasSixColumnsCardsAndEscapes(t *testing.T) {
 	cards := []Card{
 		{ID: "A", Title: "<script>alert(1)</script>", Column: ColReady, Ready: now.Add(-time.Hour), Parents: []string{"Z"}},
 		{ID: "B", Title: "실행 중", Column: ColRunning, Session: "collab-bot", State: "WORK", Updated: now, LastLog: "[..] [SEND] 지시 & 답"},
-		{ID: "C", Title: "이상", Column: ColTodo, Unknown: true},
+		{ID: "C", Title: "이상", Status: "weird", Column: ColTodo, Unknown: true},
 	}
 	h := string(HTML("AI 치트키 회사", cards, now, 30*time.Minute))
 	for _, want := range []string{"<!doctype html>", "AI 치트키 회사", "&lt;script&gt;", "&amp; 답",
 		`class="col" data-col="todo"`, `data-col="ready"`, `data-col="running"`, `data-col="blocked"`, `data-col="review"`, `data-col="done"`,
-		"collab-bot", "WORK", "← Z", "⚠", "?"} {
+		"collab-bot", "WORK", "← Z", "⚠", "?", `title="status 값을 해석하지 못함: weird"`} {
 		if !strings.Contains(h, want) {
 			t.Errorf("HTML에 %q 없음", want)
 		}

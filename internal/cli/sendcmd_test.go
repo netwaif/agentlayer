@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -194,6 +195,52 @@ func TestRunSendLogsToLinkedTask(t *testing.T) {
 	lg, _ := os.ReadFile(filepath.Join(dir, "log.md"))
 	if !strings.Contains(string(lg), "[SEND] 네, 읽어도 됩니다 (10자)") {
 		t.Errorf("log.md:\n%s", lg)
+	}
+}
+
+// --json이면 log.md 기록 실패 경고가 stdout(w)에 섞이면 안 된다 — 파서가 읽는 출력이 깨진다.
+// 경고는 stderr로 가야 한다.
+func TestRunSendJSONKeepsStdoutParseableWhenLogWriteFails(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	a := &state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}}
+	_ = st.Save(a)
+	root := t.TempDir()
+	// tasks/LAB-1 디렉터리를 만들지 않는다 — AppendLog의 log.md 열기가 "no such file or
+	// directory"로 실패하게 만든다.
+	dir := filepath.Join(root, "tasks", "LAB-1")
+	_ = task.Assign(stateDir, task.Assignment{TaskID: "LAB-1", AgentID: a.ID, Session: "collab-bot", Pane: "%1",
+		Inbox: filepath.Join(root, "runtime", "inbox"), TaskDir: dir, AssignedAt: time.Now()}, false)
+
+	origStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = origStderr }()
+
+	var out bytes.Buffer
+	sendErr := RunSend(&out, nil, st, stateDir, &fakeSender{}, []string{"--json", "collab-bot", "네, 됩니다"})
+
+	w.Close()
+	os.Stderr = origStderr
+	var stderrBuf bytes.Buffer
+	_, _ = stderrBuf.ReadFrom(r)
+
+	if sendErr != nil {
+		t.Fatal(sendErr)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(out.Bytes(), &parsed); err != nil {
+		t.Fatalf("stdout이 JSON이 아님: %v\n%s", err, out.String())
+	}
+	if strings.Contains(out.String(), "⚠") {
+		t.Errorf("경고가 stdout에 섞임: %s", out.String())
+	}
+	if !strings.Contains(stderrBuf.String(), "log.md 기록 실패") {
+		t.Errorf("경고가 stderr에 없음: %s", stderrBuf.String())
 	}
 }
 

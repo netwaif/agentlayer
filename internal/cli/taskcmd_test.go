@@ -295,6 +295,46 @@ func TestTaskDoneSetStatusFailureKeepsRegistration(t *testing.T) {
 	}
 }
 
+// 경로 조작 방지: "../x" 같은 업무ID는 taskDone·taskAssign 모두 파일시스템을 건드리기 전에
+// 거부해야 한다(경로 유효성 검사가 board.ReadTaskFile 호출보다 먼저 와야 한다).
+func TestTaskDoneRejectsBadIDBeforeTouchingFS(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	root := t.TempDir() // "root" 위에 "x"라는 형제 폴더가 생기면 안 됨(../x 시도의 흔적)
+	var out bytes.Buffer
+	err := RunTask(context.Background(), &out, st, stateDir, []string{"done", "../x", "--root", root}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "업무ID 형식 오류") {
+		t.Fatalf("../x는 형식 오류로 거부돼야 함: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(filepath.Dir(root), "x")); !os.IsNotExist(statErr) {
+		t.Error("../x가 root 바깥에 흔적을 남겼다")
+	}
+	entries, _ := os.ReadDir(root)
+	if len(entries) != 0 {
+		t.Errorf("root 안에도 아무것도 생기면 안 됨: %v", entries)
+	}
+}
+
+func TestTaskAssignRejectsBadIDBeforeReadingTaskFile(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
+	root := companyRoot(t, "LAB-1")
+	var out bytes.Buffer
+	err := RunTask(context.Background(), &out, st, stateDir,
+		[]string{"assign", "../x", "collab-bot", "--inbox", filepath.Join(root, "runtime", "inbox"), "--root", root}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "업무ID 형식 오류") {
+		t.Fatalf("../x는 형식 오류로 거부돼야 함: %v", err)
+	}
+	if _, ok, _ := task.Load(stateDir, "claude-%1"); ok {
+		t.Error("거부됐으면 등록도 생기면 안 됨")
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "tasks", "x")); !os.IsNotExist(statErr) {
+		t.Error("../x가 회사 루트 바깥/엉뚱한 곳에 흔적을 남겼다")
+	}
+}
+
 func TestTaskDoneGoneNeedsRoot(t *testing.T) {
 	stateDir := t.TempDir()
 	st, _ := state.NewStore(stateDir)

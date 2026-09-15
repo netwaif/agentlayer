@@ -161,9 +161,11 @@ func InferRoot(inbox string) string {
 }
 
 // Root는 설정값 우선, 없으면 inbox 목록에서 첫 유추 성공 값. 설정 0개로 동작하기 위한 단일 지점.
+// 설정값이 "~" 또는 "~/…"로 시작하면 셸이 없는 환경(설정 파일 읽기)이라 OS가 대신 펼쳐주지 않으므로
+// 여기서 os.UserHomeDir()로 직접 펼친다.
 func Root(configured string, inboxes []string) string {
 	if configured != "" {
-		return configured
+		return expandHome(configured)
 	}
 	for _, in := range inboxes {
 		if r := InferRoot(in); r != "" {
@@ -171,6 +173,21 @@ func Root(configured string, inboxes []string) string {
 		}
 	}
 	return ""
+}
+
+// expandHome은 선행 "~" 또는 "~/…"를 os.UserHomeDir()로 펼친다. 홈을 못 얻거나 패턴이 아니면 그대로.
+func expandHome(p string) string {
+	if p != "~" && !strings.HasPrefix(p, "~/") {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return p
+	}
+	if p == "~" {
+		return home
+	}
+	return filepath.Join(home, p[2:])
 }
 
 // CompanyName은 <root>/직원명부.json의 name. 없으면 폴더명.

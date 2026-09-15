@@ -145,3 +145,55 @@ func TestAppendLogFlattensNewlines(t *testing.T) {
 		t.Errorf("개행이 ⏎로 안 바뀜: %q", ReadLastLog(root, "A"))
 	}
 }
+
+// 경로 조작 방지: "../x" 같은 업무ID는 ReadTaskFile·SetStatus·AppendLog·ReadLastLog 모두 파일시스템을
+// 건드리지 않고 즉시 거부해야 한다(defense in depth — 호출자가 이미 걸러도 여기서 다시 막는다).
+func TestBadIDRejectedByAllTaskfileFuncs(t *testing.T) {
+	root := t.TempDir()
+	for _, id := range []string{"../x", "..", ".", "", "a/b"} {
+		if ValidID(id) {
+			t.Errorf("ValidID(%q) = true, want false", id)
+		}
+		if _, err := ReadTaskFile(root, id); err != ErrBadID {
+			t.Errorf("ReadTaskFile(%q) err = %v, want ErrBadID", id, err)
+		}
+		if err := SetStatus(root, id, "done", now); err != ErrBadID {
+			t.Errorf("SetStatus(%q) err = %v, want ErrBadID", id, err)
+		}
+		if err := AppendLog(root, id, "TAG", "text", now); err != ErrBadID {
+			t.Errorf("AppendLog(%q) err = %v, want ErrBadID", id, err)
+		}
+		if s := ReadLastLog(root, id); s != "" {
+			t.Errorf("ReadLastLog(%q) = %q, want \"\"", id, s)
+		}
+	}
+	// 부작용 없음 확인 — root 바깥에 아무것도 생기지 않았다.
+	if _, err := os.Stat(filepath.Join(filepath.Dir(root), "x")); !os.IsNotExist(err) {
+		t.Error("../x가 root 바깥에 파일을 만들었다")
+	}
+	entries, _ := os.ReadDir(root)
+	if len(entries) != 0 {
+		t.Errorf("root 안에 부작용 파일 생성됨: %v", entries)
+	}
+}
+
+// writeAtomic은 원래 파일의 권한 비트를 보존해야 한다 — os.CreateTemp가 만드는 0600으로
+// 조용히 바뀌면 안 된다.
+func TestSetStatusPreservesFileMode(t *testing.T) {
+	root := t.TempDir()
+	writeTask(t, root, "VIDEO-07", sample)
+	p := filepath.Join(root, "tasks", "VIDEO-07", "task.md")
+	if err := os.Chmod(p, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetStatus(root, "VIDEO-07", "in_progress", now); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o644 {
+		t.Errorf("mode = %v, want 0644", fi.Mode().Perm())
+	}
+}

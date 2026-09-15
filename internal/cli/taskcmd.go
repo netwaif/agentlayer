@@ -58,6 +58,9 @@ func taskDone(w io.Writer, stateDir string, args []string, now time.Time) error 
 		return errors.New(taskUsage)
 	}
 	id := pos[0]
+	if !task.ValidID(id) {
+		return fmt.Errorf("업무ID 형식 오류: %q (영숫자·점·밑줄·하이픈 1~64자)", id)
+	}
 	// 등록에서 루트·inbox를 얻는다(있으면). 없으면 --root가 있어야 보드를 닫을 수 있다.
 	inbox, found := "", false
 	list, err := task.List(stateDir)
@@ -137,6 +140,9 @@ func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, no
 	}
 	if len(pos) != 2 || inbox == "" {
 		return errors.New(taskUsage)
+	}
+	if !task.ValidID(pos[0]) {
+		return fmt.Errorf("업무ID 형식 오류: %q (영숫자·점·밑줄·하이픈 1~64자)", pos[0])
 	}
 	abs, err := filepath.Abs(inbox)
 	if err != nil {

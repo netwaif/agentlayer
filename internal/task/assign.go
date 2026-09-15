@@ -9,10 +9,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/netwaif/agentlayer/internal/board"
 )
 
 // Assignment는 세션(pane) 하나 ↔ 업무 하나. 파일은 <state>/tasks/<agent-id>.json.
@@ -38,10 +39,9 @@ func (as Assignment) BoardRootID() (root, id string) {
 
 var ErrAlreadyAssigned = errors.New("이 세션에는 이미 업무가 있습니다 (--replace로 교체)")
 
-var idRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
-
-// ValidID는 업무ID 규칙(영숫자·점·밑줄·하이픈, 1~64자).
-func ValidID(id string) bool { return idRe.MatchString(id) }
+// ValidID는 업무ID 규칙(영숫자·점·밑줄·하이픈, 1~64자) — board.ValidID에 위임한다(정본은 board,
+// task.md·log.md를 실제로 만지는 패키지라서 거기서 막는 게 방어의 마지막 줄).
+func ValidID(id string) bool { return board.ValidID(id) }
 
 // validAgentID는 에이전트 ID가 경로 조작 없이 파일명 한 조각으로 쓰일 수 있는지 확인한다.
 func validAgentID(id string) bool {
