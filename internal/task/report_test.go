@@ -93,7 +93,7 @@ func TestReportForStaleAssignmentIsSilent(t *testing.T) {
 }
 
 func TestReportCarriesTaskDir(t *testing.T) {
-	stateDir, root, a := linkedAgent(t)
+	stateDir, root, a := linkedAgent(t, "폴더 밖 읽어도 될까요?")
 	rep, ok := ReportFor(stateDir, a, state.StateWorking, state.StateDoneUnread, time.Now())
 	if !ok || rep.TaskDir != filepath.Join(root, "tasks", "LAB-1") {
 		t.Errorf("rep=%+v ok=%v", rep, ok)

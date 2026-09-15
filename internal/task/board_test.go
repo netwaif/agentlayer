@@ -11,13 +11,15 @@ import (
 	"github.com/netwaif/agentlayer/internal/state"
 )
 
-func linkedAgent(t *testing.T) (stateDir, root string, a *state.Agent) {
+// linkedAgent는 회사 tasks/LAB-1에 등록된 에이전트를 하나 만든다. ask가 ""면 Ask 없는(=idle
+// echo 같은) 전이를 재현하고, 아니면 그 문구를 Ask로 채운다.
+func linkedAgent(t *testing.T, ask string) (stateDir, root string, a *state.Agent) {
 	t.Helper()
 	stateDir, root = t.TempDir(), t.TempDir()
 	dir := filepath.Join(root, "tasks", "LAB-1")
 	_ = os.MkdirAll(dir, 0o755)
 	_ = os.WriteFile(filepath.Join(dir, "task.md"), []byte("# LAB-1\n```yaml\nstatus: in_progress\n```\n"), 0o644)
-	a = &state.Agent{ID: "claude-%1", Kind: "claude", Task: "OK 답하기", Ask: "폴더 밖 읽어도 될까요?",
+	a = &state.Agent{ID: "claude-%1", Kind: "claude", Task: "OK 답하기", Ask: ask,
 		Tmux: state.TmuxRef{Session: "collab-bot", WindowName: "t123456", PaneID: "%1"}}
 	if err := Assign(stateDir, Assignment{TaskID: "LAB-1", AgentID: a.ID, Session: "collab-bot", Window: "t123456",
 		Pane: "%1", Inbox: filepath.Join(root, "runtime", "inbox"), TaskDir: dir, AssignedAt: time.Now()}, false); err != nil {
@@ -50,7 +52,7 @@ func TestApplyTransitionTable(t *testing.T) {
 		{state.StateDoneUnread, state.StateIdle, "", "", false}, // 읽음
 	}
 	for _, c := range cases {
-		stateDir, root, a := linkedAgent(t)
+		stateDir, root, a := linkedAgent(t, "폴더 밖 읽어도 될까요?")
 		applied, err := ApplyTransition(stateDir, a, c.prev, c.to, now)
 		if err != nil {
 			t.Fatalf("%s→%s: %v", c.prev, c.to, err)
@@ -75,8 +77,23 @@ func TestApplyTransitionTable(t *testing.T) {
 	}
 }
 
+func TestApplyTransitionWaitWithoutAskLogsIdleEcho(t *testing.T) {
+	stateDir, root, a := linkedAgent(t, "")
+	applied, err := ApplyTransition(stateDir, a, state.StateWorking, state.StateWaiting, time.Now())
+	if err != nil || !applied {
+		t.Fatalf("applied=%v err=%v", applied, err)
+	}
+	task, lg := readTask(t, root)
+	if !strings.Contains(task, "status: waiting_collab-bot") {
+		t.Errorf("status:\n%s", task)
+	}
+	if !strings.Contains(lg, "[ASK] 입력 대기(승인창 아님)") {
+		t.Errorf("log:\n%s", lg)
+	}
+}
+
 func TestApplyTransitionUnlinkedIsNoop(t *testing.T) {
-	stateDir, root, a := linkedAgent(t)
+	stateDir, root, a := linkedAgent(t, "폴더 밖 읽어도 될까요?")
 	as, _, _ := Load(stateDir, a.ID)
 	as.TaskDir = ""
 	_ = Assign(stateDir, *as, true)
@@ -94,7 +111,7 @@ func TestApplyTransitionUnlinkedIsNoop(t *testing.T) {
 }
 
 func TestApplyTransitionStaleAssignmentIsNoop(t *testing.T) {
-	stateDir, _, a := linkedAgent(t)
+	stateDir, _, a := linkedAgent(t, "폴더 밖 읽어도 될까요?")
 	a.Tmux.PaneID = "%77" // 재사용된 ID — 등록 당시 pane과 다름
 	if applied, _ := ApplyTransition(stateDir, a, state.StateWorking, state.StateDoneUnread, time.Now()); applied {
 		t.Error("세션·pane 불일치면 무동작")

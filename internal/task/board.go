@@ -16,7 +16,8 @@ import (
 //	DONE  → reviewing + [REPORT] DONE: …
 //	ERR   → status 유지 + [ERROR] …
 //
-// 미등록·TaskDir 없음·세션/pane 불일치·그 밖의 전이는 무동작(false, nil). 실패해도 에이전트는 막지 않는다(호출자 몫).
+// 미등록·TaskDir 없음·세션/pane 불일치·그 밖의 전이는 무동작(false, nil). applied는 "실제로 반영됐다"는
+// 뜻이라 board 쓰기가 실패하면(false, err)를 돌려준다. 실패해도 에이전트는 막지 않는다(호출자 몫).
 func ApplyTransition(stateDir string, a *state.Agent, prev, to state.AgentState, now time.Time) (bool, error) {
 	if prev == to {
 		return false, nil
@@ -44,16 +45,24 @@ func ApplyTransition(stateDir string, a *state.Agent, prev, to state.AgentState,
 	}
 	if status != "" {
 		if err := board.SetStatus(root, id, status, now); err != nil {
-			return true, err
+			return false, err
 		}
 	}
 	if tag != "" {
-		text := a.Headline()
-		if tag == "REPORT" {
-			text = "DONE: " + text
+		var text string
+		switch tag {
+		case "ASK":
+			text = a.Ask
+			if text == "" {
+				text = "입력 대기(승인창 아님)"
+			}
+		case "REPORT":
+			text = "DONE: " + a.Headline()
+		default:
+			text = a.Headline()
 		}
 		if err := board.AppendLog(root, id, tag, text, now); err != nil {
-			return true, err
+			return false, err
 		}
 	}
 	return true, nil
