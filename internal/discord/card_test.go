@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/starter"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/usage"
@@ -76,17 +77,17 @@ func TestBuildCard(t *testing.T) {
 		"갱신 \\u003ct:", // json.Marshal이 <를 이스케이프 — Discord는 정상 해석
 		"⌁collab방",
 		// TUI 동등 정보
-		"collab-bot",              // tmux 세션 이름
-		"승인 대기",                 // TASK
-		"⎇ agent/fix-card",        // worktree 브랜치
-		"작업중?",                  // WORK 정체 의심
-		"ctx 16%",                 // 게이지 대신 텍스트
-		"3분",                     // ctx 스냅샷 나이
-		"응답 필요 1",              // 상태 집계 요약
-		"기본모델",                 // 기본모델 라인
-		"⚠",                       // claude 기본이 Fable → 경고
-		"gpt-5.6-sol",             // codex 기본모델
-		"Gemini 자동",              // 미설정 = 자동
+		"collab-bot",       // tmux 세션 이름
+		"승인 대기",            // TASK
+		"⎇ agent/fix-card", // worktree 브랜치
+		"작업중?",             // WORK 정체 의심
+		"ctx 16%",          // 게이지 대신 텍스트
+		"3분",               // ctx 스냅샷 나이
+		"응답 필요 1",          // 상태 집계 요약
+		"기본모델",             // 기본모델 라인
+		"⚠",                // claude 기본이 Fable → 경고
+		"gpt-5.6-sol",      // codex 기본모델
+		"Gemini 자동",        // 미설정 = 자동
 		"MultiAgent", "hwpx-tag(진행중)",
 		"── claude", "── codex", // 종류 그룹 구분선
 	} {
@@ -215,4 +216,110 @@ func TestBuildCardFoldsBotThreadWindow(t *testing.T) {
 	if !strings.Contains(s, "작업중 1") || strings.Contains(s, "대기 1") {
 		t.Errorf("집계는 접힌 행 기준(작업중 1만):\n%s", s)
 	}
+}
+
+func boardFixture() *BoardData {
+	return &BoardData{Name: "AI 치트키 회사", StaleLimit: 30 * time.Minute, Cards: []board.Card{
+		{ID: "VIDEO-07-TOPICS", Column: board.ColBlocked, Session: "search-youtube-bot:t170966", State: "WAIT",
+			Updated: t0.Add(-45 * time.Minute), LastLog: "[2026-08-25 11:15] [ASK] 참고자료 폴더 밖을 읽어도 될까요?"},
+		{ID: "VIDEO-07-SCRIPT", Column: board.ColRunning, Session: "collab-bot", State: "WORK", Updated: t0.Add(-3 * time.Minute)},
+		{ID: "VIDEO-07-THUMB", Column: board.ColReady, Parents: []string{"VIDEO-07-TOPICS"}, Ready: t0.Add(-41 * time.Minute)},
+		{ID: "VIDEO-06", Column: board.ColDone, Updated: t0.Add(-time.Hour)},
+		{ID: "VIDEO-08", Column: board.ColTodo, Parents: []string{"VIDEO-07-THUMB"}},
+		{ID: "VIDEO-07-REVIEW", Column: board.ColReview, Session: "sendmanual-bot", State: "DONE", Updated: t0.Add(-time.Minute)},
+	}}
+}
+
+func TestBoardContainerOrderCountsAndStale(t *testing.T) {
+	c := boardContainer(boardFixture(), t0)
+	if c == nil {
+		t.Fatal("컨테이너 없음")
+	}
+	txt := containerText(c) // 기존 테스트 헬퍼가 있으면 재사용, 없으면 comps의 content를 이어 붙이는 헬퍼를 이 파일에 추가
+	for _, want := range []string{
+		"### 업무 보드 — AI 치트키 회사",
+		"ready 1 · running 1 · blocked 1 · review 1 · todo 1 · done 1",
+		"VIDEO-07-TOPICS", "search-youtube-bot:t170966", "WAIT", "⚠",
+		"[ASK] 참고자료 폴더 밖을 읽어도 될까요?",
+		"VIDEO-07-THUMB", "← VIDEO-07-TOPICS",
+	} {
+		if !strings.Contains(txt, want) {
+			t.Errorf("보드 텍스트에 %q 없음:\n%s", want, txt)
+		}
+	}
+	// 정렬: blocked → review → running → ready
+	iB, iRv, iRn, iRd := strings.Index(txt, "VIDEO-07-TOPICS"), strings.Index(txt, "VIDEO-07-REVIEW"),
+		strings.Index(txt, "VIDEO-07-SCRIPT"), strings.Index(txt, "VIDEO-07-THUMB")
+	if !(iB < iRv && iRv < iRn && iRn < iRd) {
+		t.Errorf("정렬 어긋남: %d %d %d %d", iB, iRv, iRn, iRd)
+	}
+	// todo·done은 행으로 안 나옴
+	if strings.Contains(txt, "VIDEO-06 ") || strings.Contains(txt, "VIDEO-08") {
+		t.Error("todo·done 카드는 집계에만")
+	}
+	// ⚠는 blocked 45분·ready 41분에만, running 3분에는 없음
+	line := lineContaining(txt, "VIDEO-07-SCRIPT")
+	if strings.Contains(line, "⚠") {
+		t.Errorf("running에 ⚠: %s", line)
+	}
+}
+
+func TestBoardContainerCapsAtEightRows(t *testing.T) {
+	b := &BoardData{Name: "X", StaleLimit: time.Hour}
+	for i := 0; i < 11; i++ {
+		b.Cards = append(b.Cards, board.Card{ID: fmt.Sprintf("T-%02d", i), Column: board.ColRunning, Updated: t0})
+	}
+	txt := containerText(boardContainer(b, t0))
+	if strings.Count(txt, "T-") != 8 || !strings.Contains(txt, "외 3") {
+		t.Errorf("8행 상한 위반:\n%s", txt)
+	}
+}
+
+func TestBuildCardOmitsBoardWhenNil(t *testing.T) {
+	d := fixtureData()
+	d.Board = nil
+	if s := fmt.Sprint(BuildCard(d, t0)); strings.Contains(s, "업무 보드") {
+		t.Error("Board nil이면 컨테이너 없음")
+	}
+	d.Board = &BoardData{Name: "빈 회사"}
+	if s := fmt.Sprint(BuildCard(d, t0)); strings.Contains(s, "업무 보드") {
+		t.Error("카드 0장이면 컨테이너 없음")
+	}
+	d.Board = boardFixture()
+	if s := fmt.Sprint(BuildCard(d, t0)); !strings.Contains(s, "업무 보드") {
+		t.Error("카드가 있으면 컨테이너 있음")
+	}
+}
+
+func containerText(c map[string]any) string {
+	var sb strings.Builder
+	var walk func(v any)
+	walk = func(v any) {
+		switch x := v.(type) {
+		case map[string]any:
+			if s, ok := x["content"].(string); ok {
+				sb.WriteString(s + "\n")
+			}
+			if comps, ok := x["components"].([]any); ok {
+				for _, c := range comps {
+					walk(c)
+				}
+			}
+		case []any:
+			for _, c := range x {
+				walk(c)
+			}
+		}
+	}
+	walk(c)
+	return sb.String()
+}
+
+func lineContaining(txt, sub string) string {
+	for _, l := range strings.Split(txt, "\n") {
+		if strings.Contains(l, sub) {
+			return l
+		}
+	}
+	return ""
 }

@@ -231,7 +231,7 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	fmt.Fprintln(w, PadRight("업무ID", 24)+PadRight("세션", 30)+PadRight("상태", 8)+"경과")
 	for _, r := range rows {
 		label := targetLabel(r.Session, r.Window)
-		fmt.Fprintln(w, PadRight(r.TaskID, 24)+PadRight(label, 30)+PadRight(stateWord(r.State), 8)+Since(r.AssignedAt, now))
+		fmt.Fprintln(w, PadRight(r.TaskID, 24)+PadRight(label, 30)+PadRight(StateWord(state.AgentState(r.State)), 8)+Since(r.AssignedAt, now))
 	}
 	return nil
 }
@@ -245,9 +245,9 @@ func targetLabel(session, window string) string {
 	return session
 }
 
-// stateWord는 status 표의 단어와 맞춘다(idle·WAIT·DONE·WORK·ERR·dead).
-func stateWord(s string) string {
-	switch state.AgentState(s) {
+// StateWord는 status 표의 단어와 맞춘다(idle·WAIT·DONE·WORK·ERR·dead).
+func StateWord(s state.AgentState) string {
+	switch s {
 	case state.StateIdle:
 		return "idle"
 	case state.StateWaiting:
@@ -261,7 +261,7 @@ func stateWord(s string) string {
 	case state.StateDead:
 		return "dead"
 	}
-	return s
+	return string(s)
 }
 
 func taskWatch(ctx context.Context, w io.Writer, args []string) error {

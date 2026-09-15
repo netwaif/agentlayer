@@ -17,6 +17,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/cli"
 	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/discord"
@@ -257,8 +258,9 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 	ctx := usage.AgentCtx(agents, usage.LoadSnapshots(usage.SnapshotsDir()),
 		usage.CodexSessionsRoot(), usage.GeminiDir())
 	home, _ := os.UserHomeDir()
+	cfg := config.Load()
 	// Discord 봇 표시(세션 단위): 채널 라벨이 있으면 ⌁라벨, 없으면 ⌁
-	wired := cli.WiredSessions(agents, config.Load().ChannelLabels)
+	wired := cli.WiredSessions(agents, cfg.ChannelLabels)
 	// worktree 브랜치 표시 (TUI의 ⎇와 동일 소스)
 	branches := map[string]string{}
 	if metas, err := wt.ListMetas(state.DefaultDir()); err == nil {
@@ -266,11 +268,17 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 			branches[m.Path] = m.Branch
 		}
 	}
+	// 업무 보드: 설정 company_root 또는 등록된 업무의 inbox에서 루트를 유추
+	var boardData *discord.BoardData
+	if root, cards, err := cli.LoadBoard(st, st.Dir, cfg, now); err == nil && root != "" {
+		boardData = &discord.BoardData{Name: board.CompanyName(root), Cards: cards, StaleLimit: cfg.BoardStaleLimit()}
+	}
 	build := func(pay *usage.Payload) []any {
 		return discord.BuildCard(discord.CardData{
 			Pay: pay, Agents: agents, Ctx: ctx, Wired: wired, Branches: branches,
 			DefModels: usage.DefaultModels(home),
 			Tasks:     starter.ActiveTasks(starter.DefaultRoot()),
+			Board:     boardData,
 			Home:      home,
 		}, now)
 	}
@@ -281,7 +289,6 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 		return enc.Encode(build(usage.FetchCached(st.Dir, usageMaxAge, usage.CoachRunner, now)))
 	}
 
-	cfg := config.Load()
 	if cfg.DiscordWebhookURL == "" {
 		return fmt.Errorf("discord_webhook_url이 설정에 없습니다: %s", config.Path())
 	}

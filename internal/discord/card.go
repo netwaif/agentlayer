@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/starter"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/usage"
@@ -352,16 +353,90 @@ func since(from, now time.Time) string {
 	}
 }
 
+// BoardData는 업무 보드 절 재료. nil이면 절 생략(회사가 없는 사용자에겐 아무것도 안 보임).
+type BoardData struct {
+	Name       string
+	Cards      []board.Card
+	StaleLimit time.Duration
+}
+
+// 열 → 행 순서와 이모지. blocked가 맨 위(사람이 풀어야 함), 그다음 review(총괄 검토), running, ready(배정 대기).
+var boardRowOrder = []string{board.ColBlocked, board.ColReview, board.ColRunning, board.ColReady}
+var boardEmoji = map[string]string{board.ColBlocked: "🟡", board.ColReview: "🔵", board.ColRunning: "🟢", board.ColReady: "⚪"}
+
+const boardMaxRows = 8
+
+// boardContainer는 업무 보드 절: 집계 한 줄 + 행(blocked→review→running→ready, 최대 8). 카드 0장이면 nil.
+func boardContainer(b *BoardData, now time.Time) map[string]any {
+	if b == nil || len(b.Cards) == 0 {
+		return nil
+	}
+	cnt := board.Counts(b.Cards)
+	head := "### 업무 보드 — " + b.Name + "\n-# " + fmt.Sprintf("ready %d · running %d · blocked %d · review %d · todo %d · done %d",
+		cnt[board.ColReady], cnt[board.ColRunning], cnt[board.ColBlocked], cnt[board.ColReview], cnt[board.ColTodo], cnt[board.ColDone])
+	var rows []board.Card
+	for _, col := range boardRowOrder {
+		for _, c := range b.Cards {
+			if c.Column == col {
+				rows = append(rows, c)
+			}
+		}
+	}
+	lines := []string{head}
+	shown := 0
+	for _, c := range rows {
+		if shown == boardMaxRows {
+			lines = append(lines, fmt.Sprintf("-# 외 %d", len(rows)-shown))
+			break
+		}
+		shown++
+		line := boardEmoji[c.Column] + " **" + c.ID + "**"
+		if c.Session != "" {
+			line += "  " + c.Session
+		}
+		switch c.Column {
+		case board.ColReady:
+			line += "  (ready " + since(c.Ready, now)
+			if board.StaleReady(c, now, b.StaleLimit) {
+				line += " ⚠"
+			}
+			line += ")"
+		default:
+			if c.State != "" {
+				line += "  " + c.State + " " + since(c.Updated, now)
+			}
+			if board.StaleReady(c, now, b.StaleLimit) {
+				line += "  ⚠"
+			}
+		}
+		if len(c.Parents) > 0 {
+			line += "  ← " + strings.Join(c.Parents, ", ")
+		}
+		lines = append(lines, line)
+		if c.LastLog != "" {
+			// "[시각] [TAG] 내용"에서 시각은 뺀다(카드 갱신 시각이 따로 있다)
+			l := c.LastLog
+			if i := strings.Index(l, "] ["); i > 0 {
+				l = l[i+2:]
+			}
+			lines = append(lines, "-# "+truncateRunes(l, 60))
+		}
+	}
+	return map[string]any{"type": typeContainer, "accent_color": accent("#565B66"),
+		"components": []any{map[string]any{"type": typeText, "content": strings.Join(lines, "\n")}}}
+}
+
 // CardData는 카드 한 장을 조립하는 데 필요한 재료 전부.
 type CardData struct {
-	Pay       *usage.Payload            // coach 사용량 (nil이면 provider 섹션 생략)
-	Agents    []*state.Agent            // store.List 순서 그대로 (종류 그룹 정렬)
-	Ctx       map[string]usage.CtxInfo  // 에이전트 ID → 모델·ctx% 스냅샷
-	Wired     map[string]string         // tmux 세션 → Discord 봇 표시("⌁" 또는 "⌁라벨")
-	Branches  map[string]string         // CWD → worktree 브랜치 (⎇)
-	DefModels map[string]string         // claude·codex·gemini 기본모델 (빈 값=자동)
-	Tasks     []starter.Task            // MultiAgent 활성 작업
-	Home      string                    // ~ 축약용
+	Pay       *usage.Payload           // coach 사용량 (nil이면 provider 섹션 생략)
+	Agents    []*state.Agent           // store.List 순서 그대로 (종류 그룹 정렬)
+	Ctx       map[string]usage.CtxInfo // 에이전트 ID → 모델·ctx% 스냅샷
+	Wired     map[string]string        // tmux 세션 → Discord 봇 표시("⌁" 또는 "⌁라벨")
+	Branches  map[string]string        // CWD → worktree 브랜치 (⎇)
+	DefModels map[string]string        // claude·codex·gemini 기본모델 (빈 값=자동)
+	Tasks     []starter.Task           // MultiAgent 활성 작업
+	Board     *BoardData               // 업무 보드 절 (nil이면 생략)
+	Home      string                   // ~ 축약용
 }
 
 // BuildCard는 카드 전체를 조립한다. Pay가 nil이면 에이전트 섹션만.
@@ -378,6 +453,9 @@ func BuildCard(d CardData, now time.Time) []any {
 	}
 	if ac := agentsContainer(d, now); ac != nil {
 		comps = append(comps, ac)
+	}
+	if bc := boardContainer(d.Board, now); bc != nil {
+		comps = append(comps, bc)
 	}
 	comps = append(comps, map[string]any{"type": typeText,
 		"content": fmt.Sprintf("-# 갱신 <t:%d:R>", now.Unix())})
