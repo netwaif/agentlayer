@@ -172,4 +172,6 @@ MultiAgent(`starter`) 루트를 보드로 합치기, 여러 회사 루트, 우�
 
 - 훅이 task.md를 쓰므로 총괄과 훅이 같은 파일을 동시에 쓸 수 있다 — 둘 다 temp→rename이고 훅은 `status:` 한 줄만 바꾼다. 총괄이 편집기로 열어 둔 채 저장하면 훅의 전이가 덮일 수 있다(문서에 "status는 손대지 말 것"으로 막는다).
 - `waiting_<세션>`은 tmux 세션 이름만 쓴다(`waiting_collab-bot`, 창 `t170966`은 뺀다). mat은 접두사 `waiting_`만 보므로 어느 쪽이든 무해하고, 창은 카드의 Session 열에 따로 보인다.
-- `Root()` 유추는 등록이 하나도 없을 때 실패한다(회사는 있는데 배정 전). 그때는 카드 보드 절이 안 보인다 — `company_root`를 `companyctl install`이 안내한다(자동 기록은 안 함: agentlayer 설정 파일은 사용자 소유).
+- `Root()` 유추는 등록이 하나도 없을 때 실패한다(회사는 있는데 배정 전, 또는 총괄이 마지막 업무를 `task done`으로 닫아 등록이 전부 사라진 직후). 후자는 필드 테스트에서 실제로 관측됐다 —
+  `agentlayer board`가 "회사 루트를 찾지 못했습니다"로 실패하고 디스코드 카드의 업무 보드 절이 사라졌다.
+  `task assign`·`task done`이 루트를 찾을 때마다 `<stateDir>/company.json`에 기억해 두는 것으로 고쳤다(`board.RememberRoot`/`RememberedRoot`, 우선순위는 `company_root` 설정 → inbox 유추 → 기억된 값). 배정 전(회사는 있는데 아직 한 번도 등록이 없음)은 여전히 실패한다 — `company_root`를 `companyctl install`이 안내한다(자동 기록은 안 함: agentlayer 설정 파일은 사용자 소유).
