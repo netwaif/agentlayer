@@ -117,3 +117,59 @@ func TestApplyTransitionStaleAssignmentIsNoop(t *testing.T) {
 		t.Error("세션·pane 불일치면 무동작")
 	}
 }
+
+func writeCompanyTask(t *testing.T, root, id, status, parents string) {
+	t.Helper()
+	dir := filepath.Join(root, "tasks", id)
+	_ = os.MkdirAll(dir, 0o755)
+	_ = os.WriteFile(filepath.Join(dir, "task.md"),
+		[]byte("# "+id+" 제목\n```yaml\nstatus: "+status+"\nparents: "+parents+"\n```\n"), 0o644)
+}
+
+func TestMarkDoneEmitsReadyOnlyWhenAllParentsDone(t *testing.T) {
+	root := t.TempDir()
+	inbox := filepath.Join(root, "runtime", "inbox")
+	writeCompanyTask(t, root, "A", "reviewing", "[]")
+	writeCompanyTask(t, root, "B", "in_progress", "[]")
+	writeCompanyTask(t, root, "C", "pending", "[A]")     // A만 부모 → READY
+	writeCompanyTask(t, root, "D", "pending", "[A, B]")  // B 미완 → 안 씀
+	writeCompanyTask(t, root, "E", "in_progress", "[A]") // 이미 진행 중 → 안 씀
+	now := time.Now()
+	ready, err := MarkDone(root, "A", inbox, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ready) != 1 || ready[0] != "C" {
+		t.Errorf("ready = %v, want [C]", ready)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "tasks", "A", "task.md"))
+	if !strings.Contains(string(b), "status: done") {
+		t.Errorf("A status:\n%s", b)
+	}
+	lg, _ := os.ReadFile(filepath.Join(root, "tasks", "A", "log.md"))
+	if !strings.Contains(string(lg), "[COMPLETE]") {
+		t.Errorf("A log:\n%s", lg)
+	}
+	rep, ok, err := Poll(inbox)
+	if err != nil || !ok {
+		t.Fatalf("READY 이벤트 없음: ok=%v err=%v", ok, err)
+	}
+	if rep.Kind != "board" || rep.To != "READY" || rep.From != "pending" || rep.TaskID != "C" ||
+		rep.Task != "C 제목" || rep.TaskDir != filepath.Join(root, "tasks", "C") {
+		t.Errorf("rep = %+v", rep)
+	}
+	if _, ok, _ := Poll(inbox); ok {
+		t.Error("이벤트는 하나여야 함")
+	}
+	// B까지 끝나면 D가 READY
+	ready, _ = MarkDone(root, "B", inbox, now)
+	if len(ready) != 1 || ready[0] != "D" {
+		t.Errorf("ready = %v, want [D]", ready)
+	}
+}
+
+func TestMarkDoneWithoutTaskFileFails(t *testing.T) {
+	if _, err := MarkDone(t.TempDir(), "NOPE", "", time.Now()); err == nil {
+		t.Error("task.md 없으면 에러")
+	}
+}

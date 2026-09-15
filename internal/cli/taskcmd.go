@@ -18,7 +18,7 @@ import (
 const taskUsage = `사용법:
   agentlayer task assign <업무ID> <세션[:창]> --inbox <폴더> [--root <회사루트>] [--replace]
   agentlayer task list [--json]
-  agentlayer task done <업무ID>
+  agentlayer task done <업무ID> [--root <회사루트>]
   agentlayer task watch <inbox> [--once] [--interval 200ms]`
 
 // RunTask — 업무 ↔ 세션 등록과 수신함 감시. 보고 자체는 hook이 쓴다(main.go).
@@ -32,23 +32,78 @@ func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string,
 	case "list":
 		return taskList(w, st, stateDir, args[1:], now)
 	case "done":
-		if len(args) < 2 {
-			return errors.New(taskUsage)
-		}
-		found, err := task.Done(stateDir, args[1])
-		if err != nil {
-			return err
-		}
-		if !found {
-			return fmt.Errorf("업무 %q이 등록돼 있지 않습니다", args[1])
-		}
-		fmt.Fprintf(w, "업무 %s 등록 해제\n", args[1])
-		return nil
+		return taskDone(w, stateDir, args[1:], now)
 	case "watch":
 		return taskWatch(ctx, w, args[1:])
 	default:
 		return fmt.Errorf("알 수 없는 task 명령: %s\n%s", args[0], taskUsage)
 	}
+}
+
+func taskDone(w io.Writer, stateDir string, args []string, now time.Time) error {
+	var pos []string
+	root := ""
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--root" {
+			if i+1 >= len(args) {
+				return errors.New("--root 뒤에 회사 루트가 필요합니다")
+			}
+			root = args[i+1]
+			i++
+			continue
+		}
+		pos = append(pos, args[i])
+	}
+	if len(pos) != 1 {
+		return errors.New(taskUsage)
+	}
+	id := pos[0]
+	// 등록에서 루트·inbox를 얻는다(있으면). 없으면 --root가 있어야 보드를 닫을 수 있다.
+	inbox := ""
+	list, err := task.List(stateDir)
+	if err != nil {
+		return err
+	}
+	for _, as := range list {
+		if as.TaskID == id {
+			inbox = as.Inbox
+			if root == "" {
+				if r, _ := as.BoardRootID(); r != "" {
+					root = r
+				}
+			}
+		}
+	}
+	found, err := task.Done(stateDir, id)
+	if err != nil {
+		return err
+	}
+	if root == "" {
+		if found {
+			fmt.Fprintf(w, "업무 %s 등록 해제 (보드 연결 없음)\n", id)
+			return nil
+		}
+		return fmt.Errorf("업무 %q이 등록돼 있지 않습니다 — 보드만 닫으려면 --root <회사루트>", id)
+	}
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
+	if inbox == "" {
+		inbox = filepath.Join(root, "runtime", "inbox")
+	}
+	ready, err := task.MarkDone(root, id, inbox, now)
+	if err != nil {
+		return err
+	}
+	if found {
+		fmt.Fprintf(w, "업무 %s 등록 해제 · task.md done\n", id)
+	} else {
+		fmt.Fprintf(w, "업무 %s task.md done (등록은 없었음)\n", id)
+	}
+	for _, c := range ready {
+		fmt.Fprintf(w, "  → %s 배정 가능(READY 이벤트 전송)\n", c)
+	}
+	return nil
 }
 
 func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, now time.Time) error {

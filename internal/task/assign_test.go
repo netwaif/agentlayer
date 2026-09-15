@@ -86,6 +86,19 @@ func TestAssignAndLoadRejectPathTraversalAgentID(t *testing.T) {
 	}
 }
 
+func TestAssignmentBoardRootID(t *testing.T) {
+	as := Assignment{TaskDir: filepath.Join("/x", "tasks", "A")}
+	root, id := as.BoardRootID()
+	if root != "/x" || id != "A" {
+		t.Errorf("root=%q id=%q, want /x, A", root, id)
+	}
+	empty := Assignment{}
+	root, id = empty.BoardRootID()
+	if root != "" || id != "" {
+		t.Errorf("TaskDir 없으면 (\"\", \"\"): root=%q id=%q", root, id)
+	}
+}
+
 func TestAssignmentTaskDirRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	as := Assignment{TaskID: "A", AgentID: "claude-%1", Session: "s", Pane: "%1", Inbox: "/x/runtime/inbox",

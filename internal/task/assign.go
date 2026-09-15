@@ -28,6 +28,14 @@ type Assignment struct {
 	AssignedAt time.Time `json:"assigned_at"`
 }
 
+// BoardRootID는 TaskDir(<root>/tasks/<id>)를 회사 루트와 업무ID로 되돌린다. TaskDir가 비면 ("", "").
+func (as Assignment) BoardRootID() (root, id string) {
+	if as.TaskDir == "" {
+		return "", ""
+	}
+	return filepath.Dir(filepath.Dir(as.TaskDir)), filepath.Base(as.TaskDir)
+}
+
 var ErrAlreadyAssigned = errors.New("이 세션에는 이미 업무가 있습니다 (--replace로 교체)")
 
 var idRe = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)

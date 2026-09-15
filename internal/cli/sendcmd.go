@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -177,7 +176,7 @@ func RunSend(w io.Writer, stdin io.Reader, st *state.Store, stateDir string, tm 
 	}
 	// 회사 업무가 등록된 세션이면 총괄의 지시·답변을 log.md에 남긴다([ASK] 뒤의 [SEND]가 Q&A 한 쌍).
 	if as, ok, _ := task.Load(stateDir, a.ID); ok && as.TaskDir != "" && as.Session == a.Tmux.Session && as.Pane == a.Tmux.PaneID {
-		root, id := filepath.Dir(filepath.Dir(as.TaskDir)), filepath.Base(as.TaskDir)
+		root, id := as.BoardRootID()
 		if err := board.AppendLog(root, id, "SEND", LogExcerpt(message), time.Now()); err != nil {
 			fmt.Fprintln(w, "  ⚠ log.md 기록 실패:", err)
 		}

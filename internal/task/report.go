@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/state"
 )
 
@@ -72,6 +73,13 @@ func WriteReport(r *Report) (string, error) {
 	}
 	p := filepath.Join(dir, r.ID+".json")
 	return p, writeAtomic(p, r)
+}
+
+// ReadyReport는 부모가 전부 끝나 배정 가능해진 자식 업무를 총괄에게 알리는 이벤트.
+// 기존 watch가 그대로 흘려보낸다(version·id·task_id·to만 검사).
+func ReadyReport(child board.Card, root string, now time.Time) *Report {
+	return &Report{Version: 1, ID: NewID(), TaskID: child.ID, Kind: "board", From: "pending", To: "READY",
+		Task: child.Title, TaskDir: board.TaskDir(root, child.ID), At: now}
 }
 
 // NewID는 32자 hex(128비트 난수). 외부 uuid 의존 없이 충분히 유일하다.

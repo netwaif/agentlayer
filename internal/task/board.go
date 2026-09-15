@@ -2,7 +2,6 @@
 package task
 
 import (
-	"path/filepath"
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/board"
@@ -29,7 +28,7 @@ func ApplyTransition(stateDir string, a *state.Agent, prev, to state.AgentState,
 	if as.Session != a.Tmux.Session || as.Pane != a.Tmux.PaneID {
 		return false, nil
 	}
-	root, id := filepath.Dir(filepath.Dir(as.TaskDir)), filepath.Base(as.TaskDir)
+	root, id := as.BoardRootID()
 	status, tag := "", ""
 	switch to {
 	case state.StateWaiting:
@@ -66,4 +65,35 @@ func ApplyTransition(stateDir string, a *state.Agent, prev, to state.AgentState,
 		}
 	}
 	return true, nil
+}
+
+// MarkDone은 업무를 done으로 닫고([COMPLETE]), 그 결과 부모가 전부 done이 된 pending 자식마다
+// inbox에 READY 이벤트를 쓴다. inbox가 비면 이벤트는 쓰지 않는다. 돌려주는 값은 이벤트를 쓴 자식 ID들.
+func MarkDone(root, id, inbox string, now time.Time) ([]string, error) {
+	if err := board.SetStatus(root, id, "done", now); err != nil {
+		return nil, err
+	}
+	if err := board.AppendLog(root, id, "COMPLETE", "", now); err != nil {
+		return nil, err
+	}
+	cards, err := board.Load(root, nil, nil, now)
+	if err != nil {
+		return nil, err
+	}
+	var ready []string
+	for _, c := range board.Children(cards, id) {
+		if c.Column != board.ColReady {
+			continue
+		}
+		ready = append(ready, c.ID)
+		if inbox == "" {
+			continue
+		}
+		r := ReadyReport(c, root, now)
+		r.Inbox = inbox
+		if _, err := WriteReport(r); err != nil {
+			return ready, err
+		}
+	}
+	return ready, nil
 }

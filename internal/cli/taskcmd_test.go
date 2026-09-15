@@ -236,3 +236,45 @@ func TestTaskAssignLogIncludesThreadWindow(t *testing.T) {
 		t.Errorf("log에 창 이름 누락: %s", lg)
 	}
 }
+
+func TestTaskDoneMarksCompanyTask(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
+	root := companyRoot(t, "LAB-1")
+	inbox := filepath.Join(root, "runtime", "inbox")
+	var out bytes.Buffer
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"assign", "LAB-1", "collab-bot", "--inbox", inbox}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"done", "LAB-1"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "tasks", "LAB-1", "task.md"))
+	if !strings.Contains(string(b), "status: done") {
+		t.Errorf("status:\n%s", b)
+	}
+	if list, _ := task.List(stateDir); len(list) != 0 {
+		t.Error("등록이 해제돼야 함")
+	}
+}
+
+func TestTaskDoneGoneNeedsRoot(t *testing.T) {
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	root := companyRoot(t, "LAB-1")
+	var out bytes.Buffer
+	err := RunTask(context.Background(), &out, st, stateDir, []string{"done", "LAB-1"}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "--root") {
+		t.Errorf("등록 없으면 --root 안내: %v", err)
+	}
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"done", "LAB-1", "--root", root}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "tasks", "LAB-1", "task.md"))
+	if !strings.Contains(string(b), "status: done") {
+		t.Errorf("--root 경로로 done 실패:\n%s", b)
+	}
+}
