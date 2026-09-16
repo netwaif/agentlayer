@@ -4,6 +4,7 @@ package tmuxx
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
@@ -85,8 +86,12 @@ type Tmux struct {
 	Args []string
 }
 
-func (t Tmux) run(args ...string) (string, error) {
+func (t Tmux) run(args ...string) (string, error) { return t.runIn(nil, args...) }
+
+// runIn은 run에 stdin을 더한 것 — load-buffer -(표준입력에서 버퍼 적재)가 쓴다.
+func (t Tmux) runIn(stdin io.Reader, args ...string) (string, error) {
 	cmd := exec.Command(Bin(), append(append([]string{}, t.Args...), args...)...)
+	cmd.Stdin = stdin
 	// LaunchAgent 등 LANG 없는 환경에서 tmux는 비ASCII(✳·한글)를 _로
 	// 치환해 감지·표시가 깨진다 — UTF-8 로케일을 보장한다.
 	if os.Getenv("LANG") == "" && os.Getenv("LC_ALL") == "" {
@@ -277,15 +282,37 @@ func (t Tmux) NewWindowIn(session, name, dir string) (string, error) {
 // 텍스트와 Enter 사이에 잠깐 쉰다: codex TUI는 텍스트 직후에 오는 Enter를 삼켜
 // 문장이 입력줄에 남고 제출이 안 된다(2026-09-03 broadcast 실측 — Enter만 따로
 // 보내니 제출됨). codex-discord 브리지도 같은 이유로 붙여넣기 뒤 200ms+ 쉬고 Enter.
+//
+// 여러 줄 본문은 붙여넣기(load-buffer + paste-buffer -p)로 넣는다 — send-keys -l의 원시
+// LF는 Claude Code 입력창이 줄바꿈으로 받지 않아 절 제목이 본문에 붙어 도착했다
+// (2026-09-16 LAB-1 실측: "답한다.## 목표도구를…"). -p는 pane이 브래킷 붙여넣기를 켠
+// 경우에만 ESC[200~…ESC[201~로 감싸므로(Claude Code·codex·gemini TUI 전부 켬) 에이전트가
+// 사람의 붙여넣기와 똑같이 여러 줄을 한 덩어리로 받고, 셸처럼 안 켠 pane엔 평문으로 간다.
 func (t Tmux) SendText(paneID, text string) error {
-	// "--"는 이후 인자를 모두 리터럴로 취급하게 한다 — text가 "-"나 "---"로
-	// 시작해도(Markdown 목록, YAML 구분선) tmux가 플래그로 오인해 "invalid flag"로
-	// 실패하지 않는다.
-	if _, err := t.run("send-keys", "-t", paneID, "-l", "--", text); err != nil {
+	if strings.Contains(text, "\n") {
+		if err := t.pasteText(paneID, text); err != nil {
+			return err
+		}
+	} else if _, err := t.run("send-keys", "-t", paneID, "-l", "--", text); err != nil {
+		// "--"는 이후 인자를 모두 리터럴로 취급하게 한다 — text가 "-"나 "---"로
+		// 시작해도(Markdown 목록, YAML 구분선) tmux가 플래그로 오인해 "invalid flag"로
+		// 실패하지 않는다.
 		return err
 	}
 	time.Sleep(SendEnterDelay(len(text)))
 	_, err := t.run("send-keys", "-t", paneID, "Enter")
+	return err
+}
+
+// pasteText는 text를 이름 붙인 tmux 버퍼에 적재한 뒤 pane에 브래킷 붙여넣기(-p)하고
+// 버퍼를 지운다(-d). 버퍼 이름은 pid+시각으로 유일하게 — 여러 에이전트가 동시에 보내도
+// 서로의 버퍼를 덮지 않는다.
+func (t Tmux) pasteText(paneID, text string) error {
+	buf := fmt.Sprintf("agentlayer-%d-%d", os.Getpid(), time.Now().UnixNano())
+	if _, err := t.runIn(strings.NewReader(text), "load-buffer", "-b", buf, "-"); err != nil {
+		return err
+	}
+	_, err := t.run("paste-buffer", "-p", "-d", "-b", buf, "-t", paneID)
 	return err
 }
 

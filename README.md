@@ -165,7 +165,7 @@ agentlayer task done VIDEO-07
 - `ERR`(비정상 종료)·`dead`는 `--force`로도 보내지 않는다.
 - 막 띄운 세션은 첫 hook이 오기 전까지 idle로 보인다 — 첫 지시는 TUI가 뜬 것을 확인한 뒤 보낸다.
 - inbox는 로컬 경로여야 한다(NAS·SMB 마운트 금지) — hook은 2초 안에 못 쓰면 보고를 포기하고 에이전트를 막지 않는다.
-- 여러 줄 본문(`-`)은 `\r`·제어문자를 제거하고 64KiB까지만 보낸다.
+- 여러 줄 본문(`-`)은 `\r`·제어문자를 제거하고 64KiB까지만 보낸다. 여러 줄은 tmux 붙여넣기(브래킷)로 들어가 Claude Code·codex·gemini 입력창에서 줄바꿈이 그대로 살아 있다(한 줄은 예전대로 키 입력).
 
 ### 업무 보드 (칸반 라이트)
 
@@ -178,6 +178,8 @@ agentlayer task done VIDEO-07
 - `task done <ID>` → `done` + `[COMPLETE]`, 그 결과 부모가 전부 끝난 자식마다 수신함에 `to: READY` 이벤트.
 - ready·blocked가 30분(`board_stale_ready`) 넘게 방치되면 ⚠.
 - 디스코드 카드에 "업무 보드" 절, `agentlayer board`는 6열 HTML을 전용 브라우저로 연다(`--json`·`--out`).
+  보드는 열마다 색점·개수·설명 줄, 방치 카드는 붉은 테두리와 상단 `!!!` 경고 줄, Done 열은 최근 12장만 펼친다.
+  카드를 누르면 오른쪽 상세 패널 — 상태·담당 세션·부모/자식 링크·`task.md` 본문(목표·완료 기준 체크)·`log.md` 전체 기록(최신이 위). 자바스크립트 없는 정적 파일이라 새로고침은 `agentlayer board` 재실행(관제탑 `t`).
 - 회사 루트는 `company_root` 설정이 없으면 등록된 업무의 `<root>/runtime/inbox`에서 유추한다.
   마지막으로 등록한 루트를 기억한다(`~/.local/state/agentlayer/company.json`) — 등록이 모두 사라져도(예: 마지막 업무를 `task done`으로 닫음) 보드는 계속 열린다.
 - 등록 없이 회사 루트를 바로 지정하려면 `task assign … --root <회사루트>`, 닫을 때는 `task done <ID> --root <회사루트>`(등록이 이미 해제됐을 때 필수).

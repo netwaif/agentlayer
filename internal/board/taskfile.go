@@ -185,6 +185,56 @@ func ReadLastLog(root, id string) string {
 	return ""
 }
 
+// ReadLog는 log.md의 비어 있지 않은 줄 전부(파일 순서). 없으면 nil. 보드 상세 패널이 쓴다.
+func ReadLog(root, id string) []string {
+	if !ValidID(id) {
+		return nil
+	}
+	b, err := os.ReadFile(logPath(root, id))
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, line := range strings.Split(string(b), "\n") {
+		if s := strings.TrimSpace(line); s != "" && !strings.HasPrefix(s, "<!--") && !strings.HasPrefix(s, "# ") {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// ReadBody는 task.md에서 첫 "# " 제목 줄과 ```yaml 메타 블록을 뺀 본문(목표·담당·완료 기준 …).
+// 없으면 "". 보드 상세 패널이 원문 그대로 보여 주는 용도 — 파싱하지 않는다.
+func ReadBody(root, id string) string {
+	if !ValidID(id) {
+		return ""
+	}
+	b, err := os.ReadFile(taskPath(root, id))
+	if err != nil {
+		return ""
+	}
+	var out []string
+	inYAML, titleSkipped := false, false
+	for _, line := range strings.Split(string(b), "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case !titleSkipped && strings.HasPrefix(trimmed, "# "):
+			titleSkipped = true
+			continue
+		case strings.HasPrefix(trimmed, "```yaml"):
+			inYAML = true
+			continue
+		case inYAML && strings.HasPrefix(trimmed, "```"):
+			inYAML = false
+			continue
+		case inYAML:
+			continue
+		}
+		out = append(out, strings.TrimRight(line, " \t"))
+	}
+	return strings.Trim(strings.Join(out, "\n"), "\n")
+}
+
 // writeAtomic은 temp→rename. 훅·총괄이 동시에 써도 반쪽 파일이 없다. 원래 파일의 권한 비트를
 // 보존한다(stat 실패 시 0644로 폴백) — temp 파일은 os.CreateTemp가 0600으로 만들기 때문에
 // chmod 없이 rename하면 task.md 권한이 조용히 바뀐다.

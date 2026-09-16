@@ -35,7 +35,9 @@ type Card struct {
 	Updated time.Time // task.md mtime
 	Ready   time.Time // ready 열 진입 시각(마지막 부모 done의 mtime, 부모 없으면 자기 mtime)
 	LastLog string
-	Unknown bool // status 값을 해석하지 못함(todo 열에 ? 배지)
+	Unknown bool     // status 값을 해석하지 못함(todo 열에 ? 배지)
+	Log     []string `json:",omitempty"` // log.md 전체 줄(상세 패널용)
+	Body    string   `json:",omitempty"` // task.md 본문(제목·yaml 메타 제외, 상세 패널용)
 }
 
 // Link는 업무 등록의 board용 축약 — task 패키지가 board를 import하므로 역방향 의존을 피한다.
@@ -101,7 +103,8 @@ func Load(root string, links []Link, states map[string]string, now time.Time) ([
 	for id, tf := range files {
 		col, unknown := columnOf(tf.Status, tf.Parents, done)
 		c := Card{ID: id, Title: tf.Title, Status: tf.Status, Column: col, Parents: tf.Parents,
-			Updated: tf.Updated, Ready: tf.Updated, LastLog: ReadLastLog(root, id), Unknown: unknown}
+			Updated: tf.Updated, Ready: tf.Updated, LastLog: ReadLastLog(root, id), Unknown: unknown,
+			Log: ReadLog(root, id), Body: ReadBody(root, id)}
 		if col == ColReady {
 			for _, p := range tf.Parents {
 				if pt := files[p]; pt.Updated.After(c.Ready) {
