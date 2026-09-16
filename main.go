@@ -524,6 +524,11 @@ func runHook(args []string) error {
 		if transitioned && cfg.DiscordWebhookURL != "" {
 			spawn("card", "--event")
 		}
+		// 열어 둔 업무 보드가 있으면(board.html 존재) 전이마다 다시 써 둔다 — 페이지가 30초마다
+		// 스스로 다시 읽는다. detached라 에이전트를 막지 않는다.
+		if transitioned {
+			spawn("board", "--refresh")
+		}
 		// 에이전트가 dev 서버를 띄웠으면 몇 초 안에 hook이 오므로 여기서 자동 프리뷰.
 		// 관제탑이 닫혀 있어도 동작한다. 스캔은 5초 스로틀(autopreview 내부).
 		if cfg.PreviewAutoEnabled() {

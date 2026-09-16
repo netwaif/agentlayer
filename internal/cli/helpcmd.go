@@ -34,7 +34,7 @@ func helpText(goos string) string {
   task assign|list|done|watch  업무↔세션 등록·상주 수신 — 등록된 세션의 DONE·WAIT·ERR 전이가 hook에서 <inbox>/pending/ 에 자동 보고됨
   wt <명령>      worktree 워커 관리 (new·list·diff·test·review·send·merge·clean) — 'agentlayer wt'로 상세
   browser [open|pick|shot|errors|preview|cookies|mcp]  에이전트 전용 브라우저 (기동/탭 열기/요소찍기/캡처/콘솔에러/wt 프리뷰/쿠키 import·list·clear·export/MCP 연동 명령)
-  board          회사 업무 보드 — HTML 생성 후 전용 브라우저로 열기  [--out 경로] [--json] [--no-open]
+  board          회사 업무 보드 — HTML 생성 후 전용 브라우저로 열기  [--out 경로] [--json] [--no-open] [--refresh]
   version        버전 정보 (-v/--version)
   help           이 도움말 (-h/--help)
 `

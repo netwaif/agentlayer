@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/board"
+	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
 )
@@ -185,6 +186,13 @@ func RunSend(w io.Writer, stdin io.Reader, st *state.Store, stateDir string, tm 
 				warnOut = os.Stderr
 			}
 			fmt.Fprintln(warnOut, "  ⚠ log.md 기록 실패:", err)
+		}
+		if _, err := RefreshBoardFile(st, stateDir, config.Load(), time.Now()); err != nil {
+			warnOut := w
+			if o.JSON {
+				warnOut = os.Stderr
+			}
+			fmt.Fprintln(warnOut, "  ⚠ 보드 갱신 실패:", err)
 		}
 	}
 	if o.JSON {

@@ -34,7 +34,7 @@ func HTML(name string, cards []Card, now time.Time, stale time.Duration) []byte 
 	sb.WriteString(html.EscapeString(name))
 	sb.WriteString(" — 업무 보드</title><style>\n")
 	sb.WriteString(boardCSS)
-	sb.WriteString("</style></head><body>\n")
+	fmt.Fprintf(&sb, "</style></head><body data-generated=\"%d\">\n", now.UnixMilli())
 
 	cnt := Counts(cards)
 	var staleIDs []string
@@ -46,11 +46,11 @@ func HTML(name string, cards []Card, now time.Time, stale time.Duration) []byte 
 
 	// 머리: 회사명 · 업무 수 · 생성 시각 · 새로고침 안내
 	sb.WriteString("<header class=\"top\"><div><div class=\"eyebrow\">업무 보드</div><h1>" + html.EscapeString(name) + "</h1></div>")
-	fmt.Fprintf(&sb, "<div class=\"top-meta\"><span class=\"mono\">%d 업무</span><span class=\"sep\">·</span><span class=\"mono\">%s</span><span class=\"sep\">·</span><span class=\"hint\">새로고침 <code>agentlayer board</code> 또는 관제탑 <kbd>t</kbd></span></div></header>\n",
-		len(cards), now.Format("2006-01-02 15:04"))
+	fmt.Fprintf(&sb, "<div class=\"top-meta\"><span class=\"mono\">%d 업무</span><span class=\"sep\">·</span><span class=\"mono\" title=\"생성 %s\">생성 <b id=\"gen\">방금</b></span><span class=\"sep\">·</span><label class=\"check\" title=\"30초마다 파일을 다시 읽는다 — 훅이 상태 전이마다 파일을 새로 쓴다\"><input id=\"auto\" type=\"checkbox\" checked> 자동</label><button type=\"button\" id=\"reload\" class=\"btn\" title=\"파일을 다시 읽는다(R)\">새로고침</button></div></header>\n",
+		len(cards), now.Format("2006-01-02 15:04:05"))
 
 	if len(cards) == 0 {
-		sb.WriteString("<div class=\"empty-board\"><div class=\"mono dim\">— 업무 없음 —</div><p>tasks/&lt;업무ID&gt;/task.md가 없습니다. 총괄에게 업무를 지시하면 여기에 카드가 생깁니다.</p></div></body></html>\n")
+		sb.WriteString("<div class=\"empty-board\"><div class=\"mono dim\">— 업무 없음 —</div><p>tasks/&lt;업무ID&gt;/task.md가 없습니다. 총괄에게 업무를 지시하면 여기에 카드가 생깁니다.</p></div><script>" + reloadJS + "</script></body></html>\n")
 		return []byte(sb.String())
 	}
 
@@ -100,7 +100,7 @@ func HTML(name string, cards []Card, now time.Time, stale time.Duration) []byte 
 	for _, c := range cards {
 		writeDetail(&sb, c, cards, now, stale)
 	}
-	sb.WriteString("<script>" + boardJS + "</script></body></html>\n")
+	sb.WriteString("<script>" + reloadJS + boardJS + "</script></body></html>\n")
 	return []byte(sb.String())
 }
 
@@ -431,7 +431,7 @@ code,kbd{background:var(--card2);border:1px solid var(--line);border-radius:4px;
 .top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
 .eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--acc);margin-bottom:4px}
 h1{font-size:22px;font-weight:600;margin:0;letter-spacing:-.01em}
-.top-meta{color:var(--dim);font-size:12.5px;display:flex;align-items:center}.top-meta .hint{color:var(--dim2)}
+.top-meta{color:var(--dim);font-size:12.5px;display:flex;align-items:center;gap:2px}.top-meta .btn{margin-left:12px;padding:4px 10px}.top-meta #gen{color:var(--fg);font-weight:600}
 .summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--panel);padding:5px 11px;border-radius:999px;font-size:12.5px;color:var(--dim)}
 .chip b{color:var(--fg);font-weight:600}.chip:hover{border-color:var(--line2)}
@@ -503,6 +503,24 @@ h4 .mono{text-transform:none;letter-spacing:0;font-size:11px}
 .tag-error{color:var(--c-blocked)}.tag-complete{color:var(--c-running)}.tag-decision{color:var(--acc)}
 @media (max-width:900px){body{padding:18px 14px 32px}.board{display:flex}.col{min-width:250px}.events li{grid-template-columns:1fr;gap:2px}.kv{grid-template-columns:84px 1fr}}
 `
+
+// reloadJS — "N초 전 생성" 표시, 새로고침 버튼(R 키), 30초 자동 다시 읽기. 파일은 훅(상태 전이)·
+// task assign/done·send가 다시 쓰므로 페이지가 다시 읽기만 하면 최신이다. 검색창에 입력 중이거나
+// 자동을 끄면 건너뛴다. 자동 설정은 localStorage(agentlayer.board.auto)에 남는다.
+const reloadJS = `(function(){
+var gen=Number(document.body.getAttribute('data-generated')||0),el=document.getElementById('gen'),auto=document.getElementById('auto'),btn=document.getElementById('reload');
+var KEY='agentlayer.board.auto';
+try{var v=localStorage.getItem(KEY);if(v==='0'&&auto)auto.checked=false}catch(e){}
+function ago(){if(!el||!gen)return;var s=Math.max(0,Math.round((Date.now()-gen)/1000));el.textContent=s<5?'방금':s<60?s+'초 전':s<3600?Math.floor(s/60)+'분 전':Math.floor(s/3600)+'시간 전'}
+function typing(){var a=document.activeElement;return a&&(a.tagName==='INPUT'&&a.type!=='checkbox'||a.tagName==='SELECT')}
+function reload(){location.reload()}
+ago();setInterval(ago,1000);
+setInterval(function(){if(auto&&auto.checked&&!typing()&&!document.hidden)reload()},30000);
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&auto&&auto.checked&&Date.now()-gen>30000)reload()});
+if(btn)btn.addEventListener('click',reload);
+if(auto)auto.addEventListener('change',function(){try{localStorage.setItem(KEY,auto.checked?'1':'0')}catch(e){}});
+document.addEventListener('keydown',function(e){if((e.key==='r'||e.key==='R')&&!typing()&&!e.metaKey&&!e.ctrlKey){e.preventDefault();reload()}});
+})();`
 
 // boardJS — 검색·담당·방치만·Done 표시·열 접기·Done 더 보기. 인라인 한 덩어리(외부 로드 없음),
 // 정적 파일(file://)에서 그대로 동작. 상태는 localStorage에 남겨 재실행(새 HTML)에도 유지된다.

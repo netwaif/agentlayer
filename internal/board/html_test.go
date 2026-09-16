@@ -30,7 +30,7 @@ func TestHTMLHasSixColumnsCardsAndEscapes(t *testing.T) {
 	if strings.Contains(h, "<script src") || strings.Contains(h, "<link ") {
 		t.Error("외부 로드 없는 단일 파일이어야 함")
 	}
-	for _, want := range []string{`id="q"`, `id="who"`, `<option value="collab-bot">`, `data-who="-"`, `data-text="a &lt;script&gt;alert(1)&lt;/script&gt;`, `class="chip" data-col="ready"`} {
+	for _, want := range []string{`id="q"`, `id="who"`, `<option value="collab-bot">`, `data-generated="`, `id="reload"`, `id="auto"`, `id="gen"`, `data-who="-"`, `data-text="a &lt;script&gt;alert(1)&lt;/script&gt;`, `class="chip" data-col="ready"`} {
 		if !strings.Contains(h, want) {
 			t.Errorf("검색·필터 재료 %q 없음", want)
 		}
@@ -41,6 +41,9 @@ func TestHTMLEmptyBoardSaysSo(t *testing.T) {
 	h := string(HTML("빈 회사", nil, now, time.Minute))
 	if !strings.Contains(h, "업무 없음") {
 		t.Error("빈 보드 안내 없음")
+	}
+	if !strings.Contains(h, `id="reload"`) || !strings.Contains(h, "location.reload()") {
+		t.Error("빈 보드도 새로고침·자동 갱신 스크립트가 있어야 함")
 	}
 }
 

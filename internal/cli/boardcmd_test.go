@@ -169,3 +169,49 @@ func TestRunBoardWithoutCompanyExplains(t *testing.T) {
 		t.Errorf("회사 루트를 못 찾으면 company_root 안내: %v", err)
 	}
 }
+
+// RefreshBoardFile은 보드 파일이 이미 있을 때만 다시 쓴다 — 보드를 연 적 없는 사용자에게 파일을
+// 만들어 주지 않고, 있으면 현재 카드로 덮어쓴다. --refresh는 같은 동작을 조용히 한다.
+func TestRefreshBoardFileOnlyWhenFileExists(t *testing.T) {
+	stateDir := t.TempDir()
+	st, err := state.NewStore(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}}); err != nil {
+		t.Fatal(err)
+	}
+	root := companyRoot(t, "LAB-1")
+	var out bytes.Buffer
+	if err := RunTask(context.Background(), &out, st, stateDir,
+		[]string{"assign", "LAB-1", "collab-bot", "--inbox", filepath.Join(root, "runtime", "inbox")}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := RefreshBoardFile(st, stateDir, &config.Config{}, time.Now()); err != nil || p != "" {
+		t.Fatalf("파일 없을 때 = (%q, %v), want (\"\", nil)", p, err)
+	}
+	if _, err := os.Stat(BoardPath(stateDir)); !os.IsNotExist(err) {
+		t.Fatal("파일이 없어야 하는데 생김")
+	}
+	if err := RunBoard(&out, st, stateDir, &config.Config{}, nil, []string{"--no-open"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := os.ReadFile(BoardPath(stateDir))
+	// 카드가 바뀐 뒤(done) 갱신 → 내용이 달라져야 한다
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"done", "LAB-1"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(BoardPath(stateDir))
+	if string(before) == string(after) || !strings.Contains(string(after), `data-col="done"`) {
+		t.Error("task done 뒤 보드 파일이 갱신되지 않음")
+	}
+	out.Reset()
+	if err := RunBoard(&out, st, stateDir, &config.Config{}, nil, []string{"--refresh"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if out.Len() != 0 {
+		t.Errorf("--refresh는 조용해야 함: %q", out.String())
+	}
+	_ = json.Valid
+}

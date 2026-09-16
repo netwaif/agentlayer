@@ -78,7 +78,7 @@ agentlayer wake-all   # 모든 claude·codex 세션에 "세션 이어서하자" 
 agentlayer close-all  # "세션 마감하자" 전송 → 전원 완료(DONE)까지 감시 → 요약
 agentlayer broadcast "<메시지>"   # 임의 메시지 일괄 전송 (--except로 제외, --yes로 무확인)
 agentlayer info <세션>            # 배선 상세 카드: 폴더·엔진·Discord 채널·구동 주체·resume 경로
-agentlayer board [--out 경로] [--json] [--no-open]   # 회사 업무 보드 HTML을 전용 브라우저로
+agentlayer board [--out 경로] [--json] [--no-open] [--refresh]   # 회사 업무 보드 HTML을 전용 브라우저로(--refresh: 열린 보드 파일만 조용히 갱신)
 agentlayer wt ...     # worktree 병렬 모드 (아래 참고)
 agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참고)
 ```
@@ -181,7 +181,7 @@ agentlayer task done VIDEO-07
   보드는 열마다 색점·개수·설명 줄, 방치 카드는 붉은 테두리와 상단 `!!!` 경고 줄, Done 열은 최근 12장만 펼친다.
   카드를 누르면 오른쪽 상세 패널 — 상태·담당 세션·부모/자식 링크·`task.md` 본문(목표·완료 기준 체크)·`log.md` 전체 기록(최신이 위).
   검색(`/` 키, ID·제목·담당·기록 전문)·담당 세션 필터·"방치만"·"Done 표시"·집계 칩으로 열 접기 — 필터 상태는 브라우저에 남아 다시 열어도 유지된다.
-  외부 로드 없는 단일 HTML 파일이라 데이터 새로고침은 `agentlayer board` 재실행(관제탑 `t`).
+  열어 두면 알아서 최신이다 — 훅이 상태 전이마다, `task assign`·`task done`·`send`가 기록을 남길 때마다 `board.html`을 다시 쓰고, 페이지는 30초마다(또는 "새로고침" 버튼·`R` 키) 파일을 다시 읽는다. 머리에 "생성 N초 전". 데몬 없음.
 - 회사 루트는 `company_root` 설정이 없으면 등록된 업무의 `<root>/runtime/inbox`에서 유추한다.
   마지막으로 등록한 루트를 기억한다(`~/.local/state/agentlayer/company.json`) — 등록이 모두 사라져도(예: 마지막 업무를 `task done`으로 닫음) 보드는 계속 열린다.
 - 등록 없이 회사 루트를 바로 지정하려면 `task assign … --root <회사루트>`, 닫을 때는 `task done <ID> --root <회사루트>`(등록이 이미 해제됐을 때 필수).

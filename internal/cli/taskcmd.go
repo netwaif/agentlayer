@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/board"
+	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
 )
@@ -32,7 +33,7 @@ func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string,
 	case "list":
 		return taskList(w, st, stateDir, args[1:], now)
 	case "done":
-		return taskDone(w, stateDir, args[1:], now)
+		return taskDone(w, st, stateDir, args[1:], now)
 	case "watch":
 		return taskWatch(ctx, w, args[1:])
 	default:
@@ -40,7 +41,7 @@ func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string,
 	}
 }
 
-func taskDone(w io.Writer, stateDir string, args []string, now time.Time) error {
+func taskDone(w io.Writer, st *state.Store, stateDir string, args []string, now time.Time) error {
 	var pos []string
 	root := ""
 	for i := 0; i < len(args); i++ {
@@ -116,7 +117,19 @@ func taskDone(w io.Writer, stateDir string, args []string, now time.Time) error 
 	for _, c := range ready {
 		fmt.Fprintf(w, "  → %s 배정 가능(READY 이벤트 전송)\n", c)
 	}
+	refreshBoard(w, st, stateDir, now)
 	return nil
+}
+
+// refreshBoard는 열어 둔 보드 파일을 다시 쓴다(없으면 아무것도 안 함). 실패해도 명령은 성공 —
+// 보드는 부산물이다.
+func refreshBoard(w io.Writer, st *state.Store, stateDir string, now time.Time) {
+	if st == nil {
+		return
+	}
+	if _, err := RefreshBoardFile(st, stateDir, config.Load(), now); err != nil {
+		fmt.Fprintln(w, "  ⚠ 보드 갱신 실패:", err)
+	}
 }
 
 func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, now time.Time) error {
@@ -202,6 +215,7 @@ func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, no
 	}
 	fmt.Fprintf(w, "업무 %s → %s %s [%s] 등록. 보고는 %s/pending/ 에 떨어집니다.%s\n",
 		as.TaskID, SessionLabel(a), a.Tmux.PaneID, a.State, ShortenHome(abs), warn)
+	refreshBoard(w, st, stateDir, now)
 	return nil
 }
 
