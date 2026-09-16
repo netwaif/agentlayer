@@ -15,15 +15,15 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**4단계 사슬 시연 성공 + 보드 새 단장 릴리즈(2026-09-16)** — agentlayer **v1.6.4**(GitHub latest, tap cask 1.6.4, 이 맥 `~/.local/bin/agentlayer` v1.6.4 `make install`). v1.6.2=보드 새 디자인·카드 상세 패널·`send` 여러 줄 줄바꿈 보존(브래킷 붙여넣기), v1.6.3=보드 검색·담당 필터·방치만·Done 표시·열 접기·Done 더 보기, v1.6.4=보드 자동 갱신(훅·task·send가 board.html 다시 씀 + 페이지 30초 자동 다시 읽기·새로고침 버튼). 디스코드 회사 채널은 `AI COMPANY` 카테고리 하나로 정리(부서=채널 접두어). Codex(비주얼 디렉터)·Gemini(이미지 검수 담당, 신규, `gemini-live` TUI + LaunchAgent `com.codex-discord.gemini-tui`) 직원 편입 완료, doctor OK. 시연: `#company`에서 LAB-1 지시 → 총괄이 스레드·assign·send·수신·done까지 1분 16초, 사용자 개입 0회(`~/ai-folder/company/tasks/LAB-1`, `결과물/LAB-1/`). ai-company 플러그인은 무변경(v0.2.0).
+**2026-09-16 마감** — agentlayer **v1.6.4**(이 맥 `~/.local/bin/agentlayer` v1.6.4, tap cask 1.6.4): v1.6.2 보드 새 디자인·상세 패널·`send` 여러 줄 브래킷 붙여넣기 / v1.6.3 보드 검색·필터 / v1.6.4 보드 자동 갱신(훅·task·send가 board.html 다시 씀, 페이지 30초 자동·R 키). 4단계 사슬 시연 LAB-1 성공(개입 0). 회사: 디스코드 `AI COMPANY` 카테고리 6채널(경영기획-총괄·콘텐츠전략-pd·사업운영-매니저·크리에이티브-비주얼·크리에이티브-이미지검수·교육자료-매뉴얼), Codex(비주얼 디렉터)·Gemini(이미지 검수 담당, `gemini-live` TUI + `com.codex-discord.gemini-tui`) 직원 편입, doctor OK, 총괄 SESSION.md 갱신 완료. 짝 릴리즈: codex-discord v0.1.22 · ai-company v0.2.1 · 설치기 0.1.38. 다음은 사용자의 3단계 사슬 시연 촬영(IMG-1 콘텐츠 PD → IMG-2 비주얼 디렉터 → IMG-3 이미지 검수).
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **v1.6.0~v1.6.4 공지**(디스코드 멤버 + 유튜브 커뮤니티, 메모리 feedback-announce-two-channels) — 릴리즈 노트는 GitHub 릴리즈 페이지가 정본(v1.6.2~v1.6.4 노트 포함). 보드 스크린샷은 `BOARD_SAMPLE_OUT=<경로> go test ./internal/board -run TestWriteSampleBoard`로 표본 HTML을 만들어 에이전트 브라우저에서 찍으면 된다.
-2. 관제탑 `t` 키로 새 보드 실물 확인(사용자). 총괄 봇 `company-bot` 프롬프트에 "세션 마감해 줘"가 입력만 된 채 남아 있음 — 지우거나 보낼 것. 디스코드 총괄 채널 이름이 `#company`→`#경영기획-총괄`로 바뀜(ID 동일) — 문서·매뉴얼에서 `#company`로 부르던 곳이 있으면 갱신. codex 브리지 채널을 `AI COMPANY`로 옮길지는 사용자 판단(어느 채널이 비주얼 디렉터인지 확인 필요).
-3. 플러그인 설치 안내 경로 검증(`/plugin marketplace add netwaif/ai-company` → `/plugin install ai-company@ai-company`, 기존 사용자는 업데이트 뒤 `companyctl install` 재실행).
-4. 파킹된 후속 후보(우선순위 낮음): 스레드 창 DONE 보고의 `[REPORT] DONE: (요약 없음)` — 훅 이벤트에 요약 필드가 없고 state 헤드라인(Ask·Task)이 비어 있었음(총괄은 pane 캡처로 검증) / 총괄이 task.md 완료 기준 체크박스를 안 채움(총괄 절차 문구) / `cli.LoadBoard`가 agents를 다시 읽음 / CRLF task.md / 카드 webhook `allowed_mentions` 없음 / MarkDone 자식 루프 첫 WriteReport 실패에서 중단 / `ReadTaskFile` 제목 탐지가 yaml 안 `# ` 줄도 잡음 / `send --json` 외 경고는 stdout.
+1. **시연 촬영 지원 대기**: 사용자가 `#경영기획-총괄`에 3단계 사슬(IMG-1~3, 지시문은 2026-09-16 결정 기록 "Codex·Gemini 직원 편입" 뒤 대화 참조 — 콘텐츠 PD 콘셉트 → 비주얼 디렉터 이미지 생성(자기 워크스페이스 저장) → 이미지 검수 담당 5점 평가)을 지시해 촬영. 걸리면 보드 카드 상태·총괄 메시지를 이 세션에 전달받아 대응. Codex·Gemini 직원 경로(스레드 없이 `task assign <ID> <세션>` → `send`)는 아직 실전 미검증 — 총괄이 "짧은 점검 업무"를 제안했으니 촬영 전 "해 줘"로 확인 권장.
+2. **공지**: agentlayer v1.6.0~v1.6.4 + ai-company v0.2.1 + codex-discord v0.1.22 + 설치기 0.1.38(디스코드 멤버 + 유튜브 커뮤니티, 메모리 feedback-announce-two-channels). 릴리즈 노트는 GitHub 릴리즈 페이지(codex-discord·설치기는 태그 메시지). 보드 스크린샷은 `BOARD_SAMPLE_OUT=<경로> go test ./internal/board -run TestWriteSampleBoard`.
+3. 플러그인 설치 안내 경로 검증(`/plugin marketplace add netwaif/ai-company` → `/plugin install ai-company@ai-company`, 기존 사용자는 업데이트 뒤 `companyctl install` 재실행). 이 맥의 설치된 ai-company 플러그인도 0.2.1로 업데이트할 것(`/plugin update`).
+4. 파킹(우선순위 낮음): 총괄이 task.md 완료 기준 체크박스를 안 채움(총괄 절차 문구 후보) / 스레드 창 DONE 보고 `[REPORT] DONE: (요약 없음)`(훅 이벤트에 요약 없음, 헤드라인 비어 있음) / `cli.LoadBoard` agents 2회 읽기 / CRLF task.md / 카드 webhook `allowed_mentions` / MarkDone 자식 루프 첫 WriteReport 실패 중단 / `ReadTaskFile` 제목이 yaml 안 `# ` 줄도 잡음 / `send --json` 외 경고 stdout / 설치기 기본 제미나이 헤드리스(TUI 켜기 절차만 문서화) / `~/.local/state/agentlayer/agents`의 dead `al-lab` 항목 2개(무해).
 5. `go test ./...` 전체 실행 시 `internal/{ui,usage,wiring,wt}` 멈춤·좀비 원인 조사(메모리 go-test-full-suite-hangs) — 그전까지 패키지별 실행.
 6. 기존 이월 항목 유지(사용자 판단 대기): 강의용 `orchestration-lite` 스킬 / README·help 제목 "iTerm2+tmux"→"tmux" / usage-coach 릴리즈 페이지 latest v0.1.3 / 디스크 정리(`~/Downloads/ClaudeDir/disk_analysis_20260906.md`) / 촬영 뒤 정리(8080 python 서버, picks/, demo 저장소 reset) / 설치기 remove daemon-reload / agy 권한 프롬프트 [WORK] 표시 / 매뉴얼 "윈도우에서 시작하기" 장.
 
