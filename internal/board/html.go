@@ -468,6 +468,7 @@ h1{font-size:22px;font-weight:600;margin:0;letter-spacing:-.01em}
 .field span{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim2)}
 .tools input[type=search],.tools select{background:var(--panel);color:var(--fg);border:1px solid var(--line2);border-radius:6px;padding:6px 10px;font:13px var(--mono);outline:none;min-width:200px}
 .tools select{min-width:150px}.tools input:focus,.tools select:focus{border-color:var(--acc)}
+#shown.warn{color:var(--c-blocked);font-weight:600}.tools.nomatch #clear{border-color:var(--c-blocked);color:var(--c-blocked)}.tools.nomatch #q{border-color:var(--c-blocked)}
 .check{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim);cursor:pointer}.check input{accent-color:var(--acc)}
 .btn{background:var(--card);color:var(--dim);border:1px solid var(--line2);border-radius:6px;padding:6px 12px;font:12.5px var(--sans);cursor:pointer}.btn:hover{color:var(--fg);border-color:var(--fg)}
 .chip{cursor:pointer;font-family:var(--sans)}.chip.off{opacity:.38;text-decoration:line-through}
@@ -546,7 +547,9 @@ function apply(){
     col.classList.toggle('is-empty',cards.length===0);
     col.classList.toggle('is-nomatch',cards.length>0&&n===0);
   });
-  shown.textContent=active?vis+' / '+total+' 표시':'';
+  var none=active&&vis===0&&total>0;
+  shown.textContent=none?'조건에 맞는 카드 없음 — '+total+'장 숨김':active?vis+' / '+total+' 표시':'';
+  shown.classList.toggle('warn',none);document.querySelector('.tools').classList.toggle('nomatch',none);
   save();
 }
 load();

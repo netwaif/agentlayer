@@ -99,3 +99,14 @@ func TestSplitLogAndRenderBodyEdges(t *testing.T) {
 		t.Errorf("코드 블록 렌더: %q", got)
 	}
 }
+
+// 필터(검색·담당·방치만)가 카드를 전부 숨기면 "N장 숨김" 경고와 초기화 강조가 나와야 한다 —
+// 검색어가 localStorage에 남아 다음 열림에도 빈 보드로 보이던 문제의 회귀 방지.
+func TestHTMLFilterNoMatchWarns(t *testing.T) {
+	out := string(HTML("회사", []Card{{ID: "A-1", Title: "a", Status: "done", Column: ColDone}}, time.Now(), 30*time.Minute))
+	for _, want := range []string{"조건에 맞는 카드 없음 — '+total+'장 숨김", "shown.classList.toggle('warn',none)", "#shown.warn{", ".tools.nomatch #clear{"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+}
