@@ -179,7 +179,9 @@ agentlayer task done VIDEO-07
 - ready·blocked가 30분(`board_stale_ready`) 넘게 방치되면 ⚠.
 - 디스코드 카드에 "업무 보드" 절, `agentlayer board`는 6열 HTML을 전용 브라우저로 연다(`--json`·`--out`).
   보드는 열마다 색점·개수·설명 줄, 방치 카드는 붉은 테두리와 상단 `!!!` 경고 줄, Done 열은 최근 12장만 펼친다.
-  카드를 누르면 오른쪽 상세 패널 — 상태·담당 세션·부모/자식 링크·`task.md` 본문(목표·완료 기준 체크)·`log.md` 전체 기록(최신이 위). 자바스크립트 없는 정적 파일이라 새로고침은 `agentlayer board` 재실행(관제탑 `t`).
+  카드를 누르면 오른쪽 상세 패널 — 상태·담당 세션·부모/자식 링크·`task.md` 본문(목표·완료 기준 체크)·`log.md` 전체 기록(최신이 위).
+  검색(`/` 키, ID·제목·담당·기록 전문)·담당 세션 필터·"방치만"·"Done 표시"·집계 칩으로 열 접기 — 필터 상태는 브라우저에 남아 다시 열어도 유지된다.
+  외부 로드 없는 단일 HTML 파일이라 데이터 새로고침은 `agentlayer board` 재실행(관제탑 `t`).
 - 회사 루트는 `company_root` 설정이 없으면 등록된 업무의 `<root>/runtime/inbox`에서 유추한다.
   마지막으로 등록한 루트를 기억한다(`~/.local/state/agentlayer/company.json`) — 등록이 모두 사라져도(예: 마지막 업무를 `task done`으로 닫음) 보드는 계속 열린다.
 - 등록 없이 회사 루트를 바로 지정하려면 `task assign … --root <회사루트>`, 닫을 때는 `task done <ID> --root <회사루트>`(등록이 이미 해제됐을 때 필수).

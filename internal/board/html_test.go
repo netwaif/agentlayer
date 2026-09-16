@@ -27,8 +27,13 @@ func TestHTMLHasSixColumnsCardsAndEscapes(t *testing.T) {
 	if strings.Contains(h, "<script>alert") {
 		t.Error("이스케이프 실패")
 	}
-	if strings.Contains(h, "<script") {
-		t.Error("자바스크립트 없음(정적 페이지)")
+	if strings.Contains(h, "<script src") || strings.Contains(h, "<link ") {
+		t.Error("외부 로드 없는 단일 파일이어야 함")
+	}
+	for _, want := range []string{`id="q"`, `id="who"`, `<option value="collab-bot">`, `data-who="-"`, `data-text="a &lt;script&gt;alert(1)&lt;/script&gt;`, `class="chip" data-col="ready"`} {
+		if !strings.Contains(h, want) {
+			t.Errorf("검색·필터 재료 %q 없음", want)
+		}
 	}
 }
 
@@ -56,9 +61,6 @@ func TestHTMLDetailPanelHasBodyLogAndChildren(t *testing.T) {
 			t.Errorf("HTML에 %q 없음", want)
 		}
 	}
-	if strings.Contains(h, "<script") {
-		t.Error("자바스크립트 없음(정적 페이지)")
-	}
 }
 
 func TestHTMLDoneColumnCapped(t *testing.T) {
@@ -67,12 +69,12 @@ func TestHTMLDoneColumnCapped(t *testing.T) {
 		cards = append(cards, Card{ID: fmt.Sprintf("D-%02d", i), Column: ColDone, Updated: now})
 	}
 	h := string(HTML("회사", cards, now, time.Hour))
-	if !strings.Contains(h, "외 5건") {
-		t.Error("Done 열 접힘 안내 없음")
+	if !strings.Contains(h, "외 5건 더 보기") {
+		t.Error("Done 열 더 보기 버튼 없음")
 	}
-	// 최신(ID 큰 쪽)이 남고 오래된 것이 접힌다 — 카드 앵커 기준(상세 패널은 전부 있다)
-	if !strings.Contains(h, `class="card" href="#D-16"`) || strings.Contains(h, `class="card" href="#D-00"`) {
-		t.Error("Done 열은 최신 카드만 펼쳐야 함")
+	// 최신(ID 큰 쪽)이 펼쳐지고 오래된 것은 folded(검색에 걸리면 다시 보인다)
+	if !strings.Contains(h, `class="card" href="#D-16"`) || !strings.Contains(h, `class="card folded" href="#D-00"`) {
+		t.Error("Done 열은 최신 12장만 펼치고 나머지는 folded여야 함")
 	}
 	if !strings.Contains(h, `id="D-00"`) {
 		t.Error("접힌 카드도 상세 패널은 있어야 함")

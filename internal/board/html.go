@@ -54,12 +54,22 @@ func HTML(name string, cards []Card, now time.Time, stale time.Duration) []byte 
 		return []byte(sb.String())
 	}
 
-	// 집계 줄 + 방치 경고
+	// 집계 칩(누르면 그 열만 접기/펴기) + 도구 줄(검색·담당·방치만·Done) + 방치 경고
 	sb.WriteString("<div class=\"summary\">")
 	for _, col := range Columns {
-		fmt.Fprintf(&sb, "<a class=\"chip\" href=\"#col-%s\"><i class=\"dot %s\"></i>%s <b class=\"mono\">%d</b></a>", col, col, colTitle[col], cnt[col])
+		fmt.Fprintf(&sb, "<button type=\"button\" class=\"chip\" data-col=\"%s\" title=\"열 접기/펴기\"><i class=\"dot %s\"></i>%s <b class=\"mono\">%d</b></button>", col, col, colTitle[col], cnt[col])
 	}
 	sb.WriteString("</div>\n")
+	sb.WriteString("<div class=\"tools\"><label class=\"field\"><span>검색</span><input id=\"q\" type=\"search\" placeholder=\"ID · 제목 · 담당 · 기록\" autocomplete=\"off\"></label>")
+	sb.WriteString("<label class=\"field\"><span>담당</span><select id=\"who\"><option value=\"\">전체</option><option value=\"-\">미배정</option>")
+	for _, who := range sessions(cards) {
+		e := html.EscapeString(who)
+		sb.WriteString("<option value=\"" + e + "\">" + e + "</option>")
+	}
+	sb.WriteString("</select></label>")
+	sb.WriteString("<label class=\"check\"><input id=\"stale\" type=\"checkbox\"> 방치만</label>")
+	sb.WriteString("<label class=\"check\"><input id=\"done\" type=\"checkbox\" checked> Done 표시</label>")
+	sb.WriteString("<button type=\"button\" id=\"clear\" class=\"btn\">초기화</button><span id=\"shown\" class=\"dim mono\"></span></div>\n")
 	if len(staleIDs) > 0 {
 		fmt.Fprintf(&sb, "<div class=\"attention\"><span class=\"bang\">!!!</span><span>%d건이 %s 넘게 방치 —</span>", len(staleIDs), durKo(stale))
 		for _, id := range staleIDs {
@@ -76,15 +86,11 @@ func HTML(name string, cards []Card, now time.Time, stale time.Duration) []byte 
 		n := 0
 		for _, c := range columnCards(cards, col) {
 			n++
-			if col == ColDone && n > maxDoneShown {
-				continue
-			}
-			writeCard(&sb, c, col, now, stale)
+			writeCard(&sb, c, col, now, stale, col == ColDone && n > maxDoneShown)
 		}
-		if n == 0 {
-			sb.WriteString("<div class=\"none\">— 업무 없음 —</div>")
-		} else if col == ColDone && n > maxDoneShown {
-			fmt.Fprintf(&sb, "<div class=\"none more\">외 %d건 — tasks/ 폴더 참고</div>", n-maxDoneShown)
+		sb.WriteString("<div class=\"none empty\">— 업무 없음 —</div><div class=\"none nomatch\">— 조건에 맞는 카드 없음 —</div>")
+		if col == ColDone && n > maxDoneShown {
+			fmt.Fprintf(&sb, "<button type=\"button\" class=\"none more\" data-more>외 %d건 더 보기</button>", n-maxDoneShown)
 		}
 		sb.WriteString("</div></section>")
 	}
@@ -94,8 +100,29 @@ func HTML(name string, cards []Card, now time.Time, stale time.Duration) []byte 
 	for _, c := range cards {
 		writeDetail(&sb, c, cards, now, stale)
 	}
-	sb.WriteString("</body></html>\n")
+	sb.WriteString("<script>" + boardJS + "</script></body></html>\n")
 	return []byte(sb.String())
+}
+
+// sessions는 카드에 등장하는 담당 세션(중복 제거, 이름순) — 담당 필터 목록.
+func sessions(cards []Card) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, c := range cards {
+		if c.Session != "" && !seen[c.Session] {
+			seen[c.Session] = true
+			out = append(out, c.Session)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// searchText는 검색 대상 문자열(소문자): ID·제목·상태·담당·부모·기록 전체.
+func searchText(c Card) string {
+	parts := []string{c.ID, c.Title, c.Status, c.Session, strings.Join(c.Parents, " ")}
+	parts = append(parts, c.Log...)
+	return strings.ToLower(strings.Join(parts, " "))
 }
 
 // columnCards는 열의 카드를 최근 갱신 순(같으면 ID 내림차순)으로 — 열 안에서 방금 움직인 카드가
@@ -117,13 +144,25 @@ func columnCards(cards []Card, col string) []Card {
 	return out
 }
 
-func writeCard(sb *strings.Builder, c Card, col string, now time.Time, stale time.Duration) {
+func writeCard(sb *strings.Builder, c Card, col string, now time.Time, stale time.Duration, folded bool) {
 	cls := "card"
 	isStale := StaleReady(c, now, stale)
 	if isStale {
 		cls += " stale"
 	}
-	fmt.Fprintf(sb, "<a class=\"%s\" href=\"#%s\">", cls, html.EscapeString(c.ID))
+	if folded {
+		cls += " folded"
+	}
+	who := "-"
+	if c.Session != "" {
+		who = c.Session
+	}
+	staleAttr := ""
+	if isStale {
+		staleAttr = " data-stale=\"1\""
+	}
+	fmt.Fprintf(sb, "<a class=\"%s\" href=\"#%s\" data-who=\"%s\" data-text=\"%s\"%s>", cls, html.EscapeString(c.ID),
+		html.EscapeString(who), html.EscapeString(searchText(c)), staleAttr)
 	sb.WriteString("<div class=\"row\"><span class=\"id mono\">" + html.EscapeString(c.ID) + "</span>")
 	if c.Unknown {
 		sb.WriteString("<span class=\"badge warn\" title=\"status 값을 해석하지 못함: " + html.EscapeString(c.Status) + "\">?</span>")
@@ -424,6 +463,17 @@ h1{font-size:22px;font-weight:600;margin:0;letter-spacing:-.01em}
 .who{color:var(--c-done);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.who.dim{color:var(--dim2)}
 .ago{color:var(--dim2);flex:none}
 .log{margin-top:7px;padding-top:7px;border-top:1px solid var(--line);color:var(--dim2);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.field{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim)}
+.field span{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim2)}
+.tools input[type=search],.tools select{background:var(--panel);color:var(--fg);border:1px solid var(--line2);border-radius:6px;padding:6px 10px;font:13px var(--mono);outline:none;min-width:200px}
+.tools select{min-width:150px}.tools input:focus,.tools select:focus{border-color:var(--acc)}
+.check{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--dim);cursor:pointer}.check input{accent-color:var(--acc)}
+.btn{background:var(--card);color:var(--dim);border:1px solid var(--line2);border-radius:6px;padding:6px 12px;font:12.5px var(--sans);cursor:pointer}.btn:hover{color:var(--fg);border-color:var(--fg)}
+.chip{cursor:pointer;font-family:var(--sans)}.chip.off{opacity:.38;text-decoration:line-through}
+.col.off,.card.hide,.card.folded,.none{display:none}.col.is-empty .none.empty,.col.is-nomatch .none.nomatch{display:block}
+.col.unfolded .card.folded,.card.folded.hit{display:block}.col.unfolded [data-more]{display:none}
+button.none{width:100%;background:none;color:var(--dim);cursor:pointer;font:12.5px var(--sans)}button.none:hover{color:var(--fg);border-color:var(--fg)}
 .empty-board{border:1px dashed var(--line2);border-radius:10px;padding:48px 24px;text-align:center;color:var(--dim)}
 .empty-board p{margin:8px 0 0;font-size:13px;color:var(--dim2)}
 /* 상세 패널 — :target */
@@ -453,3 +503,39 @@ h4 .mono{text-transform:none;letter-spacing:0;font-size:11px}
 .tag-error{color:var(--c-blocked)}.tag-complete{color:var(--c-running)}.tag-decision{color:var(--acc)}
 @media (max-width:900px){body{padding:18px 14px 32px}.board{display:flex}.col{min-width:250px}.events li{grid-template-columns:1fr;gap:2px}.kv{grid-template-columns:84px 1fr}}
 `
+
+// boardJS — 검색·담당·방치만·Done 표시·열 접기·Done 더 보기. 인라인 한 덩어리(외부 로드 없음),
+// 정적 파일(file://)에서 그대로 동작. 상태는 localStorage에 남겨 재실행(새 HTML)에도 유지된다.
+// 단축키: "/" 검색창, Esc 상세 패널 닫기.
+const boardJS = `(function(){
+var $=function(s,r){return (r||document).querySelector(s)},$$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+var q=$('#q'),who=$('#who'),stale=$('#stale'),done=$('#done'),clear=$('#clear'),shown=$('#shown');
+var KEY='agentlayer.board.filters';
+function load(){try{var v=JSON.parse(localStorage.getItem(KEY)||'{}');q.value=v.q||'';who.value=v.who||'';stale.checked=!!v.stale;done.checked=v.done!==false;(v.off||[]).forEach(function(c){var ch=$('.chip[data-col="'+c+'"]');if(ch)ch.classList.add('off')})}catch(e){}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({q:q.value,who:who.value,stale:stale.checked,done:done.checked,off:$$('.chip.off').map(function(c){return c.dataset.col})}))}catch(e){}}
+function apply(){
+  var text=q.value.trim().toLowerCase(),w=who.value,st=stale.checked,dn=done.checked,total=0,vis=0,active=!!(text||w||st);
+  $$('.chip').forEach(function(ch){var col=$('.col[data-col="'+ch.dataset.col+'"]');if(!col)return;var off=ch.classList.contains('off')||(ch.dataset.col==='done'&&!dn);col.classList.toggle('off',off)});
+  $$('.col').forEach(function(col){
+    var cards=$$('.card',col),n=0;
+    cards.forEach(function(c){
+      total++;
+      var hit=(!text||c.dataset.text.indexOf(text)>=0)&&(!w||c.dataset.who===w)&&(!st||c.dataset.stale==='1');
+      c.classList.toggle('hide',!hit);c.classList.toggle('hit',hit&&active);
+      if(hit)n++;
+    });
+    if(!col.classList.contains('off'))vis+=n;
+    col.classList.toggle('is-empty',cards.length===0);
+    col.classList.toggle('is-nomatch',cards.length>0&&n===0);
+  });
+  shown.textContent=active?vis+' / '+total+' 표시':'';
+  save();
+}
+load();
+[q,who,stale,done].forEach(function(el){el.addEventListener('input',apply);el.addEventListener('change',apply)});
+$$('.chip').forEach(function(ch){ch.addEventListener('click',function(){ch.classList.toggle('off');apply()})});
+$$('[data-more]').forEach(function(b){b.addEventListener('click',function(){b.closest('.col').classList.add('unfolded')})});
+clear.addEventListener('click',function(){q.value='';who.value='';stale.checked=false;done.checked=true;$$('.chip').forEach(function(c){c.classList.remove('off')});apply();q.focus()});
+document.addEventListener('keydown',function(e){if(e.key==='/'&&document.activeElement!==q&&document.activeElement.tagName!=='INPUT'&&document.activeElement.tagName!=='SELECT'){e.preventDefault();q.focus()}if(e.key==='Escape'&&location.hash&&location.hash!=='#_'){location.hash='_'}});
+apply();
+})();`
