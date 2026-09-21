@@ -15,7 +15,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-09-22** — Win10 WSL2 검증 결과(`RESULT-wsl2-ai-company-0.2.3-20260921.md`: ① ✗ ② ✓ ③ ✓, 발견 4건) 반영해 **agentlayer v1.6.6 릴리즈**(훅 마지막 답변→Task 요약, `task done` 재실행 시 늦은 자식 READY, tap Casks 1.6.6 확인) + **ai-company v0.2.4 푸시**(install이 총괄 봇 스스로 재시작·코덱스 봇 채널 브리지 .env 폴백·질문 취소=중단). 재검증 지침 NAS `README-agentlayer-wsl2-ai-company-0.2.4.md` 작성. 매뉴얼 txt 0.2.4 문안 2곳 수정(PDF 재빌드·배포 미실행).
+**2026-09-22 마감** — Win10 WSL2 검증 결과(`RESULT-wsl2-ai-company-0.2.3-20260921.md`: ① ✗ ② ✓ ③ ✓, 발견 4건) 반영해 **agentlayer v1.6.6 릴리즈**(훅 마지막 답변→Task 요약, `task done` 재실행 시 늦은 자식 READY, tap Casks 1.6.6 확인) + **ai-company v0.2.4 푸시**(install이 총괄 봇 스스로 재시작·코덱스 봇 채널 브리지 .env 폴백·질문 취소=중단). 재검증 지침 NAS `README-agentlayer-wsl2-ai-company-0.2.4.md` 작성. 매뉴얼 txt 0.2.4 문안 2곳 수정(PDF 재빌드·배포 미실행).
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
