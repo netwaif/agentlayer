@@ -20,6 +20,8 @@ type claudePayload struct {
 	CWD       string `json:"cwd"`
 	Message   string `json:"message"` // Notification 이벤트의 안내 문구
 	Source    string `json:"source"`  // SessionStart 이벤트의 기동 사유 (startup·resume·clear·compact)
+	// LastAssistantMessage는 Stop 이벤트의 마지막 답변 본문 — Task(최근 작업) 요약의 원천.
+	LastAssistantMessage string `json:"last_assistant_message"`
 }
 
 // RunClaude는 `agentlayer hook claude --event <event>`의 본체.
@@ -98,11 +100,17 @@ func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) 
 		a.CWD = p.CWD
 	}
 	// Ask = 지금 묻고 있는 것(Notification 문구). 다른 이벤트가 오면 해소된 것이니 지운다.
-	// Task(최근 작업)는 hook이 건드리지 않는다.
+	// Task(최근 작업) = Stop의 마지막 답변 한 줄 요약. 빈 답변이면 직전 값을 유지하고, 다른
+	// 이벤트는 건드리지 않는다 — DONE 뒤에도 "무엇을 끝냈는지"가 남아야 총괄 보고에 실린다.
 	if event == "notification" {
 		a.Ask = p.Message
 	} else {
 		a.Ask = ""
+	}
+	if event == "stop" {
+		if s := summarizeMessage(p.LastAssistantMessage); s != "" {
+			a.Task = s
+		}
 	}
 	prev := a.State
 	a.Transition(to, now)

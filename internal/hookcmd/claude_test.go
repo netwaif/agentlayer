@@ -264,3 +264,45 @@ func TestExistingStateAndCoordsPreserved(t *testing.T) {
 		t.Errorf("상태는 WORKING으로: %s", a.State)
 	}
 }
+
+// Stop 훅의 last_assistant_message가 Task에 실린다. 다른 이벤트는 Task를 건드리지 않는다.
+func TestStopFillsTaskFromLastMessage(t *testing.T) {
+	st := newStore(t)
+	long := strings.Repeat("가", 200)
+	body := `{"session_id":"s1","cwd":"/p","last_assistant_message":"` + long + `"}`
+	if err := RunClaude(st, "stop", strings.NewReader(body), env("%3"), t0); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.Load(scan.IDForPane("claude", "%3"))
+	if !strings.HasPrefix(a.Task, strings.Repeat("가", 119)) || !strings.HasSuffix(a.Task, "…") || len([]rune(a.Task)) != 120 {
+		t.Errorf("120룬 말줄임이어야 함: %d %q", len([]rune(a.Task)), a.Task)
+	}
+	if err := RunClaude(st, "user-prompt-submit", strings.NewReader(`{"session_id":"s1"}`), env("%3"), t0); err != nil {
+		t.Fatal(err)
+	}
+	a, _ = st.Load(scan.IDForPane("claude", "%3"))
+	if a.Task == "" {
+		t.Error("다음 프롬프트가 Task를 지우면 안 됨(최근 작업)")
+	}
+	if err := RunClaude(st, "stop", strings.NewReader(`{"session_id":"s1","last_assistant_message":""}`), env("%3"), t0); err != nil {
+		t.Fatal(err)
+	}
+	a, _ = st.Load(scan.IDForPane("claude", "%3"))
+	if a.Task == "" {
+		t.Error("빈 메시지의 Stop은 직전 Task를 유지")
+	}
+}
+
+func TestSummarizeMessage(t *testing.T) {
+	cases := map[string]string{
+		"":                          "",
+		"\n\n  hello world  \nmore": "hello world",
+		"**굵게** `코드`":               "굵게 코드",
+		"- 항목 하나":                   "항목 하나",
+	}
+	for in, want := range cases {
+		if got := summarizeMessage(in); got != want {
+			t.Errorf("summarizeMessage(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

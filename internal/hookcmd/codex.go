@@ -13,6 +13,8 @@ import (
 type codexPayload struct {
 	Type string `json:"type"`
 	CWD  string `json:"cwd"`
+	// LastAssistantMessage는 agent-turn-complete의 마지막 답변 본문(kebab-case 키).
+	LastAssistantMessage string `json:"last-assistant-message"`
 }
 
 // RunCodex는 codex config.toml의 notify 프로그램 호출을 받는다.
@@ -43,6 +45,9 @@ func RunCodex(st *state.Store, args []string, env func(string) string, now time.
 	if p.CWD != "" {
 		a.CWD = p.CWD
 	}
+	if s := summarizeMessage(p.LastAssistantMessage); s != "" {
+		a.Task = s
+	}
 	prev := a.State
 	a.Transition(to, now)
 	if err := st.Save(a); err != nil {
@@ -59,6 +64,8 @@ func RunCodex(st *state.Store, args []string, env func(string) string, now time.
 type codexHookPayload struct {
 	SessionID string `json:"session_id"`
 	CWD       string `json:"cwd"`
+	// LastAssistantMessage는 Stop 이벤트의 마지막 답변 본문 — Claude Code hook과 같은 키.
+	LastAssistantMessage string `json:"last_assistant_message"`
 }
 
 // RunCodexEvent는 `agentlayer hook codex --event <event>`의 본체 — codex hooks 경로.
@@ -98,6 +105,11 @@ func RunCodexEvent(st *state.Store, event string, stdin io.Reader, env func(stri
 	}
 	if p.CWD != "" {
 		a.CWD = p.CWD
+	}
+	if event == "stop" {
+		if s := summarizeMessage(p.LastAssistantMessage); s != "" {
+			a.Task = s
+		}
 	}
 	prev := a.State
 	a.Transition(to, now)

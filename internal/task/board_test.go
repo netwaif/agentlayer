@@ -232,3 +232,39 @@ func TestMarkDoneIsIdempotent(t *testing.T) {
 		t.Error("두 번째 MarkDone은 READY를 다시 쓰면 안 됨")
 	}
 }
+
+// 부모를 먼저 done으로 닫고 나서 자식을 붙이는 순서는 흔하다(WSL2 실기 2026-09-21 재현). 그때 총괄이
+// 부모를 다시 done 처리하면 이미 done이어도 자식을 재평가해 READY를 내야 한다 — 단 이미 보낸 자식은
+// 다시 내지 않는다(수신함 pending/·received/에 같은 task_id의 READY가 있으면 중복).
+func TestMarkDoneAgainEmitsReadyForLateChildOnly(t *testing.T) {
+	root := t.TempDir()
+	inbox := filepath.Join(root, "runtime", "inbox")
+	writeCompanyTask(t, root, "A", "reviewing", "[]")
+	writeCompanyTask(t, root, "C", "pending", "[A]")
+	now := time.Now()
+	if _, err := MarkDone(root, "A", inbox, now); err != nil {
+		t.Fatal(err)
+	}
+	if r, ok, _ := Poll(inbox); !ok || r.TaskID != "C" {
+		t.Fatalf("첫 MarkDone은 C의 READY를 내야 함: %v", r)
+	}
+	writeCompanyTask(t, root, "D", "pending", "[A]") // 늦게 붙은 자식
+	ready, err := MarkDone(root, "A", inbox, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ready) != 1 || ready[0] != "D" {
+		t.Errorf("늦게 붙은 D만 READY: %v", ready)
+	}
+	r, ok, _ := Poll(inbox)
+	if !ok || r.TaskID != "D" || r.To != "READY" {
+		t.Errorf("수신함에 D READY가 있어야 함: %v", r)
+	}
+	if _, ok, _ := Poll(inbox); ok {
+		t.Error("C의 READY가 중복으로 나가면 안 됨")
+	}
+	lg, _ := os.ReadFile(filepath.Join(root, "tasks", "A", "log.md"))
+	if strings.Count(string(lg), "[COMPLETE]") != 1 {
+		t.Errorf("[COMPLETE]는 한 번만:\n%s", lg)
+	}
+}

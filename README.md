@@ -175,7 +175,8 @@ agentlayer task done VIDEO-07
 
 - `task assign` → `in_progress` + `[ASSIGN]`, 훅 WAIT → `waiting_<세션>` + `[ASK]`, WORK 복귀 → `in_progress`, DONE → `reviewing` + `[REPORT]`, ERR → `[ERROR]`(status 유지).
 - `agentlayer send`로 등록 세션에 보낸 지시는 `[SEND]`로 남는다 — `[ASK]` 뒤의 `[SEND]`가 Q&A 한 쌍.
-- `task done <ID>` → `done` + `[COMPLETE]`, 그 결과 부모가 전부 끝난 자식마다 수신함에 `to: READY` 이벤트.
+- `task done <ID>` → `done` + `[COMPLETE]`, 그 결과 부모가 전부 끝난 자식마다 수신함에 `to: READY` 이벤트. 이미 done인 업무에 다시 실행하면 상태·로그는 그대로 두고 자식만 재평가한다 — 부모를 먼저 닫고 나중에 붙인 자식의 READY가 이때 나간다(수신함에 이미 있는 자식은 중복 발송 없음).
+- `[REPORT] DONE:` 뒤의 요약은 직원의 마지막 답변 첫 줄(Claude·Codex Stop 훅의 `last_assistant_message`, codex notify의 `last-assistant-message`, 120자 말줄임) — status·보드 카드의 "최근 작업"도 같은 값.
 - ready·blocked가 30분(`board_stale_ready`) 넘게 방치되면 ⚠.
 - 디스코드 카드에 "업무 보드" 절, `agentlayer board`는 6열 HTML을 전용 브라우저로 연다(`--json`·`--out`).
   보드는 열마다 색점·개수·설명 줄, 방치 카드는 붉은 테두리와 상단 `!!!` 경고 줄, Done 열은 최근 12장만 펼친다.

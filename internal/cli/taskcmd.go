@@ -255,7 +255,7 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 		return json.NewEncoder(w).Encode(rows)
 	}
 	if len(rows) == 0 {
-		fmt.Fprintln(w, "등록된 업무 없음.")
+		fmt.Fprintln(w, "등록된 업무 없음. (완료된 업무는 목록에서 빠진다 — agentlayer board에서 Done 열로 확인)")
 		return nil
 	}
 	fmt.Fprintln(w, PadRight("업무ID", 24)+PadRight("세션", 30)+PadRight("상태", 8)+"경과")

@@ -80,3 +80,29 @@ func TestRunCodexEventTransitions(t *testing.T) {
 		t.Errorf("모르는 이벤트는 상태를 안 바꿈: %v", a.State)
 	}
 }
+
+// codex notify(agent-turn-complete)의 last-assistant-message가 Task(최근 작업)에 실린다 — 총괄 수신함
+// [REPORT] DONE: 요약이 "(요약 없음)"으로 비던 문제(WSL2 실기 2026-09-21).
+func TestRunCodexTurnCompleteFillsTaskFromLastMessage(t *testing.T) {
+	st := newStore(t)
+	payload := `{"type":"agent-turn-complete","turn-id":"x","cwd":"/p","last-assistant-message":"\n  OK  \n두 번째 줄"}`
+	if err := RunCodex(st, []string{payload}, env("%9"), t0); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.Load(scan.IDForPane("codex", "%9"))
+	if a.Task != "OK" {
+		t.Errorf("Task는 첫 줄 요약이어야 함: %q", a.Task)
+	}
+}
+
+func TestRunCodexEventStopFillsTaskFromLastMessage(t *testing.T) {
+	st := newStore(t)
+	body := `{"session_id":"s1","cwd":"/p","hook_event_name":"Stop","last_assistant_message":"DONE"}`
+	if err := RunCodexEvent(st, "stop", strings.NewReader(body), env("%9"), t0); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.Load(scan.IDForPane("codex", "%9"))
+	if a.Task != "DONE" {
+		t.Errorf("Task: %q", a.Task)
+	}
+}
