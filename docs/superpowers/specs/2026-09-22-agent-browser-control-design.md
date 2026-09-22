@@ -107,7 +107,7 @@ ego-lite 캡처(2026-09-22)를 기준으로 하되 색은 하우스 팔레트(�
 - `internal/browser/pagemap_test.go`: `## Pages` 파싱(selected·닫힘·재번호), pageId→url, 없는 id 폴백.
 - `internal/cli/browsercmd_test.go`(또는 `controlgate_test.go`): 게이트 — user면 잡았다가 풀림(가짜 시계), 120초 초과 응답, stopped 즉시 응답, 통과 시 파일 갱신·에이전트 ID 조회, `new_page` background 채우기(앞 앱 판정은 주입 함수), 응답 스냅샷 잘라내기.
 - `internal/browser/fx_test.go`: 병렬 SignalFx가 300ms 마감을 지키는지(느린 페이지 흉내), 입력 도구 목록.
-- `internal/browser/hangwatch_test.go`: 연속 2회·10초 간격 판정, 재시작 순서(주입 함수로 kill·sample·notify 호출 기록).
+- `internal/browser/hangwatch_test.go`: 연속 3회·10초 간격 판정, 재시작 순서(주입 함수로 kill·sample·notify 호출 기록).
 - 콘텐츠 스크립트: node로 DOM 흉내(jsdom 없이 최소 스텁)해서 미러 파싱·상태별 표시·방패 pointer-events 전환을 검사하는 `internal/browser/fx/content_test.mjs`(go test에서 `node`가 있으면 실행, 없으면 skip).
 - 실측 체크리스트(릴리즈 전 수동): ⓪ 에이전트가 탭 A에서 작업할 때 탭 B에는 띠만 뜨고 마우스가 자유로움 ① 에이전트가 클릭하는 동안 사용자 마우스를 흔들어도 AI 커서가 안 따라옴 ② 「내가 조작하기」 뒤 에이전트 호출이 멈추고, 「돌려주기」 뒤 이어짐 ③ 「중단」 뒤 에이전트가 오류 문구를 받음 ④ 에이전트가 전부 꺼진 뒤 20초 안에 알약이 내려감 ⑤ 다른 앱을 앞에 두고 검색을 시켜도 브라우저가 앞으로 안 튀어나옴 ⑥ `kill -STOP`으로 굳힌 브라우저가 20초 안에 재시작되고 알림이 옴 ⑦ `wait_for` 응답에 스냅샷이 없음.
 
