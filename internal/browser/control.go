@@ -32,6 +32,11 @@ type Control struct {
 	LastCall time.Time `json:"last_call"`         // 마지막 도구 호출
 	Stopped  bool      `json:"stopped,omitempty"` // 사용자가 「중단」을 눌렀는지
 	Waiting  int       `json:"waiting,omitempty"` // 게이트에 잡혀 있는 호출 수(마지막으로 쓴 프록시 값)
+	// LastRequestMs — 이미 반영한 버튼 요청의 ms(ack). 미러에 실려 탭으로 내려가고,
+	// 탭은 이보다 새 요청만 돌려준다. 예전엔 페이지 JS가 "읽으면서 지웠기" 때문에
+	// 느린 탭의 요청이 예산(fxBudget) 초과로 버려지면 DOM에서는 사라졌는데 파일에는
+	// 반영되지 않아 클릭이 통째로 증발했다(최종 리뷰 IMPORTANT 2).
+	LastRequestMs int64 `json:"last_request_ms,omitempty"`
 }
 
 type Event int
@@ -129,7 +134,8 @@ func SaveControl(dir string, c Control) error {
 func mirrorSafe(s string) string { return strings.ReplaceAll(s, ":", "∶") }
 
 // MirrorValue는 <html data-agentlayer-owner>에 쓸 값.
-// owner:agent:label:since_ms:last_ms:stopped(0/1):waiting:target(0/1):title
+// owner:agent:label:since_ms:last_ms:stopped(0/1):waiting:target(0/1):ack_ms:title
+// title은 ':'를 포함할 수 있으므로 항상 맨 뒤(파서가 나머지를 다 이어 붙인다).
 func MirrorValue(c Control, target bool, title string) string {
 	b := func(v bool) string {
 		if v {
@@ -140,7 +146,8 @@ func MirrorValue(c Control, target bool, title string) string {
 	return strings.Join([]string{
 		string(c.Owner), mirrorSafe(c.Agent), mirrorSafe(c.Label),
 		strconv.FormatInt(c.Since.UnixMilli(), 10), strconv.FormatInt(c.LastCall.UnixMilli(), 10),
-		b(c.Stopped), strconv.Itoa(c.Waiting), b(target), mirrorSafe(title),
+		b(c.Stopped), strconv.Itoa(c.Waiting), b(target),
+		strconv.FormatInt(c.LastRequestMs, 10), mirrorSafe(title),
 	}, ":")
 }
 

@@ -62,9 +62,30 @@ func RunBrowser(out io.Writer, args []string) error {
 		return browserMCPServe()
 	case "autopreview":
 		return browserAutoPreview(out)
+	case "control":
+		return browserControl(out, args)
 	default:
 		return fmt.Errorf("모르는 browser 서브커맨드 %q — 'agentlayer help' 참고", sub)
 	}
+}
+
+// browserControl: agentlayer browser control reset — 소유권 정본을 idle로 되돌린다.
+// 비상구다. 오버레이 버튼을 누를 수 없는 상황(확장이 안 붙은 브라우저, 작업 탭을 닫음,
+// 브라우저가 아예 안 뜸)에서 사용자 소유로 잠긴 파일을 손으로 푸는 유일한 수단 —
+// 파일은 재시작에도 남으므로 이 명령이 없으면 영구 잠금이 된다(최종 리뷰 CRITICAL 1).
+func browserControl(out io.Writer, args []string) error {
+	if len(args) != 1 || args[0] != "reset" {
+		return fmt.Errorf("사용법: agentlayer browser control reset")
+	}
+	// ack를 지금으로 올려 둔다 — 탭에 남아 있던 옛 버튼 요청(반영되지 못한 클릭)이
+	// 초기화 직후 다시 반영돼 곧바로 잠기는 일을 막는다.
+	now := time.Now()
+	c := browser.Control{Owner: browser.OwnerIdle, Since: now, LastCall: now, LastRequestMs: now.UnixMilli()}
+	if err := browser.SaveControl(state.DefaultDir(), c); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "브라우저 제어권을 초기화했습니다 (idle) — 에이전트 도구 호출이 다시 통과합니다")
+	return nil
 }
 
 // browserLaunch는 전용 브라우저를 기동(또는 기존 인스턴스에 attach)한다.
@@ -798,10 +819,15 @@ func browserMCPServe() error {
 					fx.setTarget(pm.URLFor(id))
 					fx.setTargetTitle(pm.TitleFor(id))
 				} else {
-					fx.setTarget(pm.SelectedURL())
-					fx.setTargetTitle("") // pageId 없는 호출은 어느 탭인지 몰라 제목도 같이 비운다
+					// pageId 없는 호출은 [selected] 탭으로 본다. 같은 url이면 제목은 유지.
+					fx.setTargetFallback(pm.SelectedURL())
 				}
+				// FX 신호를 게이트보다 앞에서 "장전"한다 — 게이트가 어차피 탭마다 미러를
+				// 쓰므로 그 왕복에 얹혀 나간다(왕복 1회 절약). 게이트가 막으면 Cancel이
+				// 추적을 풀고 켜진 신호를 되돌린다.
+				fx.OnClientLine(line)
 				if fwd, reply := gate.Pass(line); !fwd {
+					fx.Cancel(line)
 					_, _ = os.Stdout.Write(reply)
 					handled = true
 				}
@@ -811,7 +837,7 @@ func browserMCPServe() error {
 					front, _ := frontOps.Frontmost()
 					line = browser.RewriteNewPage(line, front == browser.EngineAppName)
 				}
-				fx.OnClientLine(line) // 도구가 손대기 전에 신호가 먹어야 하므로 전달보다 앞
+				fx.Flush() // 미러 왕복에 못 실렸으면 여기서 따로 — 도구가 손대기 전에 신호가 먹어야 한다
 				if werr := writeServer(roots.FromClient(line)); werr != nil {
 					break
 				}
@@ -835,11 +861,16 @@ type fxSignaler struct {
 	// sync — 탭 미러 갱신 + 버튼 요청 회수(기본 browser.SyncTabs). 죽은 연결은 판정용
 	// CDP 왕복을 따로 두지 않고 이 호출의 실패로만 감지한다(syncTabs 참고) — 매 호출마다
 	// 잠금 아래에서 여분의 왕복을 태우지 않기 위함. 테스트가 실패를 주입할 수 있게 필드로 뺐다.
-	sync func(b *rod.Browser, c browser.Control, url, title string) ([]browser.TabRequest, error)
+	sync func(b *rod.Browser, c browser.Control, url, title, fxOn string) ([]browser.TabRequest, error)
 
 	tmu         sync.Mutex
 	targetURL   string
 	targetTitle string
+	// pendingTool — 이번 호출의 fx "on" 신호. 게이트의 미러 왕복에 실어 보내 Eval 왕복을
+	// 하나로 합친다(최종 리뷰 IMPORTANT 3-c). 못 실었으면 Flush가 SignalFx로 따로 보낸다.
+	pendingTool string
+	pendingOn   bool
+	pendingSent bool // 이미 페이지에 써졌는지 — 게이트가 호출을 막으면 off로 되돌려야 한다
 }
 
 func newFxSignaler(enabled bool, connect func() (*rod.Browser, error)) *fxSignaler {
@@ -847,11 +878,52 @@ func newFxSignaler(enabled bool, connect func() (*rod.Browser, error)) *fxSignal
 }
 
 // OnClientLine은 tools/call이면 id→도구명을 기억한다(trim이 End에서 꺼내 쓰므로
-// browser_fx 꺼짐과 무관하게 항상 기록). FX 신호는 enabled일 때만 보낸다.
+// browser_fx 꺼짐과 무관하게 항상 기록). FX 신호는 enabled일 때만, 그리고 바로 보내지
+// 않고 "장전"만 한다 — 게이트가 어차피 탭마다 미러를 쓰므로 그 왕복에 얹는다.
 func (f *fxSignaler) OnClientLine(line []byte) {
 	tool, ok := f.tracker.Start(line)
-	if f.enabled && ok {
+	if !f.enabled || !ok {
+		return
+	}
+	f.tmu.Lock()
+	f.pendingTool, f.pendingOn, f.pendingSent = tool, true, false
+	f.tmu.Unlock()
+}
+
+// takeFx — 미러 왕복에 실을 fx 값을 꺼낸다(한 번만).
+func (f *fxSignaler) takeFx() string {
+	f.tmu.Lock()
+	defer f.tmu.Unlock()
+	if !f.pendingOn {
+		return ""
+	}
+	f.pendingOn, f.pendingSent = false, true
+	return browser.FxValue(f.pendingTool, true)
+}
+
+// Flush — 게이트의 미러 왕복에 못 실린 on 신호를 따로 보낸다(게이트가 미러를 건너뛴 경우).
+func (f *fxSignaler) Flush() {
+	f.tmu.Lock()
+	tool, pending := f.pendingTool, f.pendingOn
+	if pending {
+		f.pendingOn, f.pendingSent = false, true
+	}
+	f.tmu.Unlock()
+	if pending {
 		f.signal(tool, true)
+	}
+}
+
+// Cancel — 게이트가 막아 서버로 안 나간 호출. 추적을 풀고(안 풀면 그 id의 응답이 영영
+// 안 와 FX 종료 신호가 막힌다), 이미 켠 신호는 꺼 준다.
+func (f *fxSignaler) Cancel(line []byte) {
+	f.tracker.Cancel(line)
+	f.tmu.Lock()
+	sent := f.pendingSent
+	f.pendingOn, f.pendingSent = false, false
+	f.tmu.Unlock()
+	if sent {
+		f.signal("", false)
 	}
 }
 
@@ -898,6 +970,22 @@ func (f *fxSignaler) setTargetTitle(t string) {
 	f.tmu.Unlock()
 }
 
+// setTargetFallback — pageId가 없는 호출(list_pages 등)의 작업 탭 추정([selected] 탭).
+// 제목은 PageMap에서 못 얻으므로, url이 직전과 같으면 알고 있던 제목을 유지한다 —
+// 그래야 다른 탭의 띠가 "AI가 다른 탭에서 작업 중 · "로 제목만 빠진 채 깜빡이지 않는다.
+func (f *fxSignaler) setTargetFallback(url string, ok bool) {
+	f.tmu.Lock()
+	defer f.tmu.Unlock()
+	if !ok {
+		f.targetURL, f.targetTitle = "", ""
+		return
+	}
+	if f.targetURL != url {
+		f.targetTitle = ""
+	}
+	f.targetURL = url
+}
+
 func (f *fxSignaler) target() (string, string) {
 	f.tmu.Lock()
 	defer f.tmu.Unlock()
@@ -927,7 +1015,7 @@ func (f *fxSignaler) syncTabs(c browser.Control, url, title string) []browser.Ta
 	if b == nil {
 		return nil
 	}
-	reqs, err := f.sync(b, c, url, title)
+	reqs, err := f.sync(b, c, url, title, f.takeFx())
 	if err != nil {
 		f.mu.Lock()
 		f.b = nil
@@ -1082,6 +1170,11 @@ func browserAutoPreview(out io.Writer) error {
 // UI 스레드가 hangPing 안에 hangFailsNeeded번(≥hangMinGap 간격) 응답이 없으면 진단
 // 채집 → 강제 종료 → 재기동 → 알림까지 처리하고, 재기동까지 성공했을 때만 true.
 func browserHangWatch(out io.Writer, cfg *config.Config, port int) (restarted bool) {
+	// browser_hangwatch: false면 lsof·CDP 프로브도 하기 전에 빠진다 — 감시를 끈 사용자가
+	// 훅마다 프로세스 조회 비용을 물면 안 되고, 어떤 경우에도 브라우저를 죽이지 않는다.
+	if !cfg.BrowserHangwatchEnabled() {
+		return false
+	}
 	pid := browser.ChromePID(port, browser.ExecLsof)
 	if pid <= 0 {
 		return false

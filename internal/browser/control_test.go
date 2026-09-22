@@ -61,11 +61,14 @@ func TestSaveLoadControl(t *testing.T) {
 	if got := LoadControl(dir); got.Owner != OwnerIdle {
 		t.Fatalf("없으면 idle: %+v", got)
 	}
-	c := Control{Owner: OwnerUser, Agent: "claude-%1", Label: "a:b", Since: time.Unix(1, 0), LastCall: time.Unix(2, 0), Stopped: true, Waiting: 2}
+	c := Control{Owner: OwnerUser, Agent: "claude-%1", Label: "a:b", Since: time.Unix(1, 0), LastCall: time.Unix(2, 0), Stopped: true, Waiting: 2, LastRequestMs: 42}
 	if err := SaveControl(dir, c); err != nil {
 		t.Fatal(err)
 	}
 	got := LoadControl(dir)
+	if got.LastRequestMs != 42 {
+		t.Fatalf("ack도 파일에 남아야 함(재시작 뒤 같은 클릭 재반영 방지): %+v", got)
+	}
 	if got.Owner != OwnerUser || got.Agent != c.Agent || got.Label != c.Label || !got.Stopped || got.Waiting != 2 || !got.Since.Equal(c.Since) {
 		t.Fatalf("왕복: %+v", got)
 	}
@@ -75,14 +78,18 @@ func TestSaveLoadControl(t *testing.T) {
 }
 
 func TestMirrorValueAndParseRequest(t *testing.T) {
-	c := Control{Owner: OwnerAgent, Agent: "claude-%1", Label: "제목: 검색", Since: time.UnixMilli(1000), LastCall: time.UnixMilli(2000), Waiting: 1}
+	c := Control{Owner: OwnerAgent, Agent: "claude-%1", Label: "제목: 검색", Since: time.UnixMilli(1000), LastCall: time.UnixMilli(2000), Waiting: 1, LastRequestMs: 777}
 	v := MirrorValue(c, true, "JustWatch: 신작")
-	want := "agent:claude-%1:제목∶ 검색:1000:2000:0:1:1:JustWatch∶ 신작"
+	// ack_ms는 title 앞(9번째) — title은 ':'를 품을 수 있어 항상 맨 뒤여야 한다.
+	want := "agent:claude-%1:제목∶ 검색:1000:2000:0:1:1:777:JustWatch∶ 신작"
 	if v != want {
 		t.Fatalf("mirror = %q, want %q", v, want)
 	}
-	if strings.Count(v, ":") != 8 {
+	if strings.Count(v, ":") != 9 {
 		t.Fatalf("구분자 수: %q", v)
+	}
+	if got := MirrorValue(Control{Owner: OwnerIdle}, false, ""); !strings.HasSuffix(got, ":0:0:") {
+		t.Fatalf("ack 기본값 0이 title 앞에 와야 함: %q", got)
 	}
 	for in, want := range map[string]Event{"user:123": EvUserTake, "agent:5": EvUserReturn, "stop:9": EvUserStop} {
 		ev, ms, ok := ParseRequest(in)

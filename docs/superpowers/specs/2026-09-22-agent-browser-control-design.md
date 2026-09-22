@@ -36,7 +36,11 @@
 | user | 사용자 「AI에게 돌려주기」 | agent(stopped=false; 잡혀 있던 호출이 순서대로 나간다) |
 | user·agent·idle | 사용자 「중단」 | user(stopped=true) |
 
-사용자 입력이 파일에 닿는 경로: 콘텐츠 스크립트는 파일을 못 쓴다. 버튼 클릭은 `<html data-agentlayer-request="user:<ms>|agent:<ms>|stop:<ms>">`에 남기고, 프록시가 탭들을 훑어 가장 최신 요청을 파일에 반영한 뒤 모든 탭에 현재 상태를 미러(`data-agentlayer-owner="<owner>:<agent>:<label>:<since_ms>:<last_ms>:<stopped>"`)로 쓴다. 훑는 시점은 (a) 도구 호출마다, (b) 대기 중(owner=user)엔 0.5초마다. 요청 속성은 반영 뒤 지운다.
+사용자 입력이 파일에 닿는 경로: 콘텐츠 스크립트는 파일을 못 쓴다. 버튼 클릭은 `<html data-agentlayer-request="user:<ms>|agent:<ms>|stop:<ms>">`에 남기고, 프록시가 탭들을 훑어 가장 최신 요청을 파일에 반영한 뒤 모든 탭에 현재 상태를 미러(`data-agentlayer-owner="<owner>:<agent>:<label>:<since_ms>:<last_ms>:<stopped>:<waiting>:<target>:<ack_ms>:<title>"`)로 쓴다. 훑는 시점은 (a) 도구 호출마다, (b) 대기 중(owner=user)엔 0.5초마다.
+
+요청 속성은 **읽으면서 지우지 않는다**(2026-09-22 최종 리뷰). 지우면, 탭 응답이 300ms 예산을 넘겨 버려졌을 때 클릭이 DOM에서만 사라지고 파일에는 반영되지 않는다. 대신 파일에 `last_request_ms`(ack)를 두고 미러로 같이 내려보내, 페이지는 ack보다 새 요청만 돌려주고 ack된 요청만 지운다(`internal/browser/fx/sync.js`).
+
+사용자 소유(owner=user)일 때는 작업 탭 여부(`target`)와 무관하게 **모든 탭**에 알약과 「AI에게 돌려주기」를 띄운다 — PageMap이 비었거나 작업 탭이 닫혀 모든 탭이 `target=0`이 되면 돌려줄 버튼이 사라져 영구 잠금이 되기 때문이다. 버튼조차 못 쓰는 상황(확장이 안 붙은 브라우저 등)의 비상구로 `agentlayer browser control reset`이 있다.
 
 프록시가 하나도 없을 때(에이전트가 전부 꺼짐)는 아무도 파일을 안 갱신하므로 오버레이가 미러의 `last_ms`로 20초 만료를 스스로 계산해 내려간다. 사용자가 갇히는 일은 없다.
 
@@ -65,7 +69,9 @@
 
 **오버헤드 예산** — 호출당 프록시 추가 지연 **50ms 이하** 목표.
 - `SignalFx`·미러 쓰기를 탭마다 고루틴으로 병렬 실행하고 전체 마감 300ms 하나만 둔다(지금은 탭마다 400ms 순차).
-- 게이트의 파일 읽기는 수십 µs. 탭 요청 속성 훑기는 미러 쓰기와 같은 Eval에 묶어 왕복 1회로 한다(`(mirror) => { const r = html.getAttribute(request); html.setAttribute(owner, mirror); html.removeAttribute(request); return r }`).
+- 게이트의 파일 읽기는 수십 µs. 탭 요청 속성 훑기는 미러 쓰기와 같은 Eval에 묶어 왕복 1회로 한다(`internal/browser/fx/sync.js`).
+- 탭 목록은 `Target.getTargets` 한 번으로 얻는다(예전엔 `Pages()` + 탭마다 `Info()`). 이 왕복도 `b.Timeout(300ms)`로 묶어 굳은 브라우저가 게이트를 붙잡지 못하게 한다. 페이지 핸들은 원본 브라우저로 만든다 — 타임아웃 클론으로 만들면 rod가 그 컨텍스트에서 파생된 페이지를 캐시에 넣어 300ms 뒤 영구히 죽는다.
+- 도구 호출 하나에 드는 Eval을 탭당 1회로: fx "on" 신호는 게이트의 미러 왕복에 실어 보내고(`sync.js`의 `fxValue` 인자), 통과 확정 뒤의 미러 재기록은 내용이 그대로면(`last_call`만 다름) 건너뛴다. "off"는 응답 줄에서 별도 `SignalFx`로 남는다.
 
 ## 3. 오버레이(콘텐츠 스크립트)
 
@@ -92,7 +98,7 @@ ego-lite 캡처(2026-09-22)를 기준으로 하되 색은 하우스 팔레트(�
 - 판정: CDP 포트 pid가 있고(`ChromePID`), UI 스레드를 타는 호출 `Browser.getWindowForTarget`(첫 웹 탭)이 **3초** 안에 답이 없으면 1회 실패. `<stateDir>/hangwatch.json`에 실패 횟수를 남겨 **연속 3회**면 행으로 확정(두 판정 사이 최소 10초 → 20초 이상 무응답). 2회에서 3회로 올린 이유(2026-09-22 리뷰): 네이티브 파일 대화상자가 열려 있는 동안 Chrome UI 스레드가 중첩 런루프에 들어가 CDP가 멈추므로, 사용 중인 브라우저를 죽이는 오탐을 줄인다.
 - 실행 위치: 훅 정리 작업(`browser autopreview`)의 **맨 앞** — 프리뷰 조기 반환(`preview_auto`·경로 없음·`IsUp`)이나 rod 무제한 호출보다 앞. `IsUp`은 굳은 브라우저에 false라 그 뒤에 두면 영영 도달하지 못한다. 기록된 WS 연결이 빠르게 거부되면(낡은 instance.json) 포트 프로브로 폴백해 건강한 브라우저를 오판하지 않는다. 재기동 실패는 삼키지 않고 알림에 "재기동 실패: <err>"로 적는다. `sample`은 20초 상한.
 - 확정 시: macOS면 `sample <pid> 2 -file <stateDir>/hang/<ts>.txt`로 스택을 남기고(리눅스는 `/proc/<pid>/stack`류는 권한 문제라 생략), 프로세스 그룹을 `kill -9`, `browser.json` 제거, `Connect`로 재기동(프로필 보존이라 로그인 유지). 알림 웹훅(`notify`)으로 "에이전트 브라우저가 멈춰 재시작했습니다 · 진단: <경로>" 한 줄.
-- 스로틀: `ThrottleOK(dir, "hangwatch", 10s)`.
+- 스로틀: `ThrottleOK(dir, "hangwatch", 10s)`. 설정 `browser_hangwatch`(기본 true)가 false면 `ChromePID`(lsof)조차 부르지 않고 즉시 빠진다. 실패 횟수는 pid별로 센다 — 그 사이 브라우저가 죽고 새로 떴으면(pid 변경) 0부터 다시. 프로세스 그룹 `kill -9`는 그 pid가 그룹 리더일 때만(`Getpgid(pid)==pid`).
 - `--disable-hang-monitor`를 기동 플래그에서 뺀다(`Delete`). 렌더러가 멈추면 Chrome이 "페이지 응답 없음" 안내를 띄워 탭만 죽일 수 있게 된다.
 
 ## 5. 호출 효율

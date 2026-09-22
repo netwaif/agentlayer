@@ -11,16 +11,20 @@
     upload_file: '입력 중', drag: '끌기', navigate_page: '이동 중', new_page: '이동 중', take_snapshot: '읽는 중', take_screenshot: '읽는 중',
     wait_for: '기다리는 중', evaluate_script: '확인 중' };
 
-  const st = { owner: 'idle', agent: '', label: '', lastMs: 0, stopped: false, waiting: 0, target: false, title: '',
+  const st = { owner: 'idle', agent: '', label: '', lastMs: 0, stopped: false, waiting: 0, target: false, ackMs: 0, title: '',
     fxOn: false, tool: '', cursor: null, offTimer: 0, lastFxVal: undefined };
 
+  // 미러 형식: owner:agent:label:since_ms:last_ms:stopped:waiting:target:ack_ms:title
+  // ack_ms는 프록시가 이미 반영한 버튼 요청의 ms(fx/sync.js 참고). title은 ':'를 품을 수
+  // 있으므로 항상 맨 뒤 — 새 필드는 title 앞에 끼워 넣는다.
   const parseMirror = (v) => {
     if (!v) return null;
     const p = v.split(':');
-    if (p.length < 9) return null;
-    const [owner, agent, label, sinceMs, lastMs, stopped, waiting, target] = p;
+    if (p.length < 10) return null;
+    const [owner, agent, label, sinceMs, lastMs, stopped, waiting, target, ackMs] = p;
     if (!['agent', 'user', 'idle'].includes(owner)) return null;
-    return { owner, agent, label, sinceMs: +sinceMs, lastMs: +lastMs, stopped: stopped === '1', waiting: +waiting || 0, target: target === '1', title: p.slice(8).join(':') };
+    return { owner, agent, label, sinceMs: +sinceMs, lastMs: +lastMs, stopped: stopped === '1', waiting: +waiting || 0,
+      target: target === '1', ackMs: +ackMs || 0, title: p.slice(9).join(':') };
   };
 
   // 유효 소유권 — 프록시가 전부 꺼지면 아무도 미러를 안 고치므로 스스로 만료를 계산한다.
@@ -103,7 +107,10 @@
   const compute = () => {
     const owner = effOwner();
     const active = owner === 'agent' && st.target;
-    const inputPhase = st.fxOn && INPUT.has(st.tool);
+    // 입력 도구 구간은 "작업 탭에서 에이전트가 조작 중"일 때만이다. 소유권과 무관하게
+    // 판정하면(예전 코드) 사용자 소유일 때 프록시가 쓴 fx 신호 때문에 알약 버튼이
+    // 눌리지 않아 제어권을 못 돌려주는 상황이 생긴다.
+    const inputPhase = active && st.fxOn && INPUT.has(st.tool);
     const s = { owner, target: st.target, shield: 'none', dim: false, pill: false, banner: '', buttons: [],
       pillStatus: '', cursorLabel: '', cursor: st.cursor, buttonsClickable: !inputPhase };
     if (active) {
@@ -112,12 +119,17 @@
       s.buttons = ['내가 조작하기', '중단'];
       s.pillStatus = `AI가 조작 중 · ${st.agent}`;
       s.cursorLabel = st.fxOn ? (LABELS[st.tool] || '작업 중') : '';
-    } else if (owner === 'user' && st.target) {
+    } else if (owner === 'user') {
+      // 사용자 소유면 target과 무관하게 모든 탭에 알약을 띄운다(최종 리뷰 CRITICAL 1).
+      // target은 작업 탭을 아는 경우에만 1이 되는데, PageMap이 아직 비었거나 작업 탭이
+      // 닫히면 모든 탭이 target=0이 된다. 그때 버튼이 없으면 게이트가 모든 호출을 막은
+      // 채 제어권을 돌려줄 방법이 사라져(재시작해도 파일이 남아) 영구 잠금이 된다.
       s.pill = true;
       s.buttons = ['AI에게 돌려주기'];
       s.pillStatus = st.stopped ? '중단됨' : `내가 조작 중 · 대기 중인 호출 ${st.waiting}`;
-    } else if (owner !== 'idle' && !st.target) {
-      s.banner = `AI가 다른 탭에서 작업 중 · ${st.title}`;
+    } else if (owner === 'agent') {
+      // 작업 탭이 아닌 탭: 얇은 띠만. 제목이 비면 구분자(·)도 붙이지 않는다.
+      s.banner = st.title ? `AI가 다른 탭에서 작업 중 · ${st.title}` : 'AI가 다른 탭에서 작업 중';
     }
     return s;
   };

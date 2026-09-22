@@ -319,7 +319,7 @@ func TestFxSignalerSyncTabsReconnectsAfterFailure(t *testing.T) {
 		return &rod.Browser{}, nil
 	})
 	syncCalls := 0
-	f.sync = func(*rod.Browser, browser.Control, string, string) ([]browser.TabRequest, error) {
+	f.sync = func(*rod.Browser, browser.Control, string, string, string) ([]browser.TabRequest, error) {
 		syncCalls++
 		if syncCalls == 1 {
 			return nil, errors.New("연결 죽음")
@@ -346,7 +346,7 @@ func TestFxSignalerSyncTabsKeepsConnectionOnSuccess(t *testing.T) {
 		connectCalls++
 		return &rod.Browser{}, nil
 	})
-	f.sync = func(*rod.Browser, browser.Control, string, string) ([]browser.TabRequest, error) {
+	f.sync = func(*rod.Browser, browser.Control, string, string, string) ([]browser.TabRequest, error) {
 		return nil, nil
 	}
 	f.syncTabs(browser.Control{}, "", "")
@@ -379,21 +379,118 @@ func TestFxSignalerDisabledStillTracksToolNames(t *testing.T) {
 		}
 	})
 
-	t.Run("enabled: 신호를 시도해도 도구명은 그대로", func(t *testing.T) {
+	t.Run("enabled: 장전 뒤 Flush로 송출, 도구명은 그대로", func(t *testing.T) {
 		connectCalls := 0
 		f := newFxSignaler(true, func() (*rod.Browser, error) {
 			connectCalls++
 			return nil, errors.New("연결 실패") // 실제 브라우저 없이 signal()의 실패-삼킴 경로만 탐
 		})
 		f.OnClientLine(waitForCall)
+		if connectCalls != 0 {
+			t.Fatalf("OnClientLine은 장전만 한다(게이트 미러 왕복에 실어 보낸다): connectCalls=%d", connectCalls)
+		}
+		f.Flush() // 게이트가 미러를 건너뛴 경우의 대체 경로
+		if connectCalls == 0 {
+			t.Fatal("Flush는 장전된 신호를 송출해야 함(connect 호출)")
+		}
 		tool := f.OnServerLine(waitForReply)
 		if tool != "wait_for" {
 			t.Fatalf("도구명 반환: %q", tool)
 		}
-		if connectCalls == 0 {
-			t.Fatal("enabled=true면 신호 송출을 시도해야 함(connect 호출)")
-		}
 	})
+}
+
+// TestFxSignalerPendingRidesOnMirrorSync — 최종 리뷰 IMPORTANT 3-c: 장전된 fx "on" 값은
+// 게이트의 미러 왕복(syncTabs)에 실려 나가고, 그 뒤 Flush는 아무것도 더 보내지 않는다.
+func TestFxSignalerPendingRidesOnMirrorSync(t *testing.T) {
+	connectCalls := 0
+	f := newFxSignaler(true, func() (*rod.Browser, error) {
+		connectCalls++
+		return &rod.Browser{}, nil
+	})
+	var gotFx []string
+	f.sync = func(_ *rod.Browser, _ browser.Control, _, _, fxOn string) ([]browser.TabRequest, error) {
+		gotFx = append(gotFx, fxOn)
+		return nil, nil
+	}
+	f.OnClientLine([]byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"click"}}` + "\n"))
+	f.syncTabs(browser.Control{}, "https://x", "제목")
+	if len(gotFx) != 1 || !strings.HasPrefix(gotFx[0], "on:click:") {
+		t.Fatalf("미러 왕복에 on 신호가 실려야 함: %v", gotFx)
+	}
+	f.Flush()
+	f.syncTabs(browser.Control{}, "https://x", "제목")
+	if len(gotFx) != 2 || gotFx[1] != "" {
+		t.Fatalf("이미 실어 보냈으면 다음 왕복엔 빈 값: %v", gotFx)
+	}
+	if connectCalls != 1 {
+		t.Fatalf("Flush가 별도 SignalFx 왕복을 또 내면 안 됨: connectCalls=%d", connectCalls)
+	}
+}
+
+// TestFxSignalerCancelDropsTracking — 게이트가 막은 호출은 서버로 안 가므로 응답도 없다.
+// 추적을 안 풀면 inflight가 남아 이후 어떤 응답도 "마지막"이 되지 못해 FX가 안 꺼진다.
+func TestFxSignalerCancelDropsTracking(t *testing.T) {
+	blocked := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"click"}}` + "\n")
+	next := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"wait_for"}}` + "\n")
+	f := newFxSignaler(false, func() (*rod.Browser, error) { return nil, errors.New("없음") })
+	f.OnClientLine(blocked)
+	f.Cancel(blocked)
+	f.OnClientLine(next)
+	if tool := f.OnServerLine([]byte(`{"jsonrpc":"2.0","id":2,"result":{}}` + "\n")); tool != "wait_for" {
+		t.Fatalf("도구명: %q", tool)
+	}
+	if n := f.tracker.Inflight(); n != 0 {
+		t.Fatalf("막힌 호출의 추적이 남아 있음: inflight=%d", n)
+	}
+}
+
+// TestBrowserControlReset — 최종 리뷰 CRITICAL 1의 비상구. 오버레이 버튼을 누를 수 없는
+// 상황에서 사용자 소유로 잠긴 정본을 CLI로 푼다.
+func TestBrowserControlReset(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("AGENTLAYER_STATE_DIR", dir)
+	_ = browser.SaveControl(dir, browser.Control{Owner: browser.OwnerUser, Stopped: true, Agent: "claude-%1"})
+	var out strings.Builder
+	if err := RunBrowser(&out, []string{"control", "reset"}); err != nil {
+		t.Fatal(err)
+	}
+	c := browser.LoadControl(dir)
+	if c.Owner != browser.OwnerIdle || c.Stopped {
+		t.Fatalf("idle로 초기화돼야 함: %+v", c)
+	}
+	if c.LastRequestMs == 0 {
+		t.Fatal("ack를 지금으로 올려야 함 — 탭에 남은 옛 클릭이 다시 잠그면 안 된다")
+	}
+	if !strings.Contains(out.String(), "초기화") {
+		t.Fatalf("한 줄 안내: %q", out.String())
+	}
+	if err := RunBrowser(&out, []string{"control"}); err == nil {
+		t.Fatal("reset 없이 부르면 사용법 오류")
+	}
+	if err := RunBrowser(&out, []string{"control", "nope"}); err == nil {
+		t.Fatal("모르는 하위 명령은 오류")
+	}
+}
+
+// TestSetTargetFallbackKeepsTitle — 최종 리뷰 MINOR (a): pageId 없는 호출이 같은 탭을
+// 가리키면 제목을 유지한다(다른 탭의 띠가 "· " 뒤 빈칸으로 깜빡이지 않게).
+func TestSetTargetFallbackKeepsTitle(t *testing.T) {
+	f := newFxSignaler(false, func() (*rod.Browser, error) { return nil, errors.New("없음") })
+	f.setTarget("https://a", true)
+	f.setTargetTitle("A 제목")
+	f.setTargetFallback("https://a", true)
+	if url, title := f.target(); url != "https://a" || title != "A 제목" {
+		t.Fatalf("같은 url이면 제목 유지: %q %q", url, title)
+	}
+	f.setTargetFallback("https://b", true)
+	if url, title := f.target(); url != "https://b" || title != "" {
+		t.Fatalf("다른 url이면 제목을 비운다: %q %q", url, title)
+	}
+	f.setTargetFallback("", false)
+	if url, title := f.target(); url != "" || title != "" {
+		t.Fatalf("미상이면 둘 다 비운다: %q %q", url, title)
+	}
 }
 
 func TestParseCookiesExport(t *testing.T) {

@@ -86,13 +86,17 @@ const buttonEls = () => findByTag(hostEl(), 'BUTTON');
 const pillBtnsEl = () => buttonEls()[0]?.parentElement;
 
 // ---- parseMirror
-const m = fx.parseMirror('agent:claude-%1:JustWatch∶ 신작:1000:2000:0:1:1:탭 제목');
+const m = fx.parseMirror('agent:claude-%1:JustWatch∶ 신작:1000:2000:0:1:1:0:탭 제목');
 assert.equal(m.owner, 'agent'); assert.equal(m.agent, 'claude-%1'); assert.equal(m.label, 'JustWatch∶ 신작');
 assert.equal(m.lastMs, 2000); assert.equal(m.stopped, false); assert.equal(m.waiting, 1); assert.equal(m.target, true); assert.equal(m.title, '탭 제목');
+assert.equal(m.ackMs, 0, '미러의 9번째 필드는 ack_ms(반영된 버튼 요청의 ms)');
+assert.equal(fx.parseMirror('agent:a:l:1:2:0:0:1:777:제목: 콜론').ackMs, 777);
+assert.equal(fx.parseMirror('agent:a:l:1:2:0:0:1:777:제목: 콜론').title, '제목: 콜론', 'title은 항상 맨 뒤 — 나머지를 다 이어 붙인다');
 assert.equal(fx.parseMirror('garbage'), null);
+assert.equal(fx.parseMirror('agent:a:l:1:2:0:0:1:제목'), null, 'ack_ms 없는 옛 형식은 안 받는다');
 
 // ---- 작업 탭: agent 소유 → 방패·디밍·알약 켜짐, 버튼 문구
-html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999000:0:0:1:제목');
+html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999000:0:0:1:0:제목');
 let s = fx.state();
 assert.equal(s.owner, 'agent'); assert.equal(s.target, true);
 assert.equal(s.shield, 'auto', '입력 도구 구간 밖에서는 방패가 실제 마우스를 삼킨다');
@@ -111,7 +115,7 @@ function shieldStyle() { return findByTag(hostEl(), 'DIV').find(d => d.style && 
 // ---- render()를 같은 상태로 두 번 불러도 버튼 엘리먼트를 다시 만들지 않는다(게이트 리뷰 지적 1) —
 // 그래야 CDP mousedown~mouseup 사이에 프록시가 미러를 다시 써도 버튼이 안 사라진다.
 const before1 = buttonEls();
-html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999001:0:0:1:제목'); // 프록시가 미러를 다시 쓴 것과 같은 상황(같은 버튼 구성)
+html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999001:0:0:1:0:제목'); // 프록시가 미러를 다시 쓴 것과 같은 상황(같은 버튼 구성)
 fx.render();
 const after1 = buttonEls();
 assert.equal(before1.length, 2); assert.equal(after1.length, 2);
@@ -163,8 +167,8 @@ __advance(1000); // 아직 LINGER 안(1초 경과) — 이 사이에 프록시�
 // 재무장 버그가 있었다면 아래 두 줄이 "무장 시점"을 이 시점(+1000ms)으로 밀어놓아, 이후
 // +1500ms만 더 지나도(총 2500ms) 아직 안 꺼진 것처럼 보인다 — 그래서 시간차를 둬야 버그와
 // 수정을 구분할 수 있다(동시에 다시 쓰면 우연히 같은 시각에 만료돼 버그를 못 잡는다).
-html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999002:0:0:1:제목'); // FX는 안 건드리고 OWNER만 다시 씀
-html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999003:0:0:1:제목'); // 한 번 더(프록시가 여러 번 다시 쓰는 상황)
+html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999002:0:0:1:0:제목'); // FX는 안 건드리고 OWNER만 다시 씀
+html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999003:0:0:1:0:제목'); // 한 번 더(프록시가 여러 번 다시 쓰는 상황)
 __advance(1500); // 최초 무장 시점 기준 총 2500ms 경과 — 재무장됐다면(버그) 아직 안 꺼져 있어야 한다
 assert.equal(fx.state().shield, 'auto', 'OWNER만 다시 써도 LINGER가 재무장되면 안 된다 — 최초 off 시점 기준으로 꺼져야 한다');
 
@@ -175,30 +179,52 @@ fx.clickButton('중단');
 assert.match(html.getAttribute('data-agentlayer-request'), /^stop:\d+$/);
 
 // ---- user 소유: 방패 없음, 돌려주기 버튼, 대기 수
-html.setAttribute('data-agentlayer-owner', 'user:claude-%1:검색:1000:999000:0:2:1:제목');
+html.setAttribute('data-agentlayer-owner', 'user:claude-%1:검색:1000:999000:0:2:1:0:제목');
 s = fx.state();
 assert.equal(s.shield, 'none'); assert.equal(s.dim, false);
 assert.deepEqual(s.buttons, ['AI에게 돌려주기']);
 assert.equal(s.pillStatus, '내가 조작 중 · 대기 중인 호출 2');
-html.setAttribute('data-agentlayer-owner', 'user:claude-%1:검색:1000:999000:1:0:1:제목');
+html.setAttribute('data-agentlayer-owner', 'user:claude-%1:검색:1000:999000:1:0:1:0:제목');
 assert.equal(fx.state().pillStatus, '중단됨');
 fx.clickButton('AI에게 돌려주기');
 assert.match(html.getAttribute('data-agentlayer-request'), /^agent:\d+$/);
 
+// ---- user 소유인데 작업 탭을 모를 때(target=0): 그래도 모든 탭에 알약·「AI에게 돌려주기」가
+// 떠야 한다(최종 리뷰 CRITICAL 1 — 예전엔 띠만 떠서 제어권을 돌려줄 방법이 없었다).
+html.setAttribute('data-agentlayer-owner', 'user:claude-%1:검색:1000:999000:0:1:0:0:');
+s = fx.state();
+assert.equal(s.pill, true, 'user 소유면 target과 무관하게 알약이 뜬다');
+assert.deepEqual(s.buttons, ['AI에게 돌려주기']);
+assert.equal(s.banner, '', 'user 소유엔 "다른 탭에서 작업 중" 띠를 띄우지 않는다');
+assert.equal(s.buttonsClickable, true, 'user 소유면 언제나 버튼을 누를 수 있어야 한다');
+fx.render();
+assert.deepEqual(buttonEls().map(b => b.textContent), ['AI에게 돌려주기'], '실제 DOM에도 돌려주기 버튼이 있어야 한다');
+buttonEls()[0].click();
+assert.match(html.getAttribute('data-agentlayer-request'), /^agent:\d+$/, 'target=0 탭에서도 돌려주기가 눌린다');
+// fx 신호가 남아 있어도(입력 도구 구간처럼 보여도) user 소유에선 버튼을 막지 않는다
+html.setAttribute('data-agentlayer-fx', 'on:click:8');
+assert.equal(fx.state().buttonsClickable, true, 'user 소유 중 fx 신호가 와도 버튼은 살아 있어야 한다');
+html.setAttribute('data-agentlayer-fx', 'off:9');
+__advance(2600);
+
 // ---- 타 탭(target=0): 띠만
-html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999000:0:0:0:JustWatch 신작');
+html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999000:0:0:0:0:JustWatch 신작');
 s = fx.state();
 assert.equal(s.shield, 'none'); assert.equal(s.dim, false); assert.equal(s.pill, false);
 assert.equal(s.banner, 'AI가 다른 탭에서 작업 중 · JustWatch 신작');
 
+// ---- 제목을 모르는 경우(pageId 없는 호출): 구분자(·)가 덩그러니 남으면 안 된다(최종 리뷰 MINOR a)
+html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999000:0:0:0:0:');
+assert.equal(fx.state().banner, 'AI가 다른 탭에서 작업 중', '제목이 비면 구분자도 붙이지 않는다');
+
 // ---- 자체 만료: last_ms + 20초 지나면 idle로 본다(프록시가 다 꺼진 경우) — 갭이 100초로
 // 넉넉해 지금까지의 __advance 누적(수 초)과 무관하게 항상 만료 조건을 넘는다.
-html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:900000:0:0:1:제목');
+html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:900000:0:0:1:0:제목');
 s = fx.state();
 assert.equal(s.owner, 'idle'); assert.equal(s.shield, 'none'); assert.equal(s.pill, false);
 
 // ---- idle
-html.setAttribute('data-agentlayer-owner', 'idle:::0:0:0:0:0:');
+html.setAttribute('data-agentlayer-owner', 'idle:::0:0:0:0:0:0:');
 s = fx.state();
 assert.equal(s.owner, 'idle'); assert.equal(s.banner, '');
 
@@ -213,5 +239,32 @@ fx.render();
 const newHost = hostEl();
 assert.ok(newHost, 'render 후 host가 다시 붙어야 함');
 assert.notEqual(newHost, oldHost, '이전 host를 재사용하지 않고 새로 만들어야 한다');
+
+// ---- fx/sync.js — 프록시가 탭마다 한 번 Eval하는 스크립트(미러 쓰기 + fx 신호 + 요청 회수).
+// ack 규칙(최종 리뷰 IMPORTANT 2): 읽으면서 지우지 않는다 — ack된 요청만 지우고, ack보다
+// 새 요청만 돌려준다. 그래야 예산을 넘겨 버려진 탭의 클릭이 DOM에서만 사라지는 일이 없다.
+const syncSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'sync.js'), 'utf8');
+// rod가 Eval에 넘길 때와 같은 모양으로 감싸 본다(page_eval.go formatToJSFunc) —
+// 앞머리 주석 때문에 구문이 깨지면 실브라우저에서만 터지므로 여기서 잡는다.
+const sync = new Function('return function() { return (' + syncSrc.trim() + ').apply(this, arguments) }')();
+const OWNER_ATTR = 'data-agentlayer-owner', REQ_ATTR = 'data-agentlayer-request', FX_ATTR = 'data-agentlayer-fx';
+const ackMirror = 'user:claude-%1:검색:1000:999000:0:1:1:500:제목';
+
+html.setAttribute(REQ_ATTR, 'agent:400'); // ack(500)보다 오래된 = 이미 반영된 요청
+let ret = sync(ackMirror, OWNER_ATTR, REQ_ATTR, FX_ATTR, '', 500);
+assert.equal(ret, '', 'ack된 요청은 다시 돌려주지 않는다');
+assert.equal(html.getAttribute(REQ_ATTR), null, 'ack된 요청만 DOM에서 지운다');
+assert.equal(fx.parseMirror(html.getAttribute(OWNER_ATTR)).ackMs, 500, '미러가 ack를 싣고 내려간다');
+
+html.setAttribute(REQ_ATTR, 'agent:900'); // ack보다 새 요청
+ret = sync(ackMirror, OWNER_ATTR, REQ_ATTR, FX_ATTR, 'on:click:9', 500);
+assert.equal(ret, 'agent:900', 'ack보다 새 요청은 돌려준다');
+assert.equal(html.getAttribute(REQ_ATTR), 'agent:900', '아직 반영 전이므로 지우지 않는다(느린 탭이어도 다음 왕복에 다시 잡힌다)');
+assert.equal(html.getAttribute(FX_ATTR), 'on:click:9', 'fx 신호도 같은 왕복에서 쓴다(왕복 1회)');
+
+ret = sync(ackMirror, OWNER_ATTR, REQ_ATTR, FX_ATTR, '', 900); // 프록시가 반영해 ack가 올라감
+assert.equal(ret, '', '반영된 뒤엔 같은 요청을 두 번 주지 않는다');
+assert.equal(html.getAttribute(REQ_ATTR), null, 'ack가 따라잡으면 지운다');
+html.removeAttribute(REQ_ATTR);
 
 console.log('content_test.mjs OK');

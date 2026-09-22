@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 )
 
 // FX = 에이전트가 브라우저를 조작하는 동안 사람 눈에 보이는 효과(AI 커서·클릭 리플·
@@ -29,6 +30,12 @@ import (
 
 //go:embed fx/manifest.json fx/content.js
 var fxFS embed.FS
+
+// syncJS — 미러 쓰기·fx 신호 쓰기·요청 회수를 한 왕복으로 묶는 페이지 스크립트.
+// 파일로 뺀 이유: node 테스트(fx/content_test.mjs)가 같은 소스를 읽어 ack 규칙을 직접 검증한다.
+//
+//go:embed fx/sync.js
+var syncJS string
 
 // fxAttr는 콘텐츠 스크립트가 감시하는 <html> 속성.
 const fxAttr = "data-agentlayer-fx"
@@ -99,6 +106,28 @@ func (t *FxTracker) End(line []byte) (string, bool) {
 	return tool, len(t.inflight) == 0
 }
 
+// Cancel은 서버로 끝내 가지 않은 호출(게이트가 막고 프록시가 직접 응답한 줄)의 추적을
+// 푼다. 안 풀면 그 id의 응답이 영영 안 와 inflight가 남고, 이후 어떤 응답도 "마지막"이
+// 되지 못해 FX 종료 신호가 나가지 않는다.
+func (t *FxTracker) Cancel(line []byte) {
+	var msg struct {
+		ID json.RawMessage `json:"id"`
+	}
+	if json.Unmarshal(line, &msg) != nil || len(msg.ID) == 0 {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.inflight, string(msg.ID))
+}
+
+// Inflight — 아직 응답을 못 받은 추적 중 호출 수(테스트가 누수를 확인한다).
+func (t *FxTracker) Inflight() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return len(t.inflight)
+}
+
 // inputTools — 방패를 내리고 AI 커서를 움직이는 도구(스펙 3절).
 var inputTools = map[string]bool{
 	"click": true, "hover": true, "drag": true, "fill": true,
@@ -107,6 +136,10 @@ var inputTools = map[string]bool{
 
 // IsInputTool은 name이 위 입력 도구 목록에 있는지.
 func IsInputTool(name string) bool { return inputTools[name] }
+
+// FxValue는 <html data-agentlayer-fx>에 쓸 값. 프록시가 미러 왕복에 신호를 실어 보낼 때
+// (SyncTabs의 fxValue 인자) 같은 값을 만들어 쓰도록 노출한다.
+func FxValue(tool string, on bool) string { return fxValue(tool, on) }
 
 // fxValue는 속성 값. 타임스탬프를 붙여 같은 도구가 연달아 와도 변경으로 잡히게 한다.
 func fxValue(tool string, on bool) string {
@@ -120,13 +153,13 @@ func fxValue(tool string, on bool) string {
 // fxBudget — 탭 전부에 신호를 쓰는 전체 마감(호출 앞에 끼어드는 지연이므로 짧게).
 const fxBudget = 300 * time.Millisecond
 
-// forEachPage — 탭마다 고루틴으로 fn을 돌리고 budget까지만 기다린다. 느린 탭은 버린다.
-func forEachPage(pages []*rod.Page, budget time.Duration, fn func(*rod.Page)) {
+// forEach — 항목마다 고루틴으로 fn을 돌리고 budget까지만 기다린다. 느린 것은 버린다.
+func forEach[T any](items []T, budget time.Duration, fn func(T)) {
 	done := make(chan struct{})
 	var wg sync.WaitGroup
-	for _, p := range pages {
+	for _, it := range items {
 		wg.Add(1)
-		go func(p *rod.Page) { defer wg.Done(); fn(p) }(p)
+		go func(it T) { defer wg.Done(); fn(it) }(it)
 	}
 	go func() { wg.Wait(); close(done) }()
 	select {
@@ -135,53 +168,56 @@ func forEachPage(pages []*rod.Page, budget time.Duration, fn func(*rod.Page)) {
 	}
 }
 
-// webPage — 탭과 그 URL을 묶는다. Info()를 한 번만 불러 재사용하기 위함(SyncTabs가
-// target 판정에 같은 URL을 또 조회하지 않도록).
-type webPage struct {
-	page *rod.Page
-	url  string
+// forEachPage — 탭마다 고루틴으로 fn을 돌리고 budget까지만 기다린다.
+func forEachPage(pages []*rod.Page, budget time.Duration, fn func(*rod.Page)) {
+	forEach(pages, budget, fn)
 }
 
-// webPages — 웹 URL인 탭만. targetURL이 있으면 그 url인 탭만.
-func webPages(b *rod.Browser, targetURL string) ([]webPage, error) {
-	pages, err := b.Pages()
+// webTarget — 웹 탭 하나(타깃 id와 URL). 핸들은 아직 만들지 않는다.
+type webTarget struct {
+	id  proto.TargetTargetID
+	url string
+}
+
+// webTargets — 웹 URL인 page 타깃만. targetURL이 있으면 그 url인 것만.
+//
+// 호출당 오버헤드(최종 리뷰 IMPORTANT 3·4): 예전엔 b.Pages() 뒤 탭마다 p.Info()를
+// 직렬로 불러 CDP 왕복이 탭 수만큼 늘었다. Target.getTargets 한 번이면 타입·URL이 다
+// 실려 오므로 왕복은 하나면 된다. 그 하나도 b.Timeout(fxBudget)으로 묶어, 굳은
+// 브라우저에서 rod 기본(무제한) 컨텍스트로 게이트가 눌러앉지 않게 한다.
+//
+// 페이지 핸들은 여기서 만들지 않는다 — rod의 PageFromTarget은 페이지 컨텍스트를
+// "그 시점 브라우저 컨텍스트"에서 파생시켜 캐시에 넣으므로, 타임아웃 클론으로 만들면
+// 그 페이지가 fxBudget 뒤 영구히 죽은 채로 캐시에 남는다. 핸들 생성은 원본 b로 하되
+// forEach의 예산 안(고루틴)에서 한다.
+func webTargets(b *rod.Browser, targetURL string) ([]webTarget, error) {
+	res, err := proto.TargetGetTargets{}.Call(b.Timeout(fxBudget))
 	if err != nil {
 		return nil, err
 	}
-	var out []webPage
-	for _, p := range pages {
-		info, err := p.Info()
-		if err != nil || !IsWebURL(info.URL) {
+	var out []webTarget
+	for _, ti := range res.TargetInfos {
+		if ti.Type != "page" || !IsWebURL(ti.URL) {
 			continue
 		}
-		if targetURL != "" && info.URL != targetURL {
+		if targetURL != "" && ti.URL != targetURL {
 			continue
 		}
-		out = append(out, webPage{page: p, url: info.URL})
+		out = append(out, webTarget{id: ti.TargetID, url: ti.URL})
 	}
 	return out, nil
 }
 
-// pagesOf — forEachPage에 넘길 []*rod.Page만 뽑는다(forEachPage 시그니처는 그대로 둔다).
-func pagesOf(wps []webPage) []*rod.Page {
-	if len(wps) == 0 {
-		return nil
-	}
-	out := make([]*rod.Page, len(wps))
-	for i, wp := range wps {
-		out[i] = wp.page
-	}
-	return out
-}
-
-// urlsByPage — forEachPage 콜백 안에서 다시 p.Info()를 부르지 않도록 페이지→URL을 미리 맵으로.
-// 맵은 고루틴이 뜨기 전에 다 채워지고 이후엔 읽기만 하므로 동시 접근에 안전하다.
-func urlsByPage(wps []webPage) map[*rod.Page]string {
-	m := make(map[*rod.Page]string, len(wps))
-	for _, wp := range wps {
-		m[wp.page] = wp.url
-	}
-	return m
+// evalTabs — 탭마다 병렬로 핸들을 얻어 fn을 돌린다. 전체 마감은 fxBudget 하나,
+// 각 Eval도 fxBudget으로 묶는다(굳은 탭이 예산을 넘겨도 호출자는 제때 돌아온다).
+func evalTabs(b *rod.Browser, ts []webTarget, fn func(p *rod.Page, t webTarget)) {
+	forEach(ts, fxBudget, func(t webTarget) {
+		p, err := b.PageFromTarget(t.id) // 대개 캐시 적중 — 새 탭일 때만 attach 왕복
+		if err != nil || p == nil {
+			return
+		}
+		fn(p, t)
+	})
 }
 
 // SignalFx는 웹 페이지에 시작/끝 신호를 쓴다. targetURL이 비어 있으면 모든 웹 탭에
@@ -189,12 +225,12 @@ func urlsByPage(wps []webPage) map[*rod.Page]string {
 // 탭마다 병렬로 쓰고 fxBudget 하나로 전체를 마감 — 느린 탭 때문에 도구 호출이 밀리지 않는다.
 // 실패는 효과 누락일 뿐이라 삼킨다.
 func SignalFx(b *rod.Browser, tool string, on bool, targetURL string) error {
-	wps, err := webPages(b, targetURL)
+	ts, err := webTargets(b, targetURL)
 	if err != nil {
 		return err
 	}
 	v := fxValue(tool, on)
-	forEachPage(pagesOf(wps), fxBudget, func(p *rod.Page) {
+	evalTabs(b, ts, func(p *rod.Page, _ webTarget) {
 		_, _ = p.Timeout(fxBudget).Eval(
 			fmt.Sprintf(`(v) => document.documentElement.setAttribute(%q, v)`, fxAttr), v)
 	})
@@ -211,15 +247,6 @@ type TabRequest struct {
 	Event Event
 	At    int64 // ms
 }
-
-// syncJS — 미러 쓰기와 요청 회수를 한 왕복으로. 요청은 읽은 뒤 지운다.
-const syncJS = `(mirror, ownerAttr, requestAttr) => {
-	const h = document.documentElement;
-	const r = h.getAttribute(requestAttr) || '';
-	h.setAttribute(ownerAttr, mirror);
-	if (r) h.removeAttribute(requestAttr);
-	return r;
-}`
 
 // reqCollector — TabRequest를 mu로 지켜 모은다. forEachPage는 예산을 넘긴 고루틴을
 // 기다리지 않고 반환하므로, 그 고루틴들이 반환 이후에도 add를 계속 부를 수 있다.
@@ -243,19 +270,26 @@ func (c *reqCollector) snapshot() []TabRequest {
 }
 
 // SyncTabs — 모든 웹 탭에 현재 소유권을 미러하고(작업 탭은 target=1), 버튼 요청을 회수한다.
-// 탭마다 병렬로 한 번의 Eval 왕복(쓰기+읽기)만 쓰고 fxBudget으로 전체를 마감한다.
-// 반환하는 error는 b.Pages() 실패(연결이 죽었을 때)뿐이다 — 탭이 하나도 없어 요청이
+// fxOn이 비어 있지 않으면 같은 Eval에서 <html data-agentlayer-fx>까지 써서, 도구 호출
+// 하나에 필요한 CDP 왕복을 탭마다 한 번으로 줄인다(최종 리뷰 IMPORTANT 3). fx 신호는
+// SignalFx와 같은 규칙으로 작업 탭에만 쓴다 — targetURL이 미상이면 모든 탭.
+// 탭마다 병렬로 왕복하고 fxBudget으로 전체를 마감한다.
+// 반환하는 error는 탭 목록 조회 실패(연결이 죽었을 때)뿐이다 — 탭이 하나도 없어 요청이
 // 비어 있는 정상 상태(nil, nil)와 구분해야 호출자가 죽은 연결을 감지해 버릴 수 있다.
-func SyncTabs(b *rod.Browser, c Control, targetURL, targetTitle string) ([]TabRequest, error) {
-	wps, err := webPages(b, "")
+func SyncTabs(b *rod.Browser, c Control, targetURL, targetTitle, fxOn string) ([]TabRequest, error) {
+	ts, err := webTargets(b, "")
 	if err != nil {
 		return nil, err
 	}
-	urls := urlsByPage(wps)
 	var col reqCollector
-	forEachPage(pagesOf(wps), fxBudget, func(p *rod.Page) {
-		target := targetURL != "" && urls[p] == targetURL
-		res, err := p.Timeout(fxBudget).Eval(syncJS, MirrorValue(c, target, targetTitle), ownerAttr, requestAttr)
+	evalTabs(b, ts, func(p *rod.Page, t webTarget) {
+		target := targetURL != "" && t.url == targetURL
+		fx := ""
+		if fxOn != "" && (target || targetURL == "") {
+			fx = fxOn
+		}
+		res, err := p.Timeout(fxBudget).Eval(syncJS,
+			MirrorValue(c, target, targetTitle), ownerAttr, requestAttr, fxAttr, fx, c.LastRequestMs)
 		if err != nil {
 			return
 		}
@@ -268,14 +302,26 @@ func SyncTabs(b *rod.Browser, c Control, targetURL, targetTitle string) ([]TabRe
 
 // LatestRequest — 여러 탭에서 온 요청 중 가장 최신.
 func LatestRequest(reqs []TabRequest) (Event, bool) {
-	if len(reqs) == 0 {
-		return 0, false
-	}
-	best := reqs[0]
-	for _, r := range reqs[1:] {
-		if r.At > best.At {
-			best = r
+	ev, _, ok := LatestRequestAfter(reqs, 0)
+	return ev, ok
+}
+
+// LatestRequestAfter — ack(이미 반영한 요청의 ms)보다 새 요청 중 가장 최신과 그 ms.
+// 같은 클릭이 탭 여러 개에서(또는 느린 탭 때문에 여러 왕복에 걸쳐) 돌아와도 ack보다
+// 오래된 것은 버려 두 번 반영되지 않는다(최종 리뷰 IMPORTANT 2).
+func LatestRequestAfter(reqs []TabRequest, ack int64) (Event, int64, bool) {
+	var best TabRequest
+	found := false
+	for _, r := range reqs {
+		if r.At <= ack {
+			continue
+		}
+		if !found || r.At > best.At {
+			best, found = r, true
 		}
 	}
-	return best.Event, true
+	if !found {
+		return 0, 0, false
+	}
+	return best.Event, best.At, true
 }

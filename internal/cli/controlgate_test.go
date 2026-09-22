@@ -214,6 +214,67 @@ func TestGatePassAppliesLastInstantRequest(t *testing.T) {
 	}
 }
 
+// TestGateIgnoresAckedRequest — 최종 리뷰 IMPORTANT 2: 요청을 "읽으면서 지우지" 않으므로
+// 같은 클릭이 다음 왕복에서 또 돌아올 수 있다. ack(LastRequestMs) 이하면 무시해야 한다.
+func TestGateIgnoresAckedRequest(t *testing.T) {
+	dir := t.TempDir()
+	_ = browser.SaveControl(dir, browser.Control{Owner: browser.OwnerIdle, LastRequestMs: 500})
+	g, _ := newTestGate(t, dir, func(browser.Control) []browser.TabRequest {
+		return []browser.TabRequest{{Event: browser.EvUserTake, At: 500}} // 이미 반영한 클릭
+	})
+	fwd, reply := g.Pass(gateLine(20, "click"))
+	if !fwd || reply != nil {
+		t.Fatalf("ack된 요청은 무시하고 통과: %v %s", fwd, reply)
+	}
+	c := browser.LoadControl(dir)
+	if c.Owner != browser.OwnerAgent || c.LastRequestMs != 500 {
+		t.Fatalf("상태·ack 그대로: %+v", c)
+	}
+}
+
+// TestGateAppliesNewerRequestAndAdvancesAck — ack보다 새 요청은 반영하고 ack를 그 ms로 올린다.
+func TestGateAppliesNewerRequestAndAdvancesAck(t *testing.T) {
+	dir := t.TempDir()
+	_ = browser.SaveControl(dir, browser.Control{Owner: browser.OwnerIdle, LastRequestMs: 500})
+	n := 0
+	g, _ := newTestGate(t, dir, func(c browser.Control) []browser.TabRequest {
+		n++
+		if n == 1 {
+			if c.LastRequestMs != 500 {
+				t.Fatalf("미러에 ack가 실려야 함: %+v", c)
+			}
+			return []browser.TabRequest{{Event: browser.EvUserStop, At: 900}}
+		}
+		return nil
+	})
+	fwd, reply := g.Pass(gateLine(21, "click"))
+	if fwd || reply == nil {
+		t.Fatalf("stop이 반영되면 즉시 거절: %v %s", fwd, reply)
+	}
+	c := browser.LoadControl(dir)
+	if c.Owner != browser.OwnerUser || !c.Stopped || c.LastRequestMs != 900 {
+		t.Fatalf("반영과 함께 ack가 올라가야 함: %+v", c)
+	}
+}
+
+// TestGateSkipsUnchangedMirrorSync — 최종 리뷰 IMPORTANT 3-b: 통과 확정 뒤의 미러 왕복은
+// 내용(owner·agent·label·stopped·waiting)이 그대로면 건너뛴다. 같은 에이전트가 이어서
+// 부르는 흔한 경우 호출당 CDP 왕복이 하나 줄어든다.
+func TestGateSkipsUnchangedMirrorSync(t *testing.T) {
+	dir := t.TempDir()
+	n := 0
+	g, _ := newTestGate(t, dir, func(browser.Control) []browser.TabRequest { n++; return nil })
+	g.Pass(gateLine(22, "click")) // idle→agent: 내용이 바뀌므로 통과 뒤 미러를 한 번 더 쓴다
+	if n != 2 {
+		t.Fatalf("첫 호출은 전이가 있으니 2회: n=%d", n)
+	}
+	n = 0
+	g.Pass(gateLine(23, "click")) // 같은 에이전트·같은 label: step(0) 한 번뿐
+	if n != 1 {
+		t.Fatalf("내용이 같으면 통과 뒤 미러를 다시 쓰지 않는다: n=%d", n)
+	}
+}
+
 func TestResolveAgent(t *testing.T) {
 	dir := t.TempDir()
 	st, _ := state.NewStore(dir)

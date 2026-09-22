@@ -121,6 +121,17 @@ func TestFxTracker(t *testing.T) {
 	}
 }
 
+// TestSyncJSEmbedded — fx/sync.js가 실제로 embed돼 있고(빈 문자열이면 Eval이 통째로
+// 조용히 실패한다) ack 규칙을 담고 있는지. 구문 검증은 node 테스트가 rod와 같은 모양으로 감싸서 한다.
+func TestSyncJSEmbedded(t *testing.T) {
+	if !strings.Contains(syncJS, "=>") || !strings.Contains(syncJS, "ackMs") {
+		t.Fatalf("fx/sync.js embed 이상: %q", syncJS)
+	}
+	if !strings.Contains(syncJS, "removeAttribute") {
+		t.Fatal("ack된 요청을 지우는 부분이 없다")
+	}
+}
+
 func TestFxValue(t *testing.T) {
 	if v := fxValue("click", true); !strings.HasPrefix(v, "on:click:") {
 		t.Fatalf("on 값: %q", v)
@@ -194,6 +205,22 @@ func TestLatestRequest(t *testing.T) {
 	ev, ok := LatestRequest([]TabRequest{{EvUserTake, 10}, {EvUserStop, 30}, {EvUserReturn, 20}})
 	if !ok || ev != EvUserStop {
 		t.Fatalf("최신은 stop: %v %v", ev, ok)
+	}
+}
+
+// TestLatestRequestAfterAck — ack보다 오래된 요청(이미 반영한 클릭이 느린 탭에서 다시
+// 돌아온 경우)은 무시하고, 새 요청만 반영하며 그 ms를 돌려준다(최종 리뷰 IMPORTANT 2).
+func TestLatestRequestAfterAck(t *testing.T) {
+	reqs := []TabRequest{{EvUserTake, 10}, {EvUserStop, 30}, {EvUserReturn, 20}}
+	if _, _, ok := LatestRequestAfter(reqs, 30); ok {
+		t.Fatal("ack 이하 요청은 전부 무시")
+	}
+	ev, ms, ok := LatestRequestAfter(reqs, 20)
+	if !ok || ev != EvUserStop || ms != 30 {
+		t.Fatalf("ack보다 새 것만: %v %d %v", ev, ms, ok)
+	}
+	if _, _, ok := LatestRequestAfter(nil, 0); ok {
+		t.Fatal("없으면 false")
 	}
 }
 
