@@ -22,7 +22,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 
 1. **(선택) Win10 3차 재검증**: 이번 수정 2건은 단위 테스트로 덮였고, 발견 2(codex 업데이트 모달)는 새 codex 릴리즈가 있어야 재현된다. 사용자가 원하면 NAS `README-agentlayer-wsl2-ai-company-0.2.5.md`를 써서(0.2.4 지침 복사 + ②-2를 `task done LAB-1` 그대로 재실행으로, `grep '"to": *"READY"'` 패턴 정정) 돌린다. NAS는 `open smb://` 뒤 NetAuthAgent 「연결」(메모리 nas-private-mount).
 2. **매뉴얼 PDF 재빌드·배포**: `ai-company-manual.txt` 647·657·1080행 문안이 0.2.4 기준으로 바뀜(백업 `.bak-0.2.4-*`). `/deploy-manual` 대상은 ai-company 매뉴얼 변형이 있는지 확인 후 진행(deploy-manual SKILL.md에 agentlayer 변형만 확인됨 — ai-company 변형 없으면 타워 세션 몫).
-3. **공지**(재검증 PASS 확인됨): agentlayer v1.6.0~v1.6.7 + ai-company v0.2.5 + codex-discord v0.1.23 + 설치기 0.1.39(디스코드 멤버 + 유튜브 커뮤니티, 메모리 feedback-announce-two-channels). 보드 스크린샷은 `BOARD_SAMPLE_OUT=<경로> go test ./internal/board -run TestWriteSampleBoard`.
+3. **공지 — 디스코드 멤버 채널은 09-22 게시 완료(id 1551752912194113559, 마무리 인사 없이·비기술 문안). 남은 것은 유튜브 커뮤니티(비멤버)**: agentlayer v1.6.0~v1.6.7 + ai-company v0.2.5 + codex-discord v0.1.23 + 설치기 0.1.39(디스코드 멤버 + 유튜브 커뮤니티, 메모리 feedback-announce-two-channels). 보드 스크린샷은 `BOARD_SAMPLE_OUT=<경로> go test ./internal/board -run TestWriteSampleBoard`.
 4. **usage-coach 개선 후보(사용자 판단 대기)**: Antigravity 결과가 비었을 때(`windows: {}`) "조회 불가(CodexBar 리눅스 인증서/원천)"로 표시. 근거는 결정 기록 2026-09-21. 릴리즈 시 usage-coach v0.1.4→, 설치기 pins 갱신.
 5. **사용자 몫 남음**: 디스코드 포탈 앱 `democompany` 삭제, 카테고리 `데모 회사`·채널 `#데모-총괄` 삭제. 총괄(company-bot) 감시 껐는지 답 확인.
 6. **agentlayer 개선 후보(2번안)**: 훅이 수신함 이벤트를 쓸 때 총괄 세션 입력창에 한 줄을 직접 밀어 넣어 Monitor 감시 자체를 없애기(총괄 WAIT 중이면 건너뛰고 `task inbox`로 다음 턴에 비우는 규칙 필요).
