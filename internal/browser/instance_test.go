@@ -28,6 +28,14 @@ func TestInstanceStateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestLaunchArgsDropHangMonitorFlag(t *testing.T) {
+	for _, a := range launchArgs("/bin/chrome", "/tmp/p", 9222, "") {
+		if strings.Contains(a, "disable-hang-monitor") {
+			t.Fatalf("hang monitor는 켜 둔다: %s", a)
+		}
+	}
+}
+
 func TestConnectIdempotentIntegration(t *testing.T) {
 	if _, ok := launcher.LookPath(); !ok {
 		t.Skip("Chrome 없음")

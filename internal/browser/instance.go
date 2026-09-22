@@ -175,6 +175,7 @@ func newLauncher(bin, profile string, port int, fxDir string) *launcher.Launcher
 		Delete("no-startup-window").                      // 기동 시 빈 창을 보여 "아무 일 없음"처럼 보이지 않게
 		Delete("enable-automation").                      // "자동화된 테스트 소프트웨어에 의해 제어" 인포바 제거
 		Delete("disable-site-isolation-trials").          // "지원되지 않는 기능 플래그" 경고 띠 제거
+		Delete("disable-hang-monitor").                   // 렌더러 행 때 "페이지 응답 없음" 안내가 뜨게(스펙 4절)
 		Set("disable-features", "Translate,TranslateUI"). // site-per-process 비활성(같은 경고)·번역 말풍선 제거
 		// Chrome for Testing은 "자동 테스트 전용입니다" 띠를 창마다 띄운다. 정책으로만 끌 수 있고
 		// (IsManaged), 유일한 예외가 infobar_utils.cc의 IsGpuTest() = --test-type=gpu (2026-09-04 실측).

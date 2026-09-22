@@ -26,6 +26,7 @@ import (
 	"github.com/netwaif/agentlayer/internal/browser"
 	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/discord"
+	notifypkg "github.com/netwaif/agentlayer/internal/notify"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 	"github.com/netwaif/agentlayer/internal/usage"
@@ -1062,6 +1063,21 @@ func browserAutoPreview(out io.Writer) error {
 		if br := connect(); br != nil {
 			if n := browser.ReleaseCaptures(br); n > 0 {
 				fmt.Fprintf(out, "화면 잠자기 잠금 해제: 탭 %d개\n", n)
+			}
+		}
+	}
+	// 행 감시(스펙 4절) — 브라우저 프로세스는 있는데 UI 스레드가 3초 안에 답이 없는 게 10초 간격으로
+	// 두 번이면 채집·강제 종료·재기동·알림.
+	if browser.ThrottleOK(state.DefaultDir(), "hangwatch", 10*time.Second, time.Now()) {
+		if pid := browser.ChromePID(port, browser.ExecLsof); pid > 0 {
+			notify := func(msg string) {
+				if url := cfg.NotifyURL(); url != "" && cfg.NotifyDiscord {
+					payload, _ := json.Marshal(map[string]any{"username": "agentlayer", "content": msg})
+					_ = notifypkg.DefaultSender().PostJSON(url, payload)
+				}
+			}
+			if restarted, diag := browser.HangWatch(state.DefaultDir(), pid, browser.DefaultHangOps(state.DefaultDir(), port, runtime.GOOS, notify), time.Now()); restarted {
+				fmt.Fprintf(out, "에이전트 브라우저 재시작(행 감지) 진단: %s\n", diag)
 			}
 		}
 	}
