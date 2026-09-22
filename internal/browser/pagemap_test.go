@@ -48,3 +48,86 @@ func TestPageIDFromCallAndResultText(t *testing.T) {
 		t.Fatal("content 없으면 빈 문자열")
 	}
 }
+
+func TestPageMapParenthesesInURL(t *testing.T) {
+	// Wikipedia-style URL with parentheses
+	m := &PageMap{}
+	text := "## Pages\n1: Go Wiki (https://en.wikipedia.org/wiki/Go_(programming_language)) [selected]\n"
+	if !m.Update(text) {
+		t.Fatal("Wikipedia URL should parse")
+	}
+	u, ok := m.URLFor(1)
+	if !ok || u != "https://en.wikipedia.org/wiki/Go_(programming_language)" {
+		t.Fatalf("Wikipedia URL = %q %v", u, ok)
+	}
+	if m.TitleFor(1) != "Go Wiki" {
+		t.Fatalf("Title = %q", m.TitleFor(1))
+	}
+}
+
+func TestPageMapEmptyTitle(t *testing.T) {
+	// Single-space empty title: "3: (https://example.com)"
+	m := &PageMap{}
+	text := "## Pages\n3: (https://example.com) [selected]\n"
+	if !m.Update(text) {
+		t.Fatal("Empty title should parse")
+	}
+	u, ok := m.URLFor(3)
+	if !ok || u != "https://example.com" {
+		t.Fatalf("URLFor(3) = %q %v", u, ok)
+	}
+	if m.TitleFor(3) != "" {
+		t.Fatalf("TitleFor(3) should be empty, got %q", m.TitleFor(3))
+	}
+	sel, _ := m.SelectedURL()
+	if sel != "https://example.com" {
+		t.Fatalf("SelectedURL = %q", sel)
+	}
+}
+
+func TestPageMapTitleWithParentheses(t *testing.T) {
+	// Title containing parentheses
+	m := &PageMap{}
+	text := "## Pages\n2: My Title (extra) (https://example.com) [selected]\n"
+	if !m.Update(text) {
+		t.Fatal("Title with parens should parse")
+	}
+	u, ok := m.URLFor(2)
+	if !ok || u != "https://example.com" {
+		t.Fatalf("URLFor(2) = %q %v", u, ok)
+	}
+	if m.TitleFor(2) != "My Title (extra)" {
+		t.Fatalf("TitleFor(2) = %q, want 'My Title (extra)'", m.TitleFor(2))
+	}
+}
+
+func TestPageMapURLWithQueryString(t *testing.T) {
+	// URL with query string and special characters
+	m := &PageMap{}
+	text := "## Pages\n4: Search (https://example.com/search?q=test&lang=en) [selected]\n"
+	if !m.Update(text) {
+		t.Fatal("URL with query string should parse")
+	}
+	u, ok := m.URLFor(4)
+	if !ok || u != "https://example.com/search?q=test&lang=en" {
+		t.Fatalf("URLFor(4) = %q %v", u, ok)
+	}
+}
+
+func TestPageMapUnparsedLineTracking(t *testing.T) {
+	// Garbage line inside the block, good lines should still parse
+	m := &PageMap{}
+	text := "## Pages\n1: Good Page (https://example.com)\ngarbage line here\n2: Another (https://another.com) [selected]\n"
+	if !m.Update(text) {
+		t.Fatal("Update should succeed with some good lines")
+	}
+	if u, ok := m.URLFor(1); !ok || u != "https://example.com" {
+		t.Fatalf("URLFor(1) = %q %v", u, ok)
+	}
+	if u, ok := m.URLFor(2); !ok || u != "https://another.com" {
+		t.Fatalf("URLFor(2) = %q %v", u, ok)
+	}
+	if m.Unparsed() != 1 {
+		t.Fatalf("Unparsed() = %d, want 1", m.Unparsed())
+	}
+}
