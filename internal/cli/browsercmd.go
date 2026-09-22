@@ -737,6 +737,9 @@ func browserMCPServe() error {
 		st = s
 	}
 	pane := os.Getenv("TMUX_PANE")
+	// 배경 동작(스펙 2절): new_page가 브라우저를 앞으로 끌어오지 않도록, 그 호출일 때만
+	// 현재 앞 앱을 물어 background 여부를 정한다(다른 도구는 osascript를 부르지 않는다).
+	frontOps := browser.DefaultFrontOps(runtime.GOOS)
 	gate := newControlGate(state.DefaultDir(), cfg.BrowserControlWait(),
 		func(c browser.Control) []browser.TabRequest {
 			url, title := fx.target()
@@ -798,6 +801,10 @@ func browserMCPServe() error {
 				}
 			}
 			if !handled {
+				if toolCallName(line) == "new_page" {
+					front, _ := frontOps.Frontmost()
+					line = browser.RewriteNewPage(line, front == browser.EngineAppName)
+				}
 				fx.OnClientLine(line) // 도구가 손대기 전에 신호가 먹어야 하므로 전달보다 앞
 				if werr := writeServer(roots.FromClient(line)); werr != nil {
 					break
@@ -929,6 +936,21 @@ func IsMCPToolCall(line []byte) bool {
 		Method string `json:"method"`
 	}
 	return json.Unmarshal(line, &msg) == nil && msg.Method == "tools/call"
+}
+
+// toolCallName은 tools/call 줄에서 params.name(도구명)만 뽑는다. 파싱 실패나 다른
+// method면 "" — new_page 여부만 값싸게 확인하려는 용도라 그 이상은 보지 않는다.
+func toolCallName(line []byte) string {
+	var msg struct {
+		Method string `json:"method"`
+		Params struct {
+			Name string `json:"name"`
+		} `json:"params"`
+	}
+	if json.Unmarshal(line, &msg) != nil || msg.Method != "tools/call" {
+		return ""
+	}
+	return msg.Params.Name
 }
 
 // PreviewPaths는 산 에이전트 폴더 → 브랜치 맵을 만든다. worktree 폴더는 wt 메타의

@@ -149,7 +149,15 @@ func Connect(stateDir string, port int) (*rod.Browser, error) {
 		fmt.Fprintf(os.Stderr, "FX 확장 설치 실패(%v) — 조작 효과 없이 기동합니다\n", err)
 		fxDir = ""
 	}
-	ws, err = newLauncher(bin, profile, port, fxDir).Launch()
+	// 배경 동작(스펙 2절): 기동 중 잠깐 앞으로 튀어나오는 Chrome 때문에 사용자가 하던 작업이
+	// 밀리지 않도록, 기동 전 앞 앱을 기억했다가 뒤에 되돌린다.
+	var wsURL string
+	err = RestoreFront(DefaultFrontOps(runtime.GOOS), func() error {
+		u, lerr := newLauncher(bin, profile, port, fxDir).Launch()
+		wsURL = u
+		return lerr
+	})
+	ws = wsURL
 	if err != nil {
 		return nil, fmt.Errorf("Chrome 기동 실패: %w%s", err, launchHint(runtime.GOOS, err))
 	}
