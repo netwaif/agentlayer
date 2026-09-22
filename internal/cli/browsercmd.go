@@ -729,6 +729,24 @@ func browserMCPServe() error {
 	fx := newFxSignaler(cfg.BrowserFxEnabled(), func() (*rod.Browser, error) {
 		return browser.Connect(state.DefaultDir(), port)
 	})
+	// 소유권 게이트(controlgate.go): tools/call마다 파일 정본을 읽고 사용자 소유면 잡는다.
+	// enabled와 무관하게 항상 돈다 — 효과(FX)가 꺼져 있어도 제어권 규율은 지켜야 한다.
+	pm := &browser.PageMap{}
+	var st *state.Store
+	if s, err := state.NewStore(state.DefaultDir()); err == nil {
+		st = s
+	}
+	pane := os.Getenv("TMUX_PANE")
+	gate := newControlGate(state.DefaultDir(), cfg.BrowserControlWait(),
+		func(c browser.Control) []browser.TabRequest {
+			b := fx.browser()
+			if b == nil {
+				return nil
+			}
+			url, title := fx.target()
+			return browser.SyncTabs(b, c, url, title)
+		},
+		func() (string, string) { return resolveAgent(st, pane) })
 	var wmu sync.Mutex
 	writeServer := func(b []byte) error {
 		wmu.Lock()
@@ -749,6 +767,7 @@ func browserMCPServe() error {
 				if fwd != nil {
 					_, _ = os.Stdout.Write(fwd)
 				}
+				pm.Update(browser.ResultText(line))
 				fx.OnServerLine(line)
 			}
 			if rerr != nil {
@@ -766,9 +785,24 @@ func browserMCPServe() error {
 			if IsMCPToolCall(line) && !browser.IsUp(port) {
 				_, _ = browser.Connect(state.DefaultDir(), port) // 기동만; 클라이언트는 세션 동안 유지
 			}
-			fx.OnClientLine(line) // 도구가 손대기 전에 신호가 먹어야 하므로 전달보다 앞
-			if werr := writeServer(roots.FromClient(line)); werr != nil {
-				break
+			handled := false
+			if IsMCPToolCall(line) {
+				if id, ok := browser.PageIDFromCall(line); ok {
+					fx.setTarget(pm.URLFor(id))
+					fx.setTargetTitle(pm.TitleFor(id))
+				} else {
+					fx.setTarget(pm.SelectedURL())
+				}
+				if fwd, reply := gate.Pass(line); !fwd {
+					_, _ = os.Stdout.Write(reply)
+					handled = true
+				}
+			}
+			if !handled {
+				fx.OnClientLine(line) // 도구가 손대기 전에 신호가 먹어야 하므로 전달보다 앞
+				if werr := writeServer(roots.FromClient(line)); werr != nil {
+					break
+				}
 			}
 		}
 		if rerr != nil {
@@ -786,6 +820,10 @@ type fxSignaler struct {
 	tracker browser.FxTracker
 	mu      sync.Mutex
 	b       *rod.Browser
+
+	tmu         sync.Mutex
+	targetURL   string
+	targetTitle string
 }
 
 func newFxSignaler(enabled bool, connect func() (*rod.Browser, error)) *fxSignaler {
@@ -820,9 +858,47 @@ func (f *fxSignaler) signal(tool string, on bool) {
 		}
 		f.b = b
 	}
-	if err := browser.SignalFx(f.b, tool, on, ""); err != nil {
+	url, _ := f.target()
+	if err := browser.SignalFx(f.b, tool, on, url); err != nil {
 		f.b = nil // 연결이 죽었으면 다음 신호 때 다시 맺는다
 	}
+}
+
+// setTarget — 게이트가 특정한 작업 탭의 url(ok=false면 미상 → 빈 문자열).
+func (f *fxSignaler) setTarget(url string, ok bool) {
+	f.tmu.Lock()
+	defer f.tmu.Unlock()
+	if ok {
+		f.targetURL = url
+	} else {
+		f.targetURL = ""
+	}
+}
+
+func (f *fxSignaler) setTargetTitle(t string) {
+	f.tmu.Lock()
+	f.targetTitle = t
+	f.tmu.Unlock()
+}
+
+func (f *fxSignaler) target() (string, string) {
+	f.tmu.Lock()
+	defer f.tmu.Unlock()
+	return f.targetURL, f.targetTitle
+}
+
+// browser — 연결을 맺어 돌려준다(없으면 nil). enabled와 무관 — 게이트는 효과가 꺼져도 돈다.
+func (f *fxSignaler) browser() *rod.Browser {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.b == nil {
+		b, err := f.connect()
+		if err != nil {
+			return nil
+		}
+		f.b = b
+	}
+	return f.b
 }
 
 // IsMCPToolCall은 MCP stdio(JSON-RPC 한 줄)가 tools/call인지 본다.

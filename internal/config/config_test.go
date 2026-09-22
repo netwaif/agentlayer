@@ -135,3 +135,18 @@ func TestBoardStaleLimit(t *testing.T) {
 		}
 	}
 }
+
+func TestBrowserControlWait(t *testing.T) {
+	var c Config
+	if c.BrowserControlWait() != 120*time.Second {
+		t.Fatal("기본 120초")
+	}
+	c.BrowserControlWaitSeconds = 30
+	if c.BrowserControlWait() != 30*time.Second {
+		t.Fatal("설정 반영")
+	}
+	c.BrowserControlWaitSeconds = -1
+	if c.BrowserControlWait() != 120*time.Second {
+		t.Fatal("0 이하는 기본")
+	}
+}
