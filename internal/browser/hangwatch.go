@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -163,11 +164,13 @@ func decideHangPing(hasWS bool, ws string, budget time.Duration, connect pingCon
 	}
 	if hasWS {
 		start := now()
-		ping, err := connect(ws, budget)
+		ping, err := connectWithin(budget, ws, connect)
 		if err == nil {
 			return ping(budget)
 		}
-		if now().Sub(start) >= hangPingFast {
+		// 연결이 예산 안에 끝나지도 않았다 = 붙는 중에 멈춤 = 진짜 행. 경과 시간과
+		// 무관하게 여기서 끝낸다(대체 경로로 가면 또 같은 곳에서 멈춘다).
+		if errors.Is(err, ErrConnectTimeout) || now().Sub(start) >= hangPingFast {
 			return err // 느리게 실패 = 진짜 행 — 대체 경로로 넘기지 않는다
 		}
 		remove() // 빠르게 거부됨 = 죽은 기록 — 정리하고 포트를 다시 본다
@@ -182,11 +185,18 @@ func decideHangPing(hasWS bool, ws string, budget time.Duration, connect pingCon
 	if !alive {
 		return fmt.Errorf("에이전트 브라우저 없음")
 	}
-	ping, err := connect(pws, budget)
+	ping, err := connectWithin(budget, pws, connect)
 	if err != nil {
 		return err
 	}
 	return ping(budget)
+}
+
+// connectWithin — 주입된 connect를 budget으로 묶는다. rod의 WS 업그레이드 읽기에는
+// 데드라인이 없어(CallWithin 주석 참고) 굳은 브라우저에 붙으려다 영원히 멈춘다.
+// 감시자가 멈추면 감시가 아니다 — 훅의 autopreview가 통째로 눌러앉던 실측 증상.
+func connectWithin(budget time.Duration, ws string, connect pingConnect) (func(time.Duration) error, error) {
+	return CallWithin(budget, func() (func(time.Duration) error, error) { return connect(ws, budget) })
 }
 
 // waitPortFree는 강제 종료 뒤 죽어가는 소켓이 완전히 닫힐 때까지(최대 maxWait, step 간격)
@@ -210,6 +220,8 @@ func DefaultHangOps(stateDir string, port int, goos string, notify func(string))
 		Ping: func() error {
 			in, loadErr := LoadInstance(stateDir)
 			connect := func(ws string, budget time.Duration) (func(time.Duration) error, error) {
+				// b.Timeout(budget)은 TCP 다이얼까지만 막는다 — WS 업그레이드 읽기는
+				// decideHangPing 쪽 connectWithin이 예산으로 묶는다.
 				b := newBrowser(ws).Timeout(budget)
 				if err := b.Connect(); err != nil {
 					return nil, err

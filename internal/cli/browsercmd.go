@@ -748,8 +748,13 @@ func browserMCPServe() error {
 	roots := newMCPRoots(cwd)
 	// FX(browser/fx.go): 조작 도구의 호출~응답 구간을 페이지에 알려 AI 커서·글로우를 켠다.
 	// rod 연결은 첫 신호 때 맺고 죽으면 다시 맺는다(사용자가 브라우저를 닫았다 여는 경우).
+	// 연결도 예산으로 묶는다 — rod의 WS 업그레이드 읽기에는 데드라인이 없어(browser.CallWithin
+	// 주석) 굳은 브라우저에 붙으려다 프록시(게이트)가 통째로 멈춘다. 실패하면 이번 호출만
+	// 효과·미러를 건너뛰고 다음 호출이 다시 시도한다.
 	fx := newFxSignaler(cfg.BrowserFxEnabled(), func() (*rod.Browser, error) {
-		return browser.Connect(state.DefaultDir(), port)
+		return browser.ConnectWithin(browser.ConnectBudget, func() (*rod.Browser, error) {
+			return browser.Connect(state.DefaultDir(), port)
+		})
 	})
 	// 소유권 게이트(controlgate.go): tools/call마다 파일 정본을 읽고 사용자 소유면 잡는다.
 	// enabled와 무관하게 항상 돈다 — 효과(FX)가 꺼져 있어도 제어권 규율은 지켜야 한다.
@@ -819,8 +824,8 @@ func browserMCPServe() error {
 					fx.setTarget(pm.URLFor(id))
 					fx.setTargetTitle(pm.TitleFor(id))
 				} else {
-					// pageId 없는 호출은 [selected] 탭으로 본다. 같은 url이면 제목은 유지.
-					fx.setTargetFallback(pm.SelectedURL())
+					// pageId 없는 호출은 [selected] 탭으로 본다(제목까지 같이).
+					fx.setTargetFallback(pm.Selected())
 				}
 				// FX 신호를 게이트보다 앞에서 "장전"한다 — 게이트가 어차피 탭마다 미러를
 				// 쓰므로 그 왕복에 얹혀 나간다(왕복 1회 절약). 게이트가 막으면 Cancel이
@@ -971,16 +976,20 @@ func (f *fxSignaler) setTargetTitle(t string) {
 }
 
 // setTargetFallback — pageId가 없는 호출(list_pages 등)의 작업 탭 추정([selected] 탭).
-// 제목은 PageMap에서 못 얻으므로, url이 직전과 같으면 알고 있던 제목을 유지한다 —
-// 그래야 다른 탭의 띠가 "AI가 다른 탭에서 작업 중 · "로 제목만 빠진 채 깜빡이지 않는다.
-func (f *fxSignaler) setTargetFallback(url string, ok bool) {
+// PageMap이 제목을 알면 그대로 쓰고, 모르면(빈 제목) url이 직전과 같을 때 알고 있던
+// 제목을 유지한다 — 그래야 다른 탭의 띠가 "AI가 다른 탭에서 작업 중 · "로 제목만 빠진
+// 채 뜨지 않는다.
+func (f *fxSignaler) setTargetFallback(url, title string, ok bool) {
 	f.tmu.Lock()
 	defer f.tmu.Unlock()
 	if !ok {
 		f.targetURL, f.targetTitle = "", ""
 		return
 	}
-	if f.targetURL != url {
+	switch {
+	case title != "":
+		f.targetTitle = title
+	case f.targetURL != url:
 		f.targetTitle = ""
 	}
 	f.targetURL = url

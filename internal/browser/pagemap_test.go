@@ -22,6 +22,10 @@ func TestPageMapUpdateAndLookup(t *testing.T) {
 	if m.TitleFor(1) != "계약서 미리보기" {
 		t.Fatalf("TitleFor(1) = %q", m.TitleFor(1))
 	}
+	// Selected는 url과 제목을 같이 준다 — pageId 없는 호출(list_pages 등)의 띠에 제목이 뜨게
+	if u, tt, ok := m.Selected(); !ok || u != "https://www.justwatch.com/kr/new" || tt != "JustWatch - 신작" {
+		t.Fatalf("Selected = %q %q %v", u, tt, ok)
+	}
 	if _, ok := m.URLFor(9); ok {
 		t.Fatal("없는 id")
 	}

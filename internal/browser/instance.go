@@ -4,6 +4,7 @@ package browser
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -51,6 +52,44 @@ func RemoveInstance(dir string) { _ = os.Remove(statePath(dir)) }
 
 // launchHeadless는 테스트 전용 스위치 (export_test.go로만 접근).
 var launchHeadless = false
+
+// ErrConnectTimeout — 브라우저 연결이 예산 안에 끝나지 않았다. 굳은 브라우저의 특징이다.
+var ErrConnectTimeout = errors.New("브라우저 연결 시간 초과")
+
+// ConnectBudget — 이미 떠 있는 브라우저에 붙는 데 주는 상한(연결만; 이후 CDP 호출은 각자 마감).
+const ConnectBudget = 3 * time.Second
+
+// CallWithin은 fn을 고루틴에서 돌리고 budget까지만 기다린다. 넘기면 ErrConnectTimeout을
+// 돌려주고 고루틴은 버린다(늦게 성사된 연결은 GC될 때까지 남지만, 굳은 브라우저를 붙잡고
+// 영원히 기다리는 것보다 낫다).
+//
+// 왜 필요한가(2026-09-22 실측): rod의 `b.Timeout(d)`는 TCP 다이얼까지만 막는다.
+// WebSocket 업그레이드 응답 읽기(rod v0.116.2 lib/cdp/websocket.go)는 raw conn에
+// 데드라인 없이 ReadResponse를 부르므로, SIGSTOP된 Chrome에 붙으면 영원히 멈춘다.
+// 실제로 훅의 `browser autopreview`가 행 감시 안에서 통째로 눌러앉았다.
+func CallWithin[T any](budget time.Duration, fn func() (T, error)) (T, error) {
+	type result struct {
+		v   T
+		err error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		v, err := fn()
+		ch <- result{v, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.v, r.err
+	case <-time.After(budget):
+		var zero T
+		return zero, fmt.Errorf("%w (%s)", ErrConnectTimeout, budget)
+	}
+}
+
+// ConnectWithin — Connect류 호출을 budget으로 묶는다(CallWithin의 브라우저 전용 얼굴).
+func ConnectWithin(budget time.Duration, connect func() (*rod.Browser, error)) (*rod.Browser, error) {
+	return CallWithin(budget, connect)
+}
 
 // probeTimeout은 포트가 열려 있을 때 CDP 응답을 기다리는 상한.
 const probeTimeout = 2 * time.Second

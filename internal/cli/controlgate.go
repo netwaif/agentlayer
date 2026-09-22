@@ -48,10 +48,16 @@ func (g *controlGate) step(waiting int) browser.Control {
 	now := g.now()
 	c := browser.LoadControl(g.dir).Effective(now)
 	c.Waiting = waiting
-	reqs := g.syncOnce(c)
-	if ev, ms, ok := browser.LatestRequestAfter(reqs, c.LastRequestMs); ok {
+	if ev, ms, ok := browser.LatestRequestAfter(g.syncOnce(c), c.LastRequestMs); ok {
 		c = browser.Apply(c, ev, "", "", now)
 		c.LastRequestMs = ms
+		// 요청을 반영했으면 새 상태를 즉시 한 번 더 미러한다. 안 그러면 「중단」을 눌러도
+		// 알약이 그대로고(20초 뒤 만료돼 아예 사라진다) 다음 도구 호출에서야 "중단됨"이
+		// 뜬다 — 실측에서 나온 증상. 거절·대기 진입 경로엔 뒤따르는 sync가 없기 때문이다.
+		if ev2, ms2, ok2 := browser.LatestRequestAfter(g.syncOnce(c), c.LastRequestMs); ok2 {
+			c = browser.Apply(c, ev2, "", "", now) // 그 찰나에 또 눌렀으면 그것도 반영
+			c.LastRequestMs = ms2
+		}
 	}
 	_ = browser.SaveControl(g.dir, c)
 	return c

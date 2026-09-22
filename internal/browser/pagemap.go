@@ -111,6 +111,16 @@ func (m *PageMap) SelectedURL() (string, bool) {
 	return u, ok
 }
 
+// Selected — [selected] 탭의 url과 제목. pageId 없는 호출(list_pages·new_page 등)의
+// 작업 탭 추정에 쓴다. 제목까지 같이 줘야 다른 탭의 띠가 "AI가 다른 탭에서 작업 중 · "로
+// 제목 없이 뜨지 않는다(실측 지적).
+func (m *PageMap) Selected() (url, title string, ok bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.urls[m.selected]
+	return u, m.titles[m.selected], ok
+}
+
 func (m *PageMap) TitleFor(id int) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()

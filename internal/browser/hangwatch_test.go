@@ -220,6 +220,48 @@ func TestDecideHangPingSlowFailureSkipsFallback(t *testing.T) {
 	}
 }
 
+// TestDecideHangPingConnectBlocksForever — 실측 CRITICAL: SIGSTOP된 브라우저에 붙으면
+// rod의 WS 업그레이드 읽기가 데드라인 없이 멈춰(lib/cdp/websocket.go) 훅의 autopreview가
+// 통째로 눌러앉았다. 연결 자체를 예산으로 묶어, 막힌 connect여도 예산 안에 에러로 돌아오고
+// "죽은 기록"(stale)이 아니라 "진짜 행"으로 분류돼야 한다(기록 삭제·포트 프로브 금지).
+func TestDecideHangPingConnectBlocksForever(t *testing.T) {
+	blocked := make(chan struct{})
+	t.Cleanup(func() { close(blocked) })
+	connect := func(ws string, budget time.Duration) (func(time.Duration) error, error) {
+		<-blocked // 영원히 멈춘 연결
+		return nil, nil
+	}
+	probe := func(budget time.Duration) (string, bool, error) {
+		t.Fatal("붙는 중에 멈춘 건 진짜 행 — 대체 경로로 넘어가면 안 됨")
+		return "", false, nil
+	}
+	budget := 100 * time.Millisecond
+	start := time.Now()
+	err := decideHangPing(true, "ws", budget, connect, probe,
+		func() { t.Fatal("연결 시간 초과는 죽은 기록이 아니다 — 지우면 안 됨") }, nil)
+	if err == nil {
+		t.Fatal("예산을 넘긴 연결은 에러여야 한다")
+	}
+	if !errors.Is(err, ErrConnectTimeout) {
+		t.Fatalf("연결 시간 초과로 분류돼야: %v", err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("예산(%v) 안에 돌아와야 한다: %v", budget, d)
+	}
+}
+
+func TestCallWithinReturnsResultAndTimeout(t *testing.T) {
+	v, err := CallWithin(time.Second, func() (int, error) { return 7, nil })
+	if v != 7 || err != nil {
+		t.Fatalf("정상 경로: %d %v", v, err)
+	}
+	stop := make(chan struct{})
+	t.Cleanup(func() { close(stop) })
+	if _, err := CallWithin(50*time.Millisecond, func() (int, error) { <-stop; return 1, nil }); !errors.Is(err, ErrConnectTimeout) {
+		t.Fatalf("막히면 ErrConnectTimeout: %v", err)
+	}
+}
+
 func TestWaitPortFreeReturnsPromptlyWhenPortClosed(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

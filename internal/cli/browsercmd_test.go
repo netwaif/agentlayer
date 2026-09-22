@@ -479,15 +479,20 @@ func TestSetTargetFallbackKeepsTitle(t *testing.T) {
 	f := newFxSignaler(false, func() (*rod.Browser, error) { return nil, errors.New("없음") })
 	f.setTarget("https://a", true)
 	f.setTargetTitle("A 제목")
-	f.setTargetFallback("https://a", true)
+	f.setTargetFallback("https://a", "", true)
 	if url, title := f.target(); url != "https://a" || title != "A 제목" {
-		t.Fatalf("같은 url이면 제목 유지: %q %q", url, title)
+		t.Fatalf("같은 url이고 제목을 모르면 유지: %q %q", url, title)
 	}
-	f.setTargetFallback("https://b", true)
-	if url, title := f.target(); url != "https://b" || title != "" {
-		t.Fatalf("다른 url이면 제목을 비운다: %q %q", url, title)
+	// PageMap이 제목을 알면(실측 지적) 그대로 쓴다 — pageId 없는 첫 호출에서도 띠에 제목이 뜬다
+	f.setTargetFallback("https://b", "B 제목", true)
+	if url, title := f.target(); url != "https://b" || title != "B 제목" {
+		t.Fatalf("아는 제목은 그대로 싣는다: %q %q", url, title)
 	}
-	f.setTargetFallback("", false)
+	f.setTargetFallback("https://c", "", true)
+	if url, title := f.target(); url != "https://c" || title != "" {
+		t.Fatalf("다른 url인데 제목을 모르면 비운다: %q %q", url, title)
+	}
+	f.setTargetFallback("", "", false)
 	if url, title := f.target(); url != "" || title != "" {
 		t.Fatalf("미상이면 둘 다 비운다: %q %q", url, title)
 	}

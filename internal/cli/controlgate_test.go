@@ -275,6 +275,55 @@ func TestGateSkipsUnchangedMirrorSync(t *testing.T) {
 	}
 }
 
+// TestGateMirrorsStopImmediately — 실측: 「중단」을 눌러도 알약이 그대로였다가 20초 뒤
+// 사라졌다(다음 도구 호출에서야 "중단됨"). 거절 경로엔 뒤따르는 sync가 없기 때문이다.
+// 요청을 반영했으면 그 자리에서 새 상태를 한 번 더 미러해야 한다.
+func TestGateMirrorsStopImmediately(t *testing.T) {
+	dir := t.TempDir()
+	var seen []browser.Control
+	n := 0
+	g, _ := newTestGate(t, dir, func(c browser.Control) []browser.TabRequest {
+		seen = append(seen, c)
+		n++
+		if n == 1 {
+			return []browser.TabRequest{{Event: browser.EvUserStop, At: 100}}
+		}
+		return nil
+	})
+	fwd, reply := g.Pass(gateLine(30, "click"))
+	if fwd || reply == nil || !strings.Contains(string(reply), "중단") {
+		t.Fatalf("중단이면 즉시 거절: %v %s", fwd, reply)
+	}
+	last := seen[len(seen)-1]
+	if last.Owner != browser.OwnerUser || !last.Stopped {
+		t.Fatalf("마지막 미러가 중단 상태를 실어야 함: %+v (%d회)", last, len(seen))
+	}
+}
+
+// TestGateMirrorsTakeBeforeHolding — 「내가 조작하기」도 마찬가지 — 잡고 기다리기 전에
+// 새 상태(user)가 탭에 반영돼야 알약이 바로 "내가 조작 중"으로 바뀐다.
+func TestGateMirrorsTakeBeforeHolding(t *testing.T) {
+	dir := t.TempDir()
+	var seen []browser.Control
+	n := 0
+	g, _ := newTestGate(t, dir, func(c browser.Control) []browser.TabRequest {
+		seen = append(seen, c)
+		n++
+		if n == 1 {
+			return []browser.TabRequest{{Event: browser.EvUserTake, At: 100}}
+		}
+		return nil
+	})
+	// 대기 루프는 newTestGate의 가짜 시계(sleep이 now를 전진)로 3초 상한까지 돌다 끝난다.
+	fwd, reply := g.Pass(gateLine(31, "click"))
+	if fwd || reply == nil {
+		t.Fatalf("사용자가 가져갔으면 통과하지 않는다: %v %s", fwd, reply)
+	}
+	if len(seen) < 2 || seen[1].Owner != browser.OwnerUser || seen[1].Stopped {
+		t.Fatalf("잡기 전에 user 상태를 미러해야 함: %+v", seen)
+	}
+}
+
 func TestResolveAgent(t *testing.T) {
 	dir := t.TempDir()
 	st, _ := state.NewStore(dir)
