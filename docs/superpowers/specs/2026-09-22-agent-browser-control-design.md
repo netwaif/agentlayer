@@ -89,7 +89,8 @@ ego-lite 캡처(2026-09-22)를 기준으로 하되 색은 하우스 팔레트(�
 
 훅마다 도는 정리 작업(`capture-janitor`, `internal/browser/capturelock.go` 경로)에 `hangwatch`를 붙인다(`internal/browser/hangwatch.go`).
 
-- 판정: CDP 포트 pid가 있고(`ChromePID`), UI 스레드를 타는 호출 `Browser.getWindowForTarget`(첫 웹 탭)이 **3초** 안에 답이 없으면 1회 실패. `<stateDir>/hangwatch.json`에 실패 횟수를 남겨 **연속 2회**면 행으로 확정(훅 간격이 짧아 오탐을 막기 위해 두 판정 사이 최소 10초).
+- 판정: CDP 포트 pid가 있고(`ChromePID`), UI 스레드를 타는 호출 `Browser.getWindowForTarget`(첫 웹 탭)이 **3초** 안에 답이 없으면 1회 실패. `<stateDir>/hangwatch.json`에 실패 횟수를 남겨 **연속 3회**면 행으로 확정(두 판정 사이 최소 10초 → 20초 이상 무응답). 2회에서 3회로 올린 이유(2026-09-22 리뷰): 네이티브 파일 대화상자가 열려 있는 동안 Chrome UI 스레드가 중첩 런루프에 들어가 CDP가 멈추므로, 사용 중인 브라우저를 죽이는 오탐을 줄인다.
+- 실행 위치: 훅 정리 작업(`browser autopreview`)의 **맨 앞** — 프리뷰 조기 반환(`preview_auto`·경로 없음·`IsUp`)이나 rod 무제한 호출보다 앞. `IsUp`은 굳은 브라우저에 false라 그 뒤에 두면 영영 도달하지 못한다. 기록된 WS 연결이 빠르게 거부되면(낡은 instance.json) 포트 프로브로 폴백해 건강한 브라우저를 오판하지 않는다. 재기동 실패는 삼키지 않고 알림에 "재기동 실패: <err>"로 적는다. `sample`은 20초 상한.
 - 확정 시: macOS면 `sample <pid> 2 -file <stateDir>/hang/<ts>.txt`로 스택을 남기고(리눅스는 `/proc/<pid>/stack`류는 권한 문제라 생략), 프로세스 그룹을 `kill -9`, `browser.json` 제거, `Connect`로 재기동(프로필 보존이라 로그인 유지). 알림 웹훅(`notify`)으로 "에이전트 브라우저가 멈춰 재시작했습니다 · 진단: <경로>" 한 줄.
 - 스로틀: `ThrottleOK(dir, "hangwatch", 10s)`.
 - `--disable-hang-monitor`를 기동 플래그에서 뺀다(`Delete`). 렌더러가 멈추면 Chrome이 "페이지 응답 없음" 안내를 띄워 탭만 죽일 수 있게 된다.
