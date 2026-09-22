@@ -42,7 +42,7 @@ func TestFoldMergesThreadIntoMain(t *testing.T) {
 	if r.ID != "claude-35" || r.State != StateWorking || r.Threads != 1 {
 		t.Errorf("대표 불일치: %+v", r)
 	}
-	if r.ThreadBadge() != "스레드 1" {
+	if r.ThreadBadge() != "스레드 1 · 작업 1" {
 		t.Errorf("배지: %q", r.ThreadBadge())
 	}
 	if got[1].ID != "claude-40" || got[1].Threads != 0 || got[1].ThreadBadge() != "" {
@@ -68,7 +68,7 @@ func TestFoldCountsMultipleThreads(t *testing.T) {
 	t1 := bot("claude-35", "dev-claudecode", "t552990", StateIdle, f0)
 	t2 := bot("claude-36", "dev-claudecode", "t552991", StateWaiting, f0)
 	got := Fold([]*Agent{t2, main, t1})
-	if len(got) != 1 || got[0].ID != "claude-36" || got[0].Threads != 2 || got[0].ThreadBadge() != "스레드 2" {
+	if len(got) != 1 || got[0].ID != "claude-36" || got[0].Threads != 2 || got[0].ThreadBadge() != "스레드 2 · 대기 1" {
 		t.Errorf("스레드 2개 접힘: %+v", got)
 	}
 }
@@ -114,5 +114,28 @@ func TestFoldAttachesThreadsToSameCWDMain(t *testing.T) {
 	got := Fold([]*Agent{m1, m2, thr})
 	if len(got) != 2 || got[0].Threads != 0 || got[1].ID != "claude-2" || got[1].Threads != 1 {
 		t.Errorf("같은 폴더 메인에 붙어야: %+v %+v", got[0], got[1])
+	}
+}
+
+func TestFoldThreadBadgeSummarizesThreadStates(t *testing.T) {
+	main := bot("claude-1", "bot", "bot", StateWaiting, f0)
+	t1 := bot("claude-2", "bot", "t000001", StateWorking, f0)
+	t2 := bot("claude-3", "bot", "t000002", StateDoneUnread, f0)
+	t3 := bot("claude-4", "bot", "t000003", StateIdle, f0)
+	out := Fold([]*Agent{main, t1, t2, t3})
+	if len(out) != 1 {
+		t.Fatalf("접혀서 1행: %d", len(out))
+	}
+	if out[0].State != StateWaiting {
+		t.Fatalf("대표는 가장 급한 WAIT: %v", out[0].State)
+	}
+	if got := out[0].ThreadBadge(); got != "스레드 3 · 완료 1 · 작업 1" {
+		t.Fatalf("배지 = %q", got)
+	}
+	// 전부 idle이면 개수만
+	t1.State, t2.State = StateIdle, StateIdle
+	out = Fold([]*Agent{main, t1, t2, t3})
+	if got := out[0].ThreadBadge(); got != "스레드 3" {
+		t.Fatalf("idle만이면 개수만: %q", got)
 	}
 }

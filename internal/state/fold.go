@@ -15,12 +15,36 @@ func IsThreadWindow(name string) bool { return threadWindowRe.MatchString(name) 
 // IsThread는 이 레코드가 봇 스레드 창의 pane인지.
 func (a *Agent) IsThread() bool { return IsThreadWindow(a.Tmux.WindowName) }
 
-// ThreadBadge는 세션 이름 옆에 붙는 스레드 표기. 접힌 행이면 "스레드 N",
+// threadStateWord — 배지에 쓰는 상태 한 단어. idle·dead는 세지 않는다.
+func threadStateWord(s AgentState) string {
+	switch s {
+	case StateWaiting:
+		return "대기"
+	case StateDoneUnread:
+		return "완료"
+	case StateError:
+		return "오류"
+	case StateWorking:
+		return "작업"
+	}
+	return ""
+}
+
+// badgeOrder — 요약 순서는 급한 순(Priority)과 같다.
+var badgeOrder = []AgentState{StateWaiting, StateDoneUnread, StateError, StateWorking}
+
+// ThreadBadge는 세션 이름 옆에 붙는 스레드 표기. 접힌 행이면 "스레드 N · 상태 개수...",
 // 메인 없이 홀로 선 스레드 pane이면 "스레드 t552990", 그 외 빈 문자열.
 func (a *Agent) ThreadBadge() string {
 	switch {
 	case a.Threads > 0:
-		return fmt.Sprintf("스레드 %d", a.Threads)
+		s := fmt.Sprintf("스레드 %d", a.Threads)
+		for _, st := range badgeOrder {
+			if n := a.ThreadStates[st]; n > 0 {
+				s += fmt.Sprintf(" · %s %d", threadStateWord(st), n)
+			}
+		}
+		return s
 	case a.IsThread():
 		return "스레드 " + a.Tmux.WindowName
 	}
@@ -79,6 +103,12 @@ func Fold(agents []*Agent) []*Agent {
 		}
 		cp := *best
 		cp.Threads = len(g.threads)
+		cp.ThreadStates = map[AgentState]int{}
+		for _, t := range g.threads {
+			if threadStateWord(t.State) != "" {
+				cp.ThreadStates[t.State]++
+			}
+		}
 		rep[host] = &cp
 		for _, t := range g.threads {
 			rep[t] = &cp

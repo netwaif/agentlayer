@@ -66,6 +66,8 @@ type Agent struct {
 	StateSince time.Time  `json:"state_since"`
 	// Threads는 표시용 — Fold가 이 행 뒤로 접은 스레드 pane 수. 저장하지 않는다.
 	Threads int `json:"-"`
+	// ThreadStates는 표시용 — 접힌 스레드의 상태별 개수(idle 제외). Fold가 채우고 저장하지 않는다.
+	ThreadStates map[AgentState]int `json:"-"`
 }
 
 // KindRank는 대시보드의 종류 그룹 순서: claude → codex → gemini → 기타.
