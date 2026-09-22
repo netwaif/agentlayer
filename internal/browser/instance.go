@@ -218,7 +218,12 @@ func newLauncher(bin, profile string, port int, fxDir string) *launcher.Launcher
 		Set("disable-features", "Translate,TranslateUI"). // site-per-process 비활성(같은 경고)·번역 말풍선 제거
 		// Chrome for Testing은 "자동 테스트 전용입니다" 띠를 창마다 띄운다. 정책으로만 끌 수 있고
 		// (IsManaged), 유일한 예외가 infobar_utils.cc의 IsGpuTest() = --test-type=gpu (2026-09-04 실측).
-		Set("test-type", "gpu")
+		Set("test-type", "gpu").
+		// 화면 굳음(2026-09-23, hangwatch.go 프레임 프로브 주석) 재발 때 vsync 시계 로그가
+		// 남게 — 프로필 폴더의 chrome_debug.log. v=0이라 평소엔 경고·에러만 쌓인다.
+		Set("enable-logging").
+		Set("v", "0").
+		Set("vmodule", "display_link_mac=2,external_begin_frame_source_mac=2")
 	if fxDir != "" {
 		l = l.Set("load-extension", fxDir)
 	}

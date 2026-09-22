@@ -40,11 +40,11 @@ description: AgentLayer 에이전트 전용 브라우저(chrome-devtools MCP로 
 - `--reload` 없는 `errors`는 사람이 Enter를 칠 때까지 기다리므로 에이전트가 부르면 안 된다.
 - 화면에 보이는 증상 하나에 콘솔 에러가 여럿인 경우가 흔하다 — **에러를 전부 짚고** 원인별로 고친 뒤 같은 탭을 리로드해 스스로 확인한다.
 
-### MCP 연결이 낡았을 때 — click 전부 타임아웃, screenshot 타임아웃, evaluate_script만 정상
+### 화면이 굳었을 때 — click 전부 타임아웃, screenshot 타임아웃, evaluate_script만 정상
 
-- 이 세 가지가 같이 보이면(`did not become interactive within the configured timeout`, `Page.captureScreenshot timed out`) 페이지가 아니라 **연결이 원인**이다. MCP가 붙은 뒤 브라우저가 죽고 다시 떠서 낡은 세션에 재접속된 상태다. 요소를 바꿔 가며 재시도하거나 우회 주입을 파지 않는다.
-- 확인: `ps -o lstart= -p $(pgrep -f 'Google Chrome for Testing.*remote-debugging-port=9222' | head -1)`(브라우저 기동)과 `ps -o lstart= -p $(pgrep -f 'chrome-devtools-mcp$' | head -1)`(MCP 기동)을 대조한다. 브라우저가 더 늦게 떴으면 확정.
-- 조치: 사용자에게 `/mcp`에서 chrome-devtools 재연결(또는 세션 재시작)을 요청한다. 재연결 뒤 `new_page`부터 다시 시작한다.
+- 이 세 가지가 같이 보이면(`did not become interactive within the configured timeout`, `Page.captureScreenshot timed out`) 페이지가 아니라 **브라우저가 화면 프레임을 못 내는 상태**다(2026-09-23 실측: GPU 프로세스의 vsync 시계가 죽어 창 전체가 그림으로 굳음 — CDP·JS는 즉답하지만 새 창을 열어도 안 그려지고, 사람 눈에는 "탭이 클릭이 안 됨"으로 보인다). 요소를 바꿔 가며 재시도하거나 우회 주입을 파지 않는다. 프록시가 그 에러 줄 끝에 `[agentlayer] … agentlayer browser restart` 힌트를 붙여 주기도 한다.
+- 조치: `agentlayer browser restart`를 실행한다(강제 종료 → 같은 프로필로 재기동, 로그인 유지). 끝나면 `new_page`부터 다시 시작한다. 행 감시(훅)가 같은 상태를 프레임 프로브로 잡아 자동 재시작하기도 하므로, 명령이 "브라우저가 없어 새로 기동했습니다"라고 하면 이미 재시작된 것이다.
+- 재기동 뒤에도 같은 증상이면 그때는 연결 문제다: 사용자에게 `/mcp`에서 chrome-devtools 재연결(또는 세션 재시작)을 요청한다.
 
 ## 지목 받기 — "브라우저에서 지목할게"
 

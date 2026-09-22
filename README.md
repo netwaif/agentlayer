@@ -293,15 +293,21 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   포커스가 곧바로 돌아간다. 브라우저가 앞에 있지 않을 때 에이전트가 새 탭을
   열면(`new_page`) 배경 탭으로 열려 사용자가 보던 화면을 뺏지 않는다. 리눅스는
   해당 없음.
-- **행 감시** — 훅이 도는 정리 작업 맨 앞에서 UI가 3초 안에 응답하는지 검사한다.
-  10초 이상 간격으로 연속 3회(20초 이상) 무응답이면 macOS `sample`로 진단 파일
+- **행 감시** — 훅이 도는 정리 작업 맨 앞에서 UI가 3초 안에 응답하는지, 그리고
+  보이는 탭 하나가 3초 안에 화면 프레임(8×8 캡처)을 내놓는지 검사한다(프레임 검사는
+  창 전체가 그림으로 굳는 증상 — GPU의 vsync 시계가 죽어 CDP는 살아 있는데 아무것도
+  안 그려지는 상태 — 를 잡기 위한 것. 가려진 창·숨은 탭은 원래 프레임이 없으므로
+  제외). 10초 이상 간격으로 연속 3회(20초 이상) 실패면 macOS `sample`로 진단 파일
   (`~/.local/state/agentlayer/hang/<시각>.txt`)을 남기고 강제 종료·재기동한 뒤
   알림 웹훅으로 "에이전트 브라우저가 멈춰 재시작했습니다 · 진단: …"을 보낸다
   (재기동에 실패하면 "…강제 종료했습니다 · 재기동 실패: …"). 로그인(프로필)은
   그대로 유지된다. `--disable-hang-monitor` 플래그를 빼 뒀으므로 렌더러(페이지)
   자체가 멈추면 Chrome 본연의 "페이지 응답 없음" 안내가 먼저 뜬다.
   `browser_hangwatch: false`면 감시 자체를 끈다. 사이에 브라우저가 죽고 새로 뜨면
-  (pid가 바뀌면) 실패 횟수는 0부터 다시 센다.
+  (pid가 바뀌면) 실패 횟수는 0부터 다시 센다. 감시를 기다리지 않고 바로 되살리려면
+  `agentlayer browser restart`(강제 종료 → 같은 프로필로 재기동). 재발 원인 추적용으로
+  Chrome 로그를 켜 둔다(`~/.local/state/agentlayer/browser-profile/chrome_debug.log`,
+  vsync 모듈 verbose).
 - **스냅샷 잘라내기** — `wait_for`·`navigate_page` 응답에 자동으로 붙는 페이지
   스냅샷을 잘라 토큰을 아낀다(`browser_trim_snapshots`, 기본 `true`). 구조가
   필요하면 에이전트가 `take_snapshot`을 따로 부른다.

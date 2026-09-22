@@ -16,7 +16,10 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
-// 행 감시(스펙 4절): 창 전체가 굳어 강제 종료만 통하던 증상. 원인 미상이라 감지·채집·재시작까지.
+// 행 감시(스펙 4절): 창 전체가 굳어 강제 종료만 통하던 증상. 감지·채집·재시작까지.
+// 실측(2026-09-23): 그 증상의 정체는 UI 스레드 행이 아니라 GPU 프로세스의 vsync 시계가
+// 죽어 프레임이 안 나오는 상태였다(PingUI의 프레임 프로브 주석 참고). Chrome 내부 트리거는
+// 미상 — 기동 플래그의 --vmodule 로그(프로필 chrome_debug.log)가 다음 재발 때의 증거다.
 // hangFailsNeeded=3 — 파일 열기 같은 네이티브 모달은 UI 스레드를 중첩 런루프로 잠깐 묶어
 // ping 한두 번은 실패할 수 있다. 세 번 연속(≥20초 동안 계속 무응답)까지 요구해 그런 오탐을 줄인다.
 const (
@@ -135,12 +138,81 @@ func PingUI(b *rod.Browser, timeout time.Duration) error {
 	}
 	for _, p := range pages {
 		if info, err := p.Info(); err == nil && IsWebURL(info.URL) {
-			_, err = proto.BrowserGetWindowForTarget{TargetID: p.TargetID}.Call(p.Timeout(timeout))
-			return err
+			if _, err := (proto.BrowserGetWindowForTarget{TargetID: p.TargetID}).Call(p.Timeout(timeout)); err != nil {
+				return err
+			}
+			return frameProbePages(pages, timeout)
 		}
 	}
-	_, err = proto.BrowserGetVersion{}.Call(bt)
-	return err
+	if _, err := (proto.BrowserGetVersion{}).Call(bt); err != nil {
+		return err
+	}
+	return frameProbePages(pages, timeout)
+}
+
+// 프레임 프로브(2026-09-23 실측): "창 전체가 그림으로 굳음"은 UI 스레드가 멀쩡한 채로
+// GPU 프로세스의 vsync 시계(CVDisplayLink 스레드)가 사라져 프레임이 한 장도 안 나오는
+// 상태였다 — CDP·JS는 즉답, 탭 목록도 정상, 그러나 screenshot·click은 프레임을 기다리다
+// 타임아웃, 새 창을 만들어도 마찬가지(트레이스: SetNeedsCommit만 있고 BeginFrame 0).
+// 4시간 동안 위 ping이 통과해 감시가 못 잡았다. 그래서 보이는 탭 하나에서 8×8 캡처가
+// 예산 안에 오는지를 같이 본다. 숨은 탭(가려진 창·최소화·비활성 탭)은 원래 프레임이 안
+// 나오므로 후보에서 빼 오탐을 막고, 보이는 탭이 없으면 판정을 건너뛴다.
+type frameTab struct {
+	Web     bool
+	Visible bool
+}
+
+// pickFrameTab — 보이는 웹 탭 우선, 없으면 보이는 아무 탭, 그것도 없으면 -1.
+func pickFrameTab(tabs []frameTab) int {
+	any := -1
+	for i, t := range tabs {
+		if !t.Visible {
+			continue
+		}
+		if t.Web {
+			return i
+		}
+		if any < 0 {
+			any = i
+		}
+	}
+	return any
+}
+
+// FrameProbe — 보이는 탭 하나가 timeout 안에 프레임을 내놓는지.
+func FrameProbe(b *rod.Browser, timeout time.Duration) error {
+	pages, err := b.Timeout(timeout).Pages()
+	if err != nil {
+		return err
+	}
+	return frameProbePages(pages, timeout)
+}
+
+func frameProbePages(pages rod.Pages, timeout time.Duration) error {
+	tabs := make([]frameTab, len(pages))
+	for i, p := range pages {
+		info, err := p.Info()
+		if err != nil {
+			continue
+		}
+		res, err := proto.RuntimeEvaluate{Expression: "document.visibilityState", ReturnByValue: true}.Call(p.Timeout(timeout))
+		if err != nil || res.Result == nil {
+			continue
+		}
+		tabs[i] = frameTab{Web: IsWebURL(info.URL), Visible: res.Result.Value.Str() == "visible"}
+	}
+	i := pickFrameTab(tabs)
+	if i < 0 {
+		return nil
+	}
+	_, err := proto.PageCaptureScreenshot{
+		Format: proto.PageCaptureScreenshotFormatPng,
+		Clip:   &proto.PageViewport{X: 0, Y: 0, Width: 8, Height: 8, Scale: 1},
+	}.Call(pages[i].Timeout(timeout))
+	if err != nil {
+		return fmt.Errorf("프레임 없음(화면 굳음): %w", err)
+	}
+	return nil
 }
 
 // pingConnect — ws에 budget 안에서 붙어, 이후 UI ping에 쓸 함수를 돌려준다.

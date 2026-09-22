@@ -64,9 +64,41 @@ func RunBrowser(out io.Writer, args []string) error {
 		return browserAutoPreview(out)
 	case "control":
 		return browserControl(out, args)
+	case "restart":
+		return browserRestart(out)
 	default:
 		return fmt.Errorf("모르는 browser 서브커맨드 %q — 'agentlayer help' 참고", sub)
 	}
+}
+
+// browserRestart: agentlayer browser restart — 굳은 에이전트 브라우저를 사람이 한 마디로
+// 되살리는 길(2026-09-23). 행 감시와 같은 수단(강제 종료 → 재기동)을 쓴다. 화면 프레임이
+// 멈춘 상태는 UI가 살아 있어 사람 눈에는 "탭이 클릭이 안 됨"으로만 보인다.
+func browserRestart(out io.Writer) error {
+	cfg := config.Load()
+	port := cfg.BrowserPortOrDefault()
+	pid := browser.ChromePID(port, browser.ExecLsof)
+	return browserRestartWith(out, pid, browser.DefaultHangOps(state.DefaultDir(), port, runtime.GOOS, nil))
+}
+
+func browserRestartWith(out io.Writer, pid int, ops browser.HangOps) error {
+	if pid > 0 && ops.Kill != nil {
+		if err := ops.Kill(pid); err != nil {
+			fmt.Fprintf(out, "강제 종료 실패(pid %d): %v — 재기동만 시도\n", pid, err)
+		}
+	}
+	if ops.Relaunch == nil {
+		return fmt.Errorf("재기동 수단 없음")
+	}
+	if err := ops.Relaunch(); err != nil {
+		return fmt.Errorf("에이전트 브라우저 재기동 실패: %w", err)
+	}
+	if pid > 0 {
+		fmt.Fprintln(out, "에이전트 브라우저 재시작 완료 — 세션의 MCP는 new_page부터 다시 시작하세요")
+	} else {
+		fmt.Fprintln(out, "에이전트 브라우저가 없어 새로 기동했습니다")
+	}
+	return nil
 }
 
 // browserControl: agentlayer browser control reset — 소유권 정본을 idle로 되돌린다.
@@ -800,6 +832,8 @@ func browserMCPServe() error {
 					if cfg.BrowserTrimSnapshotsEnabled() {
 						fwd = browser.TrimSnapshot(fwd, tool)
 					}
+					// 화면 굳음 힌트(browser/framehint.go): 프레임 타임아웃 에러에 복구 명령을 덧붙인다.
+					fwd = browser.FrozenScreenHint(fwd)
 					_, _ = os.Stdout.Write(fwd)
 				}
 			}

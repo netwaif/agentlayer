@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-rod/rod/lib/launcher"
 )
 
 type hangLog struct {
@@ -273,5 +275,53 @@ func TestWaitPortFreeReturnsPromptlyWhenPortClosed(t *testing.T) {
 	waitPortFree(port, 2*time.Second, 50*time.Millisecond)
 	if time.Since(start) > time.Second {
 		t.Fatal("이미 빈 포트인데 너무 오래 기다림")
+	}
+}
+
+// 프레임 프로브(2026-09-23): 창 전체가 그림으로 굳은 상태는 UI 스레드 ping이 멀쩡하다 —
+// GPU 프로세스의 vsync 시계(CVDisplayLink)가 죽어 프레임이 한 장도 안 나오는 상태라서.
+// 보이는 탭 하나에서 작은 캡처가 예산 안에 오는지로 잡는다. 숨은 탭은 원래 프레임이
+// 안 나오므로 후보에서 뺀다(오탐 방지).
+func TestPickFrameTabPrefersVisibleWebTab(t *testing.T) {
+	tabs := []frameTab{{Web: false, Visible: true}, {Web: true, Visible: false}, {Web: true, Visible: true}}
+	if got := pickFrameTab(tabs); got != 2 {
+		t.Fatalf("보이는 웹 탭(2)을 골라야 한다: %d", got)
+	}
+}
+
+func TestPickFrameTabFallsBackToAnyVisible(t *testing.T) {
+	tabs := []frameTab{{Web: true, Visible: false}, {Web: false, Visible: true}}
+	if got := pickFrameTab(tabs); got != 1 {
+		t.Fatalf("웹 탭이 다 숨었으면 보이는 아무 탭(1): %d", got)
+	}
+}
+
+func TestPickFrameTabNoneVisible(t *testing.T) {
+	if got := pickFrameTab([]frameTab{{Web: true}, {}}); got != -1 {
+		t.Fatalf("보이는 탭이 없으면 -1(프로브 생략): %d", got)
+	}
+}
+
+// 실브라우저: 건강한 헤드리스 브라우저는 프레임 프로브를 통과해야 한다(PingUI가 nil).
+func TestPingUIIncludesFrameProbeIntegration(t *testing.T) {
+	if _, ok := launcher.LookPath(); !ok {
+		t.Skip("Chrome 없음")
+	}
+	SetHeadlessForTest(true)
+	defer SetHeadlessForTest(false)
+	dir := t.TempDir()
+	port := freePort(t)
+	b, err := Connect(dir, port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer b.MustClose()
+	p := b.MustPage("data:text/html,<title>frame</title><p>hi")
+	defer p.MustClose()
+	if err := PingUI(b, 3*time.Second); err != nil {
+		t.Fatalf("건강한 브라우저의 PingUI: %v", err)
+	}
+	if err := FrameProbe(b, 3*time.Second); err != nil {
+		t.Fatalf("건강한 브라우저의 프레임 프로브: %v", err)
 	}
 }
