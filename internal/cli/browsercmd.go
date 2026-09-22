@@ -739,12 +739,8 @@ func browserMCPServe() error {
 	pane := os.Getenv("TMUX_PANE")
 	gate := newControlGate(state.DefaultDir(), cfg.BrowserControlWait(),
 		func(c browser.Control) []browser.TabRequest {
-			b := fx.browser()
-			if b == nil {
-				return nil
-			}
 			url, title := fx.target()
-			return browser.SyncTabs(b, c, url, title)
+			return fx.syncTabs(c, url, title)
 		},
 		func() (string, string) { return resolveAgent(st, pane) })
 	var wmu sync.Mutex
@@ -823,10 +819,10 @@ type fxSignaler struct {
 	tracker browser.FxTracker
 	mu      sync.Mutex
 	b       *rod.Browser
-	// alive — 들고 있는 연결이 아직 살아 있는지(가벼운 판정). Chrome이 재시작되면 b는
-	// 그대로 남아 있지만 CDP 왕복이 전부 실패한다 — signal()의 사후 실패 감지만 믿으면
-	// browser_fx가 꺼져 signal이 한 번도 안 불릴 때(게이트만 도는 경우) 영영 재연결이 안 된다.
-	alive func(*rod.Browser) bool
+	// sync — 탭 미러 갱신 + 버튼 요청 회수(기본 browser.SyncTabs). 죽은 연결은 판정용
+	// CDP 왕복을 따로 두지 않고 이 호출의 실패로만 감지한다(syncTabs 참고) — 매 호출마다
+	// 잠금 아래에서 여분의 왕복을 태우지 않기 위함. 테스트가 실패를 주입할 수 있게 필드로 뺐다.
+	sync func(b *rod.Browser, c browser.Control, url, title string) ([]browser.TabRequest, error)
 
 	tmu         sync.Mutex
 	targetURL   string
@@ -834,13 +830,7 @@ type fxSignaler struct {
 }
 
 func newFxSignaler(enabled bool, connect func() (*rod.Browser, error)) *fxSignaler {
-	return &fxSignaler{enabled: enabled, connect: connect, alive: fxBrowserAlive}
-}
-
-// fxBrowserAlive — CDP 왕복 하나(Pages())로 연결 생존을 가볍게 확인한다.
-func fxBrowserAlive(b *rod.Browser) bool {
-	_, err := b.Pages()
-	return err == nil
+	return &fxSignaler{enabled: enabled, connect: connect, sync: browser.SyncTabs}
 }
 
 func (f *fxSignaler) OnClientLine(line []byte) {
@@ -864,12 +854,15 @@ func (f *fxSignaler) OnServerLine(line []byte) {
 func (f *fxSignaler) signal(tool string, on bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	b := f.browserLocked()
-	if b == nil {
-		return
+	if f.b == nil {
+		b, err := f.connect()
+		if err != nil {
+			return
+		}
+		f.b = b
 	}
 	url, _ := f.target()
-	if err := browser.SignalFx(b, tool, on, url); err != nil {
+	if err := browser.SignalFx(f.b, tool, on, url); err != nil {
 		f.b = nil // 연결이 죽었으면 다음 신호 때 다시 맺는다
 	}
 }
@@ -901,15 +894,6 @@ func (f *fxSignaler) target() (string, string) {
 func (f *fxSignaler) browser() *rod.Browser {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.browserLocked()
-}
-
-// browserLocked — f.mu를 쥔 채로 부른다. 들고 있는 연결이 죽었으면(f.alive) 버리고 새로
-// 맺는다 — browser_fx가 꺼져 signal()이 안 불려도 게이트의 SyncTabs 경로가 재연결한다.
-func (f *fxSignaler) browserLocked() *rod.Browser {
-	if f.b != nil && !f.alive(f.b) {
-		f.b = nil
-	}
 	if f.b == nil {
 		b, err := f.connect()
 		if err != nil {
@@ -918,6 +902,25 @@ func (f *fxSignaler) browserLocked() *rod.Browser {
 		f.b = b
 	}
 	return f.b
+}
+
+// syncTabs — 게이트가 tools/call마다 부르는 탭 미러 갱신 + 버튼 요청 회수.
+// CDP 왕복(f.sync)은 잠금을 놓은 채로 하고, 실패하면(Chrome 재시작 등) 연결을 버려
+// 다음 호출이 새로 맺게 한다 — signal()이 SignalFx 실패를 처리하는 것과 같은 패턴.
+// browser_fx가 꺼져 signal()이 한 번도 안 불려도 이 경로 하나로 재연결이 돈다.
+func (f *fxSignaler) syncTabs(c browser.Control, url, title string) []browser.TabRequest {
+	b := f.browser()
+	if b == nil {
+		return nil
+	}
+	reqs, err := f.sync(b, c, url, title)
+	if err != nil {
+		f.mu.Lock()
+		f.b = nil
+		f.mu.Unlock()
+		return nil
+	}
+	return reqs
 }
 
 // IsMCPToolCall은 MCP stdio(JSON-RPC 한 줄)가 tools/call인지 본다.

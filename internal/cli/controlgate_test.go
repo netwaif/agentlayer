@@ -191,6 +191,29 @@ func TestGateUserReturnsExactlyAtDeadline(t *testing.T) {
 	}
 }
 
+// TestGatePassAppliesLastInstantRequest — Fix round 2 (b): 통과 확정 뒤의 마지막 sync가
+// 회수한 버튼 요청을 버리지 않는다. 그 순간 사용자가 「내가 조작하기」를 눌렀다면
+// 이번 호출 자체는 이미 통과가 확정됐으니 그대로 전달하되, 파일에는 반영해서 다음
+// 호출부터는 사용자 소유로 잡혀야 한다.
+func TestGatePassAppliesLastInstantRequest(t *testing.T) {
+	dir := t.TempDir()
+	calls := 0
+	g, _ := newTestGate(t, dir, func(browser.Control) []browser.TabRequest {
+		calls++
+		if calls == 2 { // idle→agent 전이 확정 직후의 미러 sync에서 사용자가 눌렀다
+			return []browser.TabRequest{{Event: browser.EvUserTake, At: 1}}
+		}
+		return nil
+	})
+	fwd, reply := g.Pass(gateLine(10, "click"))
+	if !fwd || reply != nil {
+		t.Fatalf("이번 호출 자체는 이미 통과가 확정됐으니 그대로 전달: %v %s", fwd, reply)
+	}
+	if c := browser.LoadControl(dir); c.Owner != browser.OwnerUser {
+		t.Fatalf("마지막 순간의 요청을 버리지 않고 반영해야 함: %+v", c)
+	}
+}
+
 func TestResolveAgent(t *testing.T) {
 	dir := t.TempDir()
 	st, _ := state.NewStore(dir)

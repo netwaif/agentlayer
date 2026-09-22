@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -286,36 +287,50 @@ func TestIsMCPToolCall(t *testing.T) {
 	}
 }
 
-// TestFxSignalerReconnectsAfterDeath — Fix round 1 #2: fxSignaler.browser()가 죽은 연결을
-// 스스로 감지해 버려야 한다(browser_fx가 꺼져 signal()이 안 불려도, 게이트의 SyncTabs
-// 경로만으로 재연결이 이뤄져야 함). 실제 Chrome 없이 alive를 주입해 판정만 검증한다.
-func TestFxSignalerReconnectsAfterDeath(t *testing.T) {
+// TestFxSignalerSyncTabsReconnectsAfterFailure — Fix round 2 (a): 죽은 연결 감지는
+// syncTabs()가 실제로 실패했을 때만 일어난다 — 핫 패스(연결이 멀쩡한 보통 호출)에
+// 판정용 CDP 왕복을 추가로 태우지 않는다. f.sync를 주입해 실제 Chrome 없이 검증한다.
+func TestFxSignalerSyncTabsReconnectsAfterFailure(t *testing.T) {
 	connectCalls := 0
 	f := newFxSignaler(false, func() (*rod.Browser, error) {
 		connectCalls++
 		return &rod.Browser{}, nil
 	})
-	f.alive = func(*rod.Browser) bool { return false } // 항상 죽었다고 판정 — 재연결 경로만 검증
-	if b := f.browser(); b == nil || connectCalls != 1 {
-		t.Fatalf("첫 연결: b=%v connectCalls=%d", b, connectCalls)
+	syncCalls := 0
+	f.sync = func(*rod.Browser, browser.Control, string, string) ([]browser.TabRequest, error) {
+		syncCalls++
+		if syncCalls == 1 {
+			return nil, errors.New("연결 죽음")
+		}
+		return nil, nil
 	}
-	if b := f.browser(); b == nil || connectCalls != 2 {
-		t.Fatalf("죽은 연결 감지 뒤 재연결: b=%v connectCalls=%d", b, connectCalls)
+	if reqs := f.syncTabs(browser.Control{}, "", ""); reqs != nil {
+		t.Fatalf("첫 호출은 실패 주입 — nil이어야 함: %v", reqs)
+	}
+	if connectCalls != 1 {
+		t.Fatalf("첫 연결: connectCalls=%d", connectCalls)
+	}
+	f.syncTabs(browser.Control{}, "", "")
+	if connectCalls != 2 {
+		t.Fatalf("실패로 버려진 연결이 다음 호출에서 재연결돼야 함: connectCalls=%d", connectCalls)
 	}
 }
 
-// TestFxSignalerKeepsAliveConnection — alive가 참이면 재연결하지 않는다(불필요한 CDP 왕복 방지 확인).
-func TestFxSignalerKeepsAliveConnection(t *testing.T) {
+// TestFxSignalerSyncTabsKeepsConnectionOnSuccess — sync가 성공하면 재연결하지 않는다
+// (불필요한 connect 호출 방지 확인).
+func TestFxSignalerSyncTabsKeepsConnectionOnSuccess(t *testing.T) {
 	connectCalls := 0
 	f := newFxSignaler(false, func() (*rod.Browser, error) {
 		connectCalls++
 		return &rod.Browser{}, nil
 	})
-	f.alive = func(*rod.Browser) bool { return true }
-	f.browser()
-	f.browser()
+	f.sync = func(*rod.Browser, browser.Control, string, string) ([]browser.TabRequest, error) {
+		return nil, nil
+	}
+	f.syncTabs(browser.Control{}, "", "")
+	f.syncTabs(browser.Control{}, "", "")
 	if connectCalls != 1 {
-		t.Fatalf("살아있으면 재연결 없음: connectCalls=%d", connectCalls)
+		t.Fatalf("성공하면 재연결 없음: connectCalls=%d", connectCalls)
 	}
 }
 

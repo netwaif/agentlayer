@@ -244,10 +244,12 @@ func (c *reqCollector) snapshot() []TabRequest {
 
 // SyncTabs — 모든 웹 탭에 현재 소유권을 미러하고(작업 탭은 target=1), 버튼 요청을 회수한다.
 // 탭마다 병렬로 한 번의 Eval 왕복(쓰기+읽기)만 쓰고 fxBudget으로 전체를 마감한다.
-func SyncTabs(b *rod.Browser, c Control, targetURL, targetTitle string) []TabRequest {
+// 반환하는 error는 b.Pages() 실패(연결이 죽었을 때)뿐이다 — 탭이 하나도 없어 요청이
+// 비어 있는 정상 상태(nil, nil)와 구분해야 호출자가 죽은 연결을 감지해 버릴 수 있다.
+func SyncTabs(b *rod.Browser, c Control, targetURL, targetTitle string) ([]TabRequest, error) {
 	wps, err := webPages(b, "")
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	urls := urlsByPage(wps)
 	var col reqCollector
@@ -261,7 +263,7 @@ func SyncTabs(b *rod.Browser, c Control, targetURL, targetTitle string) []TabReq
 			col.add(TabRequest{Event: ev, At: at})
 		}
 	})
-	return col.snapshot()
+	return col.snapshot(), nil
 }
 
 // LatestRequest — 여러 탭에서 온 요청 중 가장 최신.

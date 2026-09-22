@@ -76,9 +76,14 @@ func (g *controlGate) Pass(line []byte) (bool, []byte) {
 	c.Waiting = 0
 	_ = browser.SaveControl(g.dir, c)
 	// 전이·파일 갱신 뒤 미러도 지금 반영한다 — 다음 step까지 기다리면 이번 호출 동안
-	// 탭의 owner 표시가 한 박자 뒤처진다(직전 상태를 계속 보여줌). 이 호출이 회수하는
-	// 버튼 요청은 버린다 — 다음 tools/call의 step()이 정상적으로 집어간다.
-	_ = g.sync(c)
+	// 탭의 owner 표시가 한 박자 뒤처진다(직전 상태를 계속 보여줌). 이 sync가 회수하는
+	// 버튼 요청은 버리지 않는다 — syncJS는 Eval 한 번으로 DOM 속성을 읽고 지우므로,
+	// 바로 이 순간 사용자가 눌렀다면 여기서 잡지 않으면 다음 step()은 그 클릭을 영영
+	// 못 본다(이번 호출 자체는 이미 통과가 확정됐으니 그대로 전달한다).
+	if ev, ok := browser.LatestRequest(g.sync(c)); ok {
+		c = browser.Apply(c, ev, "", "", g.now())
+		_ = browser.SaveControl(g.dir, c)
+	}
 	return true, nil
 }
 
