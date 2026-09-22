@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -18,8 +19,21 @@ func TestContentScriptWithNode(t *testing.T) {
 	if err != nil {
 		t.Skip("node 없음")
 	}
-	cmd := exec.Command(node, "fx/content_test.mjs")
+	// 상대 경로("fx/content_test.mjs")는 테스트 러너의 작업 디렉터리에 기댄다 — go test는
+	// 패키지 디렉터리에서 돌지만, 명시적으로 절대 경로를 넘겨 그 가정을 없앤다(게이트 리뷰 지적 5).
+	script, err := filepath.Abs(filepath.Join("fx", "content_test.mjs"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// content_test.mjs가 어떤 이유로든(타이머 정리 누락 등) 종료하지 않고 매달리면 go test
+	// 전체가 걸리므로, 30초 마감을 둬 확실히 죽인다(게이트 리뷰 지적 5).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, node, script)
 	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("content_test.mjs 타임아웃(30s) — 프로세스가 안 끝남:\n%s", out)
+	}
 	if err != nil {
 		t.Fatalf("content_test.mjs 실패: %v\n%s", err, out)
 	}

@@ -12,7 +12,7 @@
     wait_for: '기다리는 중', evaluate_script: '확인 중' };
 
   const st = { owner: 'idle', agent: '', label: '', lastMs: 0, stopped: false, waiting: 0, target: false, title: '',
-    fxOn: false, tool: '', cursor: null, offTimer: 0 };
+    fxOn: false, tool: '', cursor: null, offTimer: 0, lastFxVal: undefined };
 
   const parseMirror = (v) => {
     if (!v) return null;
@@ -28,18 +28,27 @@
 
   // ---- DOM
   let host, shield, dim, glow, hl, cursor, cursorLabel, pill, pillTitle, pillStatus, pillBtns, banner;
+  // render()의 재도색 캐시 — 값이 바뀌지 않으면 DOM에 다시 쓰지 않는다(버튼을 매 뮤테이션마다
+  // 다시 만들면 mousedown~mouseup 사이에 버튼이 사라져 클릭이 씹힌다: 게이트 리뷰 지적).
+  let cache = null;
+  const resetCache = () => { cache = { shield: null, dim: null, pill: null, pillTitle: null, pillStatus: null, buttonsKey: null, buttonsClickable: null, banner: null, cursorLabel: null, cursorOn: null, hlHidden: null }; };
+  resetCache();
   const css = (e, s) => { e.style.cssText = s; return e; };
   const btn = (text) => {
     const b = css(document.createElement('button'),
-      `pointer-events:auto;cursor:pointer;border:0;border-radius:999px;padding:6px 12px;margin-left:6px;` +
+      `cursor:pointer;border:0;border-radius:999px;padding:6px 12px;margin-left:6px;` +
       `font:600 12px/16px -apple-system,system-ui,sans-serif;background:${text === '중단' ? 'rgba(255,255,255,.12)' : CREAM};color:${text === '중단' ? CREAM : INK}`);
+    // pointer-events는 여기서 고정하지 않는다 — pillBtns의 값을 그대로 물려받아야
+    // 입력 도구 구간에서 컨테이너를 none으로 내리면 버튼도 같이 막힌다(게이트 리뷰 지적:
+    // 에이전트 CDP 클릭이 화면 하단 알약 버튼에 먹히던 문제).
     b.textContent = text;
     b.setAttribute('type', 'button');
     b.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); request(text); });
     return b;
   };
   const ensure = () => {
-    if (host) return;
+    if (host && host.isConnected) return; // 페이지가 host를 지워도(document.write 등) 다음 호출에서 되살린다
+    host = null;
     host = css(document.createElement('div'), 'position:fixed;inset:0;pointer-events:none;z-index:2147483647;contain:strict;');
     host.id = '__agentlayer_fx';
     host.setAttribute('aria-hidden', 'true'); // take_snapshot에 안 섞이게. inert는 붙이지 않는다(버튼이 눌려야 함)
@@ -71,6 +80,8 @@
     pillTitle = css(document.createElement('div'), 'font-weight:700;font-size:13px');
     pillStatus = css(document.createElement('div'), `color:${TERRA};font-weight:600`);
     txt.append(pillTitle, pillStatus);
+    // pillBtns 자체는 pointer-events를 명시하지 않는다(호스트로부터 none을 물려받는 게 기본) —
+    // render()가 매번 buttonsClickable에 따라 auto/none을 명시적으로 써준다.
     pillBtns = css(document.createElement('div'), 'display:flex;align-items:center;margin-left:6px');
     pill.append(spin, txt, pillBtns);
     banner = css(document.createElement('div'),
@@ -80,6 +91,7 @@
     style.textContent = '@keyframes __alpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.35)}}';
     host.append(style, shield, dim, glow, hl, cursor, pill, banner);
     (document.body || document.documentElement).appendChild(host);
+    resetCache(); // 새 엘리먼트는 기본 상태이므로 이전 캐시값과 비교하면 안 됨 — 다음 render가 전부 다시 씀
   };
 
   const request = (text) => {
@@ -87,12 +99,13 @@
     document.documentElement.setAttribute(REQ, `${kind}:${Date.now()}`);
   };
 
-  // ---- 표시 계산(테스트가 같은 함수를 본다)
+  // ---- 표시 계산(테스트가 같은 함수를 본다) — 순수 함수, DOM을 건드리지 않는다
   const compute = () => {
     const owner = effOwner();
     const active = owner === 'agent' && st.target;
     const inputPhase = st.fxOn && INPUT.has(st.tool);
-    const s = { owner, target: st.target, shield: 'none', dim: false, pill: false, banner: '', buttons: [], pillStatus: '', cursorLabel: '', cursor: st.cursor };
+    const s = { owner, target: st.target, shield: 'none', dim: false, pill: false, banner: '', buttons: [],
+      pillStatus: '', cursorLabel: '', cursor: st.cursor, buttonsClickable: !inputPhase };
     if (active) {
       s.shield = inputPhase ? 'none' : 'auto';
       s.dim = true; s.pill = true;
@@ -109,27 +122,57 @@
     return s;
   };
 
+  // render()는 멱등이어야 한다 — 프록시가 미러를 500ms~ 간격으로 계속 다시 쓰고,
+  // 뮤테이션옵저버가 매번 이 함수를 부르므로, 값이 안 바뀐 항목은 DOM에 다시 쓰지 않는다.
+  // 특히 버튼 컨테이너를 매번 비웠다 새로 만들면 mousedown~mouseup 사이에 버튼이
+  // 사라져 클릭이 씹힌다(게이트 리뷰 지적 1) — buttonsKey가 같으면 pillBtns를 건드리지 않는다.
   const render = () => {
     ensure();
     const s = compute();
-    shield.style.pointerEvents = s.shield;
-    dim.style.opacity = s.dim ? '1' : '0';
-    glow.style.opacity = s.dim ? '1' : '0';
-    pill.style.opacity = s.pill ? '1' : '0';
-    pill.style.transform = s.pill ? 'translate(-50%,0)' : 'translate(-50%,8px)';
-    pillTitle.textContent = st.label || '브라우저 작업';
-    pillStatus.textContent = s.pillStatus;
-    pillBtns.innerHTML = '';
-    pillBtns.children.length = 0;
-    s.buttons.forEach(b => pillBtns.appendChild(btn(b)));
-    banner.textContent = s.banner;
-    banner.style.opacity = s.banner ? '1' : '0';
-    cursorLabel.textContent = s.cursorLabel;
-    cursor.style.opacity = (s.owner === 'agent' && st.target && st.cursor) ? '1' : '0';
-    if (!s.dim) hl.style.opacity = '0';
+    if (cache.shield !== s.shield) { shield.style.pointerEvents = s.shield; cache.shield = s.shield; }
+    if (cache.dim !== s.dim) {
+      dim.style.opacity = s.dim ? '1' : '0';
+      glow.style.opacity = s.dim ? '1' : '0';
+      cache.dim = s.dim;
+    }
+    if (cache.pill !== s.pill) {
+      pill.style.opacity = s.pill ? '1' : '0';
+      pill.style.transform = s.pill ? 'translate(-50%,0)' : 'translate(-50%,8px)';
+      cache.pill = s.pill;
+    }
+    const title = st.label || '브라우저 작업';
+    if (cache.pillTitle !== title) { pillTitle.textContent = title; cache.pillTitle = title; }
+    if (cache.pillStatus !== s.pillStatus) { pillStatus.textContent = s.pillStatus; cache.pillStatus = s.pillStatus; }
+    const buttonsKey = s.buttons.join('|');
+    if (cache.buttonsKey !== buttonsKey) {
+      pillBtns.innerHTML = '';
+      s.buttons.forEach(b => pillBtns.appendChild(btn(b)));
+      cache.buttonsKey = buttonsKey;
+    }
+    // 입력 도구 구간엔 알약 버튼의 pointer-events를 내려 에이전트의 CDP 합성 클릭이
+    // 화면 하단 버튼에 먹히지 않게 한다(게이트 리뷰 지적 2). 버튼 자신은 pointer-events를
+    // 고정하지 않으므로(위 btn() 참고) 이 컨테이너 값을 그대로 물려받는다.
+    if (cache.buttonsClickable !== s.buttonsClickable) {
+      pillBtns.style.pointerEvents = s.buttonsClickable ? 'auto' : 'none';
+      cache.buttonsClickable = s.buttonsClickable;
+    }
+    if (cache.banner !== s.banner) {
+      banner.textContent = s.banner;
+      banner.style.opacity = s.banner ? '1' : '0';
+      cache.banner = s.banner;
+    }
+    if (cache.cursorLabel !== s.cursorLabel) { cursorLabel.textContent = s.cursorLabel; cache.cursorLabel = s.cursorLabel; }
+    const cursorOn = !!(s.owner === 'agent' && st.target && st.cursor);
+    if (cache.cursorOn !== cursorOn) { cursor.style.opacity = cursorOn ? '1' : '0'; cache.cursorOn = cursorOn; }
+    if (!s.dim) { if (cache.hlHidden !== true) { hl.style.opacity = '0'; cache.hlHidden = true; } }
+    else { cache.hlHidden = false; }
   };
 
-  const moveTo = (x, y) => { st.cursor = { x, y }; ensure(); cursor.style.transform = `translate(${x}px,${y}px)`; render(); };
+  // moveTo는 render()를 부르지 않는다 — 마우스가 움직일 때마다(뮤테이션과 무관하게) 풀
+  // render를 돌리면 버튼이 계속 다시 만들어져 클릭이 씹힌다(게이트 리뷰 지적 1). 커서
+  // 위치·표시 여부만 직접 반영한다. 호출 시점엔 inputPhase()가 이미 참이므로(owner=agent,
+  // target=true) 커서를 보이는 상태로 둔다.
+  const moveTo = (x, y) => { st.cursor = { x, y }; ensure(); cursor.style.transform = `translate(${x}px,${y}px)`; cursor.style.opacity = '1'; cache.cursorOn = true; };
   const ripple = (x, y) => {
     ensure();
     const r = css(document.createElement('div'),
@@ -155,8 +198,14 @@
     if (!m) { st.owner = 'idle'; st.target = false; return; }
     Object.assign(st, m);
   };
+  // readFx()는 FX 속성 "값이 실제로 바뀌었을 때만" on/off를 처리한다. OWNER 미러가
+  // 500ms~마다 다시 쓰이면 뮤테이션옵저버가 매번 이 함수를 부르는데, 예전 코드는 FX 값이
+  // 그대로여도 매번 clearTimeout+setTimeout으로 LINGER를 재무장해 입력 호출 간격이
+  // 2.5초보다 짧으면 fxOn이 영원히 꺼지지 않았다(게이트 리뷰 지적 3).
   const readFx = () => {
     const v = root.getAttribute(FX) || '';
+    if (v === st.lastFxVal) return;
+    st.lastFxVal = v;
     clearTimeout(st.offTimer);
     if (v.startsWith('on:')) { st.fxOn = true; st.tool = v.split(':')[1] || ''; }
     else if (v.startsWith('off:')) { st.offTimer = setTimeout(() => { st.fxOn = false; st.tool = ''; render(); }, LINGER); }
@@ -172,5 +221,10 @@
   // 만료 자체 계산 — 프록시가 없을 때도 20초 뒤 내려가게 5초마다 다시 그린다
   if (typeof setInterval === 'function') setInterval(() => { if (st.owner !== 'idle') render(); }, 5000);
 
-  window.__agentlayerFx = { parseMirror, state: () => (readOwner(), readFx(), compute()), clickButton: (t) => request(t) };
+  window.__agentlayerFx = {
+    parseMirror,
+    state: () => (readOwner(), readFx(), compute()),
+    clickButton: (t) => request(t),
+    render: () => (readOwner(), readFx(), render()), // 테스트가 render() 경로(DOM 반영)를 직접 검증할 수 있게
+  };
 })();
