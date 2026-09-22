@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-rod/rod"
 	"github.com/netwaif/agentlayer/internal/browser"
 	"github.com/netwaif/agentlayer/internal/state"
 )
@@ -282,6 +283,39 @@ func TestIsMCPToolCall(t *testing.T) {
 		if IsMCPToolCall([]byte(l)) {
 			t.Errorf("%s 는 도구 호출 아님", l)
 		}
+	}
+}
+
+// TestFxSignalerReconnectsAfterDeath — Fix round 1 #2: fxSignaler.browser()가 죽은 연결을
+// 스스로 감지해 버려야 한다(browser_fx가 꺼져 signal()이 안 불려도, 게이트의 SyncTabs
+// 경로만으로 재연결이 이뤄져야 함). 실제 Chrome 없이 alive를 주입해 판정만 검증한다.
+func TestFxSignalerReconnectsAfterDeath(t *testing.T) {
+	connectCalls := 0
+	f := newFxSignaler(false, func() (*rod.Browser, error) {
+		connectCalls++
+		return &rod.Browser{}, nil
+	})
+	f.alive = func(*rod.Browser) bool { return false } // 항상 죽었다고 판정 — 재연결 경로만 검증
+	if b := f.browser(); b == nil || connectCalls != 1 {
+		t.Fatalf("첫 연결: b=%v connectCalls=%d", b, connectCalls)
+	}
+	if b := f.browser(); b == nil || connectCalls != 2 {
+		t.Fatalf("죽은 연결 감지 뒤 재연결: b=%v connectCalls=%d", b, connectCalls)
+	}
+}
+
+// TestFxSignalerKeepsAliveConnection — alive가 참이면 재연결하지 않는다(불필요한 CDP 왕복 방지 확인).
+func TestFxSignalerKeepsAliveConnection(t *testing.T) {
+	connectCalls := 0
+	f := newFxSignaler(false, func() (*rod.Browser, error) {
+		connectCalls++
+		return &rod.Browser{}, nil
+	})
+	f.alive = func(*rod.Browser) bool { return true }
+	f.browser()
+	f.browser()
+	if connectCalls != 1 {
+		t.Fatalf("살아있으면 재연결 없음: connectCalls=%d", connectCalls)
 	}
 }
 

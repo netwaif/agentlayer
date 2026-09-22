@@ -56,8 +56,9 @@ func (g *controlGate) Pass(line []byte) (bool, []byte) {
 		deadline := g.now().Add(g.wait)
 		for c.Owner == browser.OwnerUser && !c.Stopped {
 			if !g.now().Before(deadline) {
-				g.step(0)
-				return false, gateErrorReply(rpcID(line), gateUserBusyText)
+				// 마지막 확인 — 바로 이 순간 사용자가 돌려줬으면 거절하지 않고 통과시킨다.
+				c = g.step(0)
+				break
 			}
 			g.sleep(g.poll)
 			c = g.step(1)
@@ -66,11 +67,18 @@ func (g *controlGate) Pass(line []byte) (bool, []byte) {
 			g.step(0)
 			return false, gateErrorReply(rpcID(line), gateStoppedText)
 		}
+		if c.Owner == browser.OwnerUser {
+			return false, gateErrorReply(rpcID(line), gateUserBusyText)
+		}
 	}
 	id, label := g.agent()
 	c = browser.Apply(c, browser.EvCall, id, label, g.now())
 	c.Waiting = 0
 	_ = browser.SaveControl(g.dir, c)
+	// 전이·파일 갱신 뒤 미러도 지금 반영한다 — 다음 step까지 기다리면 이번 호출 동안
+	// 탭의 owner 표시가 한 박자 뒤처진다(직전 상태를 계속 보여줌). 이 호출이 회수하는
+	// 버튼 요청은 버린다 — 다음 tools/call의 step()이 정상적으로 집어간다.
+	_ = g.sync(c)
 	return true, nil
 }
 

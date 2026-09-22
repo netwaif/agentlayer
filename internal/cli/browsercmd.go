@@ -764,10 +764,12 @@ func browserMCPServe() error {
 				if reply != nil {
 					_ = writeServer(reply)
 				}
+				// pm 갱신은 클라이언트가 이 줄을 받고 바로 다음 tools/call을 보낼 수 있으므로
+				// stdout에 내보내기 전에 끝내 둔다 — 그래야 그 다음 호출의 pageId→url 조회가 최신이다.
+				pm.Update(browser.ResultText(line))
 				if fwd != nil {
 					_, _ = os.Stdout.Write(fwd)
 				}
-				pm.Update(browser.ResultText(line))
 				fx.OnServerLine(line)
 			}
 			if rerr != nil {
@@ -792,6 +794,7 @@ func browserMCPServe() error {
 					fx.setTargetTitle(pm.TitleFor(id))
 				} else {
 					fx.setTarget(pm.SelectedURL())
+					fx.setTargetTitle("") // pageId 없는 호출은 어느 탭인지 몰라 제목도 같이 비운다
 				}
 				if fwd, reply := gate.Pass(line); !fwd {
 					_, _ = os.Stdout.Write(reply)
@@ -820,6 +823,10 @@ type fxSignaler struct {
 	tracker browser.FxTracker
 	mu      sync.Mutex
 	b       *rod.Browser
+	// alive — 들고 있는 연결이 아직 살아 있는지(가벼운 판정). Chrome이 재시작되면 b는
+	// 그대로 남아 있지만 CDP 왕복이 전부 실패한다 — signal()의 사후 실패 감지만 믿으면
+	// browser_fx가 꺼져 signal이 한 번도 안 불릴 때(게이트만 도는 경우) 영영 재연결이 안 된다.
+	alive func(*rod.Browser) bool
 
 	tmu         sync.Mutex
 	targetURL   string
@@ -827,7 +834,13 @@ type fxSignaler struct {
 }
 
 func newFxSignaler(enabled bool, connect func() (*rod.Browser, error)) *fxSignaler {
-	return &fxSignaler{enabled: enabled, connect: connect}
+	return &fxSignaler{enabled: enabled, connect: connect, alive: fxBrowserAlive}
+}
+
+// fxBrowserAlive — CDP 왕복 하나(Pages())로 연결 생존을 가볍게 확인한다.
+func fxBrowserAlive(b *rod.Browser) bool {
+	_, err := b.Pages()
+	return err == nil
 }
 
 func (f *fxSignaler) OnClientLine(line []byte) {
@@ -851,15 +864,12 @@ func (f *fxSignaler) OnServerLine(line []byte) {
 func (f *fxSignaler) signal(tool string, on bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.b == nil {
-		b, err := f.connect()
-		if err != nil {
-			return
-		}
-		f.b = b
+	b := f.browserLocked()
+	if b == nil {
+		return
 	}
 	url, _ := f.target()
-	if err := browser.SignalFx(f.b, tool, on, url); err != nil {
+	if err := browser.SignalFx(b, tool, on, url); err != nil {
 		f.b = nil // 연결이 죽었으면 다음 신호 때 다시 맺는다
 	}
 }
@@ -891,6 +901,15 @@ func (f *fxSignaler) target() (string, string) {
 func (f *fxSignaler) browser() *rod.Browser {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	return f.browserLocked()
+}
+
+// browserLocked — f.mu를 쥔 채로 부른다. 들고 있는 연결이 죽었으면(f.alive) 버리고 새로
+// 맺는다 — browser_fx가 꺼져 signal()이 안 불려도 게이트의 SyncTabs 경로가 재연결한다.
+func (f *fxSignaler) browserLocked() *rod.Browser {
+	if f.b != nil && !f.alive(f.b) {
+		f.b = nil
+	}
 	if f.b == nil {
 		b, err := f.connect()
 		if err != nil {

@@ -141,8 +141,53 @@ func TestGateTakeRequestDuringAgent(t *testing.T) {
 		return nil
 	})
 	fwd, reply := g.Pass(gateLine(6, "click"))
-	if !fwd || reply != nil || n != 2 {
+	// n==3: step(0)에서 take 회수(1) → 폴링 step(1)에서 return 회수(2) →
+	// 통과 확정 뒤 미러를 지금 반영하는 마지막 sync(3, 이 호출은 무시).
+	if !fwd || reply != nil || n != 3 {
 		t.Fatalf("take→return: %v %s n=%d", fwd, reply, n)
+	}
+}
+
+// TestGateMirrorsTransitionOnPass — Fix round 1 #1: 통과가 확정되면 그 즉시(다음 step을
+// 기다리지 않고) 미러에 새 소유권이 실려야 한다. sync 클로저의 마지막 호출이 관찰하는
+// Control이 전이 후 값(Owner=agent, 새 id·label)이어야 한다.
+func TestGateMirrorsTransitionOnPass(t *testing.T) {
+	dir := t.TempDir()
+	var last browser.Control
+	g, _ := newTestGate(t, dir, func(c browser.Control) []browser.TabRequest {
+		last = c
+		return nil
+	})
+	fwd, reply := g.Pass(gateLine(7, "click"))
+	if !fwd || reply != nil {
+		t.Fatalf("idle이면 통과: %v %s", fwd, reply)
+	}
+	if last.Owner != browser.OwnerAgent || last.Agent != "claude-%1" || last.Label != "검색" {
+		t.Fatalf("마지막 sync 호출이 전이 후 소유권을 봐야 함: %+v", last)
+	}
+}
+
+// TestGateUserReturnsExactlyAtDeadline — Fix round 1 #5: 대기 상한 마지막 확인
+// (타임아웃 직전의 g.step(0))에서 사용자가 「AI에게 돌려주기」를 눌렀으면 거절 대신
+// 통과시킨다. wait=3s, poll=1s이므로 폴링 4번(초기 1 + 폴링 3) 뒤 다섯 번째 sync 호출이
+// 데드라인 확인이다.
+func TestGateUserReturnsExactlyAtDeadline(t *testing.T) {
+	dir := t.TempDir()
+	_ = browser.SaveControl(dir, browser.Control{Owner: browser.OwnerUser})
+	calls := 0
+	g, _ := newTestGate(t, dir, func(browser.Control) []browser.TabRequest {
+		calls++
+		if calls == 5 { // 다섯 번째 = 데드라인 확인용 마지막 step(0)
+			return []browser.TabRequest{{Event: browser.EvUserReturn, At: 99}}
+		}
+		return nil
+	})
+	fwd, reply := g.Pass(gateLine(9, "click"))
+	if !fwd || reply != nil {
+		t.Fatalf("데드라인 확인 시점에 돌아왔으면 통과해야 함: %v %s", fwd, reply)
+	}
+	if c := browser.LoadControl(dir); c.Owner != browser.OwnerAgent {
+		t.Fatalf("돌아온 뒤 agent: %+v", c)
 	}
 }
 
