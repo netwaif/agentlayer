@@ -5,7 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/go-rod/rod"
 )
 
 func TestInstallFxWritesExtension(t *testing.T) {
@@ -64,10 +68,10 @@ func TestFxTracker(t *testing.T) {
 	if tool, ok := tr.Start(call("1", "take_snapshot")); !ok || tool != "take_snapshot" {
 		t.Fatalf("읽기 도구도 추적(깜빡임 방지): %q %v", tool, ok)
 	}
-	if !tr.End(resp("1")) {
+	if _, last := tr.End(resp("1")); !last {
 		t.Fatal("응답에 종료 신호")
 	}
-	if tr.End(resp("99")) {
+	if _, last := tr.End(resp("99")); last {
 		t.Fatal("추적 안 한 응답에 종료 신호")
 	}
 	if tool, ok := tr.Start(call("2", "click")); !ok || tool != "click" {
@@ -76,13 +80,13 @@ func TestFxTracker(t *testing.T) {
 	if _, ok := tr.Start(call(`"s3"`, "fill")); !ok {
 		t.Fatal("문자열 id도 추적")
 	}
-	if tr.End(resp("2")) {
+	if _, last := tr.End(resp("2")); last {
 		t.Fatal("아직 fill이 진행 중 — 종료 신호는 마지막에만")
 	}
-	if !tr.End(resp(`"s3"`)) {
+	if _, last := tr.End(resp(`"s3"`)); !last {
 		t.Fatal("마지막 응답에 종료 신호")
 	}
-	if tr.End(resp(`"s3"`)) {
+	if _, last := tr.End(resp(`"s3"`)); last {
 		t.Fatal("같은 응답 두 번은 무시")
 	}
 	if _, ok := tr.Start([]byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n")); ok {
@@ -96,5 +100,72 @@ func TestFxValue(t *testing.T) {
 	}
 	if v := fxValue("", false); !strings.HasPrefix(v, "off:") {
 		t.Fatalf("off 값: %q", v)
+	}
+}
+
+func TestFxTrackerKeepsToolName(t *testing.T) {
+	var tr FxTracker
+	if tool, ok := tr.Start([]byte(`{"id":1,"method":"tools/call","params":{"name":"wait_for"}}`)); !ok || tool != "wait_for" {
+		t.Fatal("start")
+	}
+	if tool, ok := tr.Start([]byte(`{"id":2,"method":"tools/call","params":{"name":"click"}}`)); !ok || tool != "click" {
+		t.Fatal("start2")
+	}
+	tool, last := tr.End([]byte(`{"id":2,"result":{}}`))
+	if tool != "click" || last {
+		t.Fatalf("End(2) = %q last=%v", tool, last)
+	}
+	tool, last = tr.End([]byte(`{"id":1,"result":{}}`))
+	if tool != "wait_for" || !last {
+		t.Fatalf("End(1) = %q last=%v", tool, last)
+	}
+	if tool, last := tr.End([]byte(`{"id":99,"result":{}}`)); tool != "" || last {
+		t.Fatal("모르는 id")
+	}
+}
+
+func TestIsInputTool(t *testing.T) {
+	for _, n := range []string{"click", "hover", "drag", "fill", "fill_form", "type_text", "press_key", "upload_file"} {
+		if !IsInputTool(n) {
+			t.Errorf("%s는 입력 도구", n)
+		}
+	}
+	for _, n := range []string{"take_snapshot", "wait_for", "navigate_page", "evaluate_script", ""} {
+		if IsInputTool(n) {
+			t.Errorf("%s는 입력 도구 아님", n)
+		}
+	}
+}
+
+func TestForEachPageRunsInParallelWithinBudget(t *testing.T) {
+	// rod.Page 없이 병렬성만 본다 — fn이 각각 200ms 자면 순차면 600ms, 병렬이면 ~200ms
+	pages := make([]*rod.Page, 3)
+	start := time.Now()
+	var n int32
+	forEachPage(pages, 300*time.Millisecond, func(*rod.Page) {
+		time.Sleep(200 * time.Millisecond)
+		atomic.AddInt32(&n, 1)
+	})
+	if d := time.Since(start); d > 450*time.Millisecond {
+		t.Fatalf("병렬이 아님: %v", d)
+	}
+	if atomic.LoadInt32(&n) != 3 {
+		t.Fatalf("3개 다 실행돼야 함: %d", n)
+	}
+	// 마감을 넘기는 fn은 기다리지 않는다
+	start = time.Now()
+	forEachPage(pages, 100*time.Millisecond, func(*rod.Page) { time.Sleep(2 * time.Second) })
+	if d := time.Since(start); d > 400*time.Millisecond {
+		t.Fatalf("마감을 안 지킴: %v", d)
+	}
+}
+
+func TestLatestRequest(t *testing.T) {
+	if _, ok := LatestRequest(nil); ok {
+		t.Fatal("없으면 false")
+	}
+	ev, ok := LatestRequest([]TabRequest{{EvUserTake, 10}, {EvUserStop, 30}, {EvUserReturn, 20}})
+	if !ok || ev != EvUserStop {
+		t.Fatalf("최신은 stop: %v %v", ev, ok)
 	}
 }

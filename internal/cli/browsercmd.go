@@ -805,7 +805,7 @@ func (f *fxSignaler) OnServerLine(line []byte) {
 	if !f.enabled {
 		return
 	}
-	if f.tracker.End(line) {
+	if _, last := f.tracker.End(line); last {
 		f.signal("", false)
 	}
 }
@@ -820,7 +820,7 @@ func (f *fxSignaler) signal(tool string, on bool) {
 		}
 		f.b = b
 	}
-	if err := browser.SignalFx(f.b, tool, on); err != nil {
+	if err := browser.SignalFx(f.b, tool, on, ""); err != nil {
 		f.b = nil // 연결이 죽었으면 다음 신호 때 다시 맺는다
 	}
 }
