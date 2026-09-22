@@ -1,6 +1,7 @@
 package hookcmd
 
 import (
+	"encoding/json"
 	"strings"
 	"unicode/utf8"
 )
@@ -13,6 +14,9 @@ const taskSummaryMax = 120
 // 마크다운 장식(굵게·코드·머리표·제목 기호)을 벗기고 taskSummaryMax 룬에서 말줄임한다.
 // 이 값이 Agent.Task가 되어 status·보드 카드·총괄 수신함 [REPORT] DONE: 요약에 실린다.
 func summarizeMessage(msg string) string {
+	if isTitleJSON(msg) {
+		return ""
+	}
 	for _, line := range strings.Split(msg, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -31,4 +35,20 @@ func summarizeMessage(msg string) string {
 		return line
 	}
 	return ""
+}
+
+// isTitleJSON은 codex가 첫 턴 뒤 스레드 제목을 만들며 notify에 싣는 `{"title":"…"}`(codex 0.155.x,
+// WSL2 실기 2026-09-22 — status 최근 작업 열에 JSON 그대로 찍힘)인지 본다. 키가 title 하나뿐인
+// JSON 객체만 답변이 아닌 것으로 무시한다 — 진짜 JSON 답변까지 버리지 않게 좁게 잡는다.
+func isTitleJSON(msg string) bool {
+	msg = strings.TrimSpace(msg)
+	if !strings.HasPrefix(msg, "{") {
+		return false
+	}
+	var m map[string]json.RawMessage
+	if json.Unmarshal([]byte(msg), &m) != nil {
+		return false
+	}
+	_, ok := m["title"]
+	return ok && len(m) == 1
 }

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
 )
@@ -364,5 +365,74 @@ func TestTaskDoneGoneNeedsRoot(t *testing.T) {
 	b, _ := os.ReadFile(filepath.Join(root, "tasks", "LAB-1", "task.md"))
 	if !strings.Contains(string(b), "status: done") {
 		t.Errorf("--root 경로로 done 실패:\n%s", b)
+	}
+}
+
+// 등록이 해제된(이미 done) 부모를 다시 닫을 때 --root 없이도 루트를 찾아야 한다 — 기억된 루트
+// (company.json)에 tasks/<id>/task.md가 있으면 그것. WSL2 실기 2026-09-22 발견 1: 총괄이
+// `task done LAB-1`을 그대로 재실행했다가 "등록돼 있지 않습니다"로 실패했다.
+func TestTaskDoneGoneUsesRememberedRoot(t *testing.T) {
+	t.Setenv("AGENTLAYER_CONFIG", filepath.Join(t.TempDir(), "none.json"))
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
+		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
+	root := companyRoot(t, "LAB-1")
+	inbox := filepath.Join(root, "runtime", "inbox")
+	var out bytes.Buffer
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"assign", "LAB-1", "collab-bot", "--inbox", inbox}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"done", "LAB-1"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	// 늦게 붙은 자식
+	dir := filepath.Join(root, "tasks", "LAB-2")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "# LAB-2\n```yaml\nstatus: pending\nupdated: 2026-01-01\nparents: [LAB-1]\n```\n"
+	if err := os.WriteFile(filepath.Join(dir, "task.md"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"done", "LAB-1"}, time.Now()); err != nil {
+		t.Fatalf("--root 없이 재마감 실패: %v", err)
+	}
+	if !strings.Contains(out.String(), "등록은 없었음") || !strings.Contains(out.String(), "LAB-2 배정 가능") {
+		t.Errorf("출력:\n%s", out.String())
+	}
+}
+
+// 기억된 루트가 없어도 현재 폴더가 회사 루트(tasks/<id>/task.md 존재)면 그걸 쓴다.
+func TestTaskDoneGoneUsesCwdRoot(t *testing.T) {
+	t.Setenv("AGENTLAYER_CONFIG", filepath.Join(t.TempDir(), "none.json"))
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	root := companyRoot(t, "LAB-1")
+	t.Chdir(root)
+	var out bytes.Buffer
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"done", "LAB-1"}, time.Now()); err != nil {
+		t.Fatalf("cwd 루트로 done 실패: %v", err)
+	}
+	b, _ := os.ReadFile(filepath.Join(root, "tasks", "LAB-1", "task.md"))
+	if !strings.Contains(string(b), "status: done") {
+		t.Errorf("status:\n%s", b)
+	}
+}
+
+// 기억된 루트에 그 업무가 없으면(다른 회사) 여전히 --root를 안내한다.
+func TestTaskDoneGoneRememberedRootWithoutTaskStillNeedsRoot(t *testing.T) {
+	t.Setenv("AGENTLAYER_CONFIG", filepath.Join(t.TempDir(), "none.json"))
+	stateDir := t.TempDir()
+	st, _ := state.NewStore(stateDir)
+	other := companyRoot(t, "X-1")
+	if err := board.RememberRoot(stateDir, other); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	err := RunTask(context.Background(), &out, st, stateDir, []string{"done", "LAB-1"}, time.Now())
+	if err == nil || !strings.Contains(err.Error(), "--root") {
+		t.Errorf("다른 회사 루트면 --root 안내: %v", err)
 	}
 }

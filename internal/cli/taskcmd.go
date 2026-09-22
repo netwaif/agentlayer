@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -80,6 +81,9 @@ func taskDone(w io.Writer, st *state.Store, stateDir string, args []string, now 
 		}
 	}
 	if root == "" {
+		root = inferDoneRoot(stateDir, id, list)
+	}
+	if root == "" {
 		if !found {
 			return fmt.Errorf("업무 %q이 등록돼 있지 않습니다 — 보드만 닫으려면 --root <회사루트>", id)
 		}
@@ -119,6 +123,30 @@ func taskDone(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	}
 	refreshBoard(w, st, stateDir, now)
 	return nil
+}
+
+// inferDoneRoot는 --root 없이 온 task done의 회사 루트를 찾는다 — 등록이 없거나 등록에 루트가
+// 없을 때(이미 done으로 닫혀 등록 해제된 부모에 자식을 늦게 붙이고 다시 닫는 경우, WSL2 실기
+// 2026-09-22). 후보는 현재 폴더 → board.Root(설정 → 등록 inbox → 기억된 루트) 순이고, 그 루트에
+// tasks/<id>/task.md가 실제로 있어야 채택한다(다른 회사의 루트로 엉뚱한 파일을 만들지 않게).
+func inferDoneRoot(stateDir, id string, list []task.Assignment) string {
+	var cands []string
+	if cwd, err := os.Getwd(); err == nil {
+		cands = append(cands, cwd)
+	}
+	var inboxes []string
+	for _, as := range list {
+		inboxes = append(inboxes, as.Inbox)
+	}
+	if r := board.Root(config.Load().CompanyRoot, inboxes, board.RememberedRoot(stateDir)); r != "" {
+		cands = append(cands, r)
+	}
+	for _, r := range cands {
+		if _, err := board.ReadTaskFile(r, id); err == nil {
+			return r
+		}
+	}
+	return ""
 }
 
 // refreshBoard는 열어 둔 보드 파일을 다시 쓴다(없으면 아무것도 안 함). 실패해도 명령은 성공 —

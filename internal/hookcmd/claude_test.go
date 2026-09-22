@@ -299,6 +299,9 @@ func TestSummarizeMessage(t *testing.T) {
 		"\n\n  hello world  \nmore": "hello world",
 		"**굵게** `코드`":               "굵게 코드",
 		"- 항목 하나":                   "항목 하나",
+		// codex 0.155.x 부팅 턴 뒤 notify에 스레드 제목 JSON이 실린다(WSL2 실기 2026-09-22) — 답변이 아니므로 무시
+		`{"title":"Run boot check"}`: "",
+		"{\n  \"title\": \"x\"\n}":   "",
 	}
 	for in, want := range cases {
 		if got := summarizeMessage(in); got != want {
