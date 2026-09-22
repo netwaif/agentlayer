@@ -17,11 +17,12 @@ const EngineAppName = "Google Chrome for Testing"
 type FrontOps struct {
 	Frontmost func() (string, error) // 지금 앞에 있는 앱 이름
 	Activate  func(name string) error
+	Supported bool // false면 배경 동작 자체를 건너뛴다(리눅스 등) — Frontmost/Activate는 no-op이라도 값
 }
 
 func DefaultFrontOps(goos string) FrontOps {
 	if goos != "darwin" {
-		return FrontOps{Frontmost: func() (string, error) { return "", nil }, Activate: func(string) error { return nil }}
+		return FrontOps{Frontmost: func() (string, error) { return "", nil }, Activate: func(string) error { return nil }, Supported: false}
 	}
 	return FrontOps{
 		Frontmost: func() (string, error) {
@@ -29,10 +30,14 @@ func DefaultFrontOps(goos string) FrontOps {
 				`tell application "System Events" to get name of first application process whose frontmost is true`).Output()
 			return strings.TrimSpace(string(out)), err
 		},
+		// 이름을 AppleScript 소스에 직접 이어붙이면(원래 구현) 따옴표·백슬래시가 섞인 앱
+		// 이름에서 구문이 깨질 수 있다. argv로 넘겨 osascript가 문자열로 다루게 한다.
 		Activate: func(name string) error {
 			return exec.Command("osascript", "-e",
-				`tell application "System Events" to set frontmost of process "`+strings.ReplaceAll(name, `"`, ``)+`" to true`).Run()
+				"on run argv\n tell application \"System Events\" to set frontmost of process (item 1 of argv) to true\nend run",
+				name).Run()
 		},
+		Supported: true,
 	}
 }
 

@@ -53,6 +53,15 @@ func TestRestoreFrontSwallowsOpsErrors(t *testing.T) {
 	}
 }
 
+func TestDefaultFrontOpsSupported(t *testing.T) {
+	if DefaultFrontOps("linux").Supported {
+		t.Fatal("리눅스는 배경 동작 미지원")
+	}
+	if !DefaultFrontOps("darwin").Supported {
+		t.Fatal("맥은 배경 동작 지원")
+	}
+}
+
 func TestRewriteNewPage(t *testing.T) {
 	in := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"new_page","arguments":{"url":"https://x"}}}` + "\n")
 	out := RewriteNewPage(in, false)

@@ -287,6 +287,28 @@ func TestIsMCPToolCall(t *testing.T) {
 	}
 }
 
+// TestToolCallName — Fix round 1: new_page만 골라 osascript를 부르는 근거이므로
+// tools/call+click, tools/call+new_page, tools/list, 깨진 JSON 네 경우를 표로 확인한다.
+func TestToolCallName(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+		want string
+	}{
+		{"click", `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"click","arguments":{"pageId":1}}}`, "click"},
+		{"new_page", `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"new_page","arguments":{}}}`, "new_page"},
+		{"tools/list", `{"jsonrpc":"2.0","id":3,"method":"tools/list"}`, ""},
+		{"garbage", `not json`, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := toolCallName([]byte(c.line)); got != c.want {
+				t.Errorf("toolCallName(%q) = %q, want %q", c.line, got, c.want)
+			}
+		})
+	}
+}
+
 // TestFxSignalerSyncTabsReconnectsAfterFailure — Fix round 2 (a): 죽은 연결 감지는
 // syncTabs()가 실제로 실패했을 때만 일어난다 — 핫 패스(연결이 멀쩡한 보통 호출)에
 // 판정용 CDP 왕복을 추가로 태우지 않는다. f.sync를 주입해 실제 Chrome 없이 검증한다.

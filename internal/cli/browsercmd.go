@@ -801,7 +801,7 @@ func browserMCPServe() error {
 				}
 			}
 			if !handled {
-				if toolCallName(line) == "new_page" {
+				if frontOps.Supported && toolCallName(line) == "new_page" {
 					front, _ := frontOps.Frontmost()
 					line = browser.RewriteNewPage(line, front == browser.EngineAppName)
 				}
