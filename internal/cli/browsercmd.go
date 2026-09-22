@@ -983,6 +983,15 @@ func PreviewPaths(agents []*state.Agent, metas []*wt.Meta) map[string]string {
 // 브라우저는 새 서버가 있을 때만 건드린다(Connect가 Chrome을 띄우므로).
 func browserAutoPreview(out io.Writer) error {
 	cfg := config.Load()
+	port := cfg.BrowserPortOrDefault()
+	// 행 감시(스펙 4절)를 가장 먼저 본다 — 아래 IsUp은 TCP 다이얼+HTTP GET(각 2초)이라
+	// UI 스레드만 굳은 브라우저에는 살아 있다고 답할 수 있고, capture-janitor의
+	// connect()/br.Pages()/ReleaseCaptures는 rod 기본(무제한) 컨텍스트라 굳은 브라우저를
+	// 만나면 훅 자체가 눌러앉는다. 그래서 이번 훅에서 재시작이 있었으면 프리뷰·정리는
+	// 건너뛰고 바로 끝낸다.
+	if browserHangWatch(out, cfg, port) {
+		return nil
+	}
 	if !cfg.PreviewAutoEnabled() {
 		return nil
 	}
@@ -999,7 +1008,6 @@ func browserAutoPreview(out io.Writer) error {
 	if len(paths) == 0 {
 		return nil
 	}
-	port := cfg.BrowserPortOrDefault()
 	// 브라우저가 떠 있을 때만 — 닫아 둔 전용 브라우저를 hook이 다시 띄우지 않는다.
 	// 안 떠 있으면 기록도 남기지 않아, 나중에 브라우저를 열면 그때 한 번 연다.
 	if !browser.IsUp(port) {
@@ -1066,22 +1074,36 @@ func browserAutoPreview(out io.Writer) error {
 			}
 		}
 	}
-	// 행 감시(스펙 4절) — 브라우저 프로세스는 있는데 UI 스레드가 3초 안에 답이 없는 게 10초 간격으로
-	// 두 번이면 채집·강제 종료·재기동·알림.
-	if browser.ThrottleOK(state.DefaultDir(), "hangwatch", 10*time.Second, time.Now()) {
-		if pid := browser.ChromePID(port, browser.ExecLsof); pid > 0 {
-			notify := func(msg string) {
-				if url := cfg.NotifyURL(); url != "" && cfg.NotifyDiscord {
-					payload, _ := json.Marshal(map[string]any{"username": "agentlayer", "content": msg})
-					_ = notifypkg.DefaultSender().PostJSON(url, payload)
-				}
-			}
-			if restarted, diag := browser.HangWatch(state.DefaultDir(), pid, browser.DefaultHangOps(state.DefaultDir(), port, runtime.GOOS, notify), time.Now()); restarted {
-				fmt.Fprintf(out, "에이전트 브라우저 재시작(행 감지) 진단: %s\n", diag)
-			}
+	return nil
+}
+
+// browserHangWatch — 행 감시(스펙 4절) 진입점. ChromePID를 먼저 봐서 브라우저가 아예
+// 없으면 스로틀 파일을 건드리지 않는다(브라우저가 뜨자마자 다음 훅이 곧바로 판정하도록).
+// UI 스레드가 hangPing 안에 hangFailsNeeded번(≥hangMinGap 간격) 응답이 없으면 진단
+// 채집 → 강제 종료 → 재기동 → 알림까지 처리하고, 재기동까지 성공했을 때만 true.
+func browserHangWatch(out io.Writer, cfg *config.Config, port int) (restarted bool) {
+	pid := browser.ChromePID(port, browser.ExecLsof)
+	if pid <= 0 {
+		return false
+	}
+	if !browser.ThrottleOK(state.DefaultDir(), "hangwatch", 10*time.Second, time.Now()) {
+		return false
+	}
+	notify := func(msg string) {
+		if url := cfg.NotifyURL(); url != "" && cfg.NotifyDiscord {
+			payload, _ := json.Marshal(map[string]any{"username": "agentlayer", "content": msg})
+			_ = notifypkg.DefaultSender().PostJSON(url, payload)
 		}
 	}
-	return nil
+	var diag string
+	restarted, diag = browser.HangWatch(state.DefaultDir(), pid, browser.DefaultHangOps(state.DefaultDir(), port, runtime.GOOS, notify), time.Now())
+	switch {
+	case restarted:
+		fmt.Fprintf(out, "에이전트 브라우저 재시작(행 감지) 진단: %s\n", diag)
+	case diag != "":
+		fmt.Fprintf(out, "에이전트 브라우저 강제 종료(행 감지, 재기동 실패) 진단: %s\n", diag)
+	}
+	return restarted
 }
 
 // MCPCommands는 claude·codex·gemini에 chrome-devtools-mcp를 전용 브라우저

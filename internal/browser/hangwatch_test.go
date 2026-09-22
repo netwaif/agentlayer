@@ -2,6 +2,7 @@ package browser
 
 import (
 	"errors"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -33,7 +34,7 @@ func TestHangWatchHealthyResetsFails(t *testing.T) {
 	}
 }
 
-func TestHangWatchNeedsTwoFailsTenSecondsApart(t *testing.T) {
+func TestHangWatchNeedsThreeFailsTenSecondsApart(t *testing.T) {
 	dir := t.TempDir()
 	var l hangLog
 	now := time.Now()
@@ -47,9 +48,21 @@ func TestHangWatchNeedsTwoFailsTenSecondsApart(t *testing.T) {
 	if loadHangState(dir).Fails != 1 {
 		t.Fatalf("fails=%d", loadHangState(dir).Fails)
 	}
-	r, diag := HangWatch(dir, 100, ops, now.Add(11*time.Second))
+	if r, _ := HangWatch(dir, 100, ops, now.Add(11*time.Second)); r || l.killed != 0 {
+		t.Fatal("2회째로는 재시작하면 안 됨(3회째부터)")
+	}
+	if loadHangState(dir).Fails != 2 {
+		t.Fatalf("fails=%d", loadHangState(dir).Fails)
+	}
+	if r, _ := HangWatch(dir, 100, ops, now.Add(14*time.Second)); r || l.killed != 0 {
+		t.Fatal("10초 안 지난 재판정은 세지 않음(2회차 이후)")
+	}
+	if loadHangState(dir).Fails != 2 {
+		t.Fatalf("10초 안 재판정 뒤에도 fails=%d", loadHangState(dir).Fails)
+	}
+	r, diag := HangWatch(dir, 100, ops, now.Add(22*time.Second))
 	if !r || l.sampled != 1 || l.killed != 1 || l.relaunched != 1 {
-		t.Fatalf("2회 연속 실패면 채집·종료·재기동: r=%v %+v", r, l)
+		t.Fatalf("3회 연속 실패면 채집·종료·재기동: r=%v %+v", r, l)
 	}
 	if !strings.Contains(diag, "hang/") || len(l.notes) != 1 || !strings.Contains(l.notes[0], "재시작") {
 		t.Fatalf("진단 경로·알림: %q %v", diag, l.notes)
@@ -59,9 +72,129 @@ func TestHangWatchNeedsTwoFailsTenSecondsApart(t *testing.T) {
 	}
 }
 
+func TestHangWatchRelaunchFailureReportsFailure(t *testing.T) {
+	dir := t.TempDir()
+	var l hangLog
+	now := time.Now()
+	ops := fakeHangOps(&l, errors.New("timeout"))
+	ops.Relaunch = func() error { l.relaunched++; return errors.New("포트 사용 중") }
+	HangWatch(dir, 100, ops, now)
+	HangWatch(dir, 100, ops, now.Add(11*time.Second))
+	r, diag := HangWatch(dir, 100, ops, now.Add(22*time.Second))
+	if r {
+		t.Fatal("재기동 실패면 restarted=false")
+	}
+	if l.killed != 1 || l.relaunched != 1 {
+		t.Fatalf("강제 종료는 되고 재기동은 시도돼야: %+v", l)
+	}
+	if len(l.notes) != 1 || !strings.Contains(l.notes[0], "재기동 실패") {
+		t.Fatalf("재기동 실패가 알림에 드러나야: %v", l.notes)
+	}
+	if diag == "" {
+		t.Fatal("채집은 됐으니 진단 경로가 있어야")
+	}
+	if loadHangState(dir).Fails != 0 {
+		t.Fatal("재판정 루프 방지 위해 상태는 리셋돼야")
+	}
+}
+
 func TestHangWatchNoPid(t *testing.T) {
 	var l hangLog
 	if r, _ := HangWatch(t.TempDir(), 0, fakeHangOps(&l, errors.New("x")), time.Now()); r || l.killed != 0 {
 		t.Fatal("pid 0이면 아무것도 안 함")
+	}
+}
+
+func TestHangWatchNilPingIsNoop(t *testing.T) {
+	if r, diag := HangWatch(t.TempDir(), 100, HangOps{}, time.Now()); r || diag != "" {
+		t.Fatal("Ping이 nil이면 아무것도 안 함")
+	}
+}
+
+// fakeClock은 decideHangPing 테스트에서 now()를 호출 순서대로 offsets만큼 흐르게 한다 —
+// 진짜 sleep 없이 "빠른 실패"·"느린 실패"를 재현한다.
+func fakeClock(offsets ...time.Duration) func() time.Time {
+	base := time.Now()
+	i := 0
+	return func() time.Time {
+		d := offsets[i]
+		if i < len(offsets)-1 {
+			i++
+		}
+		return base.Add(d)
+	}
+}
+
+func TestDecideHangPingStaleWSHealthyProbe(t *testing.T) {
+	var removed bool
+	connect := func(ws string, budget time.Duration) (func(time.Duration) error, error) {
+		if ws == "stale" {
+			return nil, errors.New("connection refused")
+		}
+		return func(time.Duration) error { return nil }, nil
+	}
+	probe := func(budget time.Duration) (string, bool, error) { return "fresh", true, nil }
+	err := decideHangPing(true, "stale", 3*time.Second, connect, probe, func() { removed = true }, fakeClock(0, 100*time.Millisecond))
+	if err != nil {
+		t.Fatalf("죽은 기록+정상 프로브면 nil: %v", err)
+	}
+	if !removed {
+		t.Fatal("죽은 기록은 지워야")
+	}
+}
+
+func TestDecideHangPingStaleWSProbeFails(t *testing.T) {
+	connect := func(ws string, budget time.Duration) (func(time.Duration) error, error) {
+		return nil, errors.New("connection refused")
+	}
+	probe := func(budget time.Duration) (string, bool, error) { return "", false, errors.New("포트 안 열림") }
+	err := decideHangPing(true, "stale", 3*time.Second, connect, probe, func() {}, fakeClock(0, 100*time.Millisecond))
+	if err == nil {
+		t.Fatal("프로브까지 실패하면 에러")
+	}
+}
+
+func TestDecideHangPingRecordedWSPingTimeout(t *testing.T) {
+	pingErr := errors.New("ping timeout")
+	connect := func(ws string, budget time.Duration) (func(time.Duration) error, error) {
+		return func(time.Duration) error { return pingErr }, nil
+	}
+	probe := func(budget time.Duration) (string, bool, error) {
+		t.Fatal("연결이 됐으면 프로브로 넘어가면 안 됨")
+		return "", false, nil
+	}
+	err := decideHangPing(true, "ws", 3*time.Second, connect, probe, func() { t.Fatal("연결됐으면 기록을 지우면 안 됨") }, nil)
+	if !errors.Is(err, pingErr) {
+		t.Fatalf("ping 타임아웃이 그대로 전달돼야: %v", err)
+	}
+}
+
+func TestDecideHangPingSlowFailureSkipsFallback(t *testing.T) {
+	connect := func(ws string, budget time.Duration) (func(time.Duration) error, error) {
+		return nil, errors.New("진짜 행")
+	}
+	probe := func(budget time.Duration) (string, bool, error) {
+		t.Fatal("느리게 실패하면 대체 경로로 넘어가면 안 됨")
+		return "", false, nil
+	}
+	err := decideHangPing(true, "ws", 3*time.Second, connect, probe,
+		func() { t.Fatal("느린 실패는 죽은 기록이 아니다 — 지우면 안 됨") },
+		fakeClock(0, 600*time.Millisecond))
+	if err == nil {
+		t.Fatal("느리게 실패하면 에러를 그대로 돌려줘야")
+	}
+}
+
+func TestWaitPortFreeReturnsPromptlyWhenPortClosed(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close() // 바로 닫아 포트를 비워 둔다
+	start := time.Now()
+	waitPortFree(port, 2*time.Second, 50*time.Millisecond)
+	if time.Since(start) > time.Second {
+		t.Fatal("이미 빈 포트인데 너무 오래 기다림")
 	}
 }
