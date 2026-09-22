@@ -135,13 +135,20 @@ func forEachPage(pages []*rod.Page, budget time.Duration, fn func(*rod.Page)) {
 	}
 }
 
+// webPage — 탭과 그 URL을 묶는다. Info()를 한 번만 불러 재사용하기 위함(SyncTabs가
+// target 판정에 같은 URL을 또 조회하지 않도록).
+type webPage struct {
+	page *rod.Page
+	url  string
+}
+
 // webPages — 웹 URL인 탭만. targetURL이 있으면 그 url인 탭만.
-func webPages(b *rod.Browser, targetURL string) ([]*rod.Page, error) {
+func webPages(b *rod.Browser, targetURL string) ([]webPage, error) {
 	pages, err := b.Pages()
 	if err != nil {
 		return nil, err
 	}
-	var out []*rod.Page
+	var out []webPage
 	for _, p := range pages {
 		info, err := p.Info()
 		if err != nil || !IsWebURL(info.URL) {
@@ -150,9 +157,31 @@ func webPages(b *rod.Browser, targetURL string) ([]*rod.Page, error) {
 		if targetURL != "" && info.URL != targetURL {
 			continue
 		}
-		out = append(out, p)
+		out = append(out, webPage{page: p, url: info.URL})
 	}
 	return out, nil
+}
+
+// pagesOf — forEachPage에 넘길 []*rod.Page만 뽑는다(forEachPage 시그니처는 그대로 둔다).
+func pagesOf(wps []webPage) []*rod.Page {
+	if len(wps) == 0 {
+		return nil
+	}
+	out := make([]*rod.Page, len(wps))
+	for i, wp := range wps {
+		out[i] = wp.page
+	}
+	return out
+}
+
+// urlsByPage — forEachPage 콜백 안에서 다시 p.Info()를 부르지 않도록 페이지→URL을 미리 맵으로.
+// 맵은 고루틴이 뜨기 전에 다 채워지고 이후엔 읽기만 하므로 동시 접근에 안전하다.
+func urlsByPage(wps []webPage) map[*rod.Page]string {
+	m := make(map[*rod.Page]string, len(wps))
+	for _, wp := range wps {
+		m[wp.page] = wp.url
+	}
+	return m
 }
 
 // SignalFx는 웹 페이지에 시작/끝 신호를 쓴다. targetURL이 비어 있으면 모든 웹 탭에
@@ -160,12 +189,12 @@ func webPages(b *rod.Browser, targetURL string) ([]*rod.Page, error) {
 // 탭마다 병렬로 쓰고 fxBudget 하나로 전체를 마감 — 느린 탭 때문에 도구 호출이 밀리지 않는다.
 // 실패는 효과 누락일 뿐이라 삼킨다.
 func SignalFx(b *rod.Browser, tool string, on bool, targetURL string) error {
-	pages, err := webPages(b, targetURL)
+	wps, err := webPages(b, targetURL)
 	if err != nil {
 		return err
 	}
 	v := fxValue(tool, on)
-	forEachPage(pages, fxBudget, func(p *rod.Page) {
+	forEachPage(pagesOf(wps), fxBudget, func(p *rod.Page) {
 		_, _ = p.Timeout(fxBudget).Eval(
 			fmt.Sprintf(`(v) => document.documentElement.setAttribute(%q, v)`, fxAttr), v)
 	})
@@ -192,32 +221,47 @@ const syncJS = `(mirror, ownerAttr, requestAttr) => {
 	return r;
 }`
 
+// reqCollector — TabRequest를 mu로 지켜 모은다. forEachPage는 예산을 넘긴 고루틴을
+// 기다리지 않고 반환하므로, 그 고루틴들이 반환 이후에도 add를 계속 부를 수 있다.
+// snapshot은 그 시점의 값을 새 배킹 배열로 복사해 돌려주므로, 늦게 도착하는 add가
+// 이미 반환된 슬라이스의 배킹 배열을 건드리는 일이 없다(레이스 없음).
+type reqCollector struct {
+	mu   sync.Mutex
+	reqs []TabRequest
+}
+
+func (c *reqCollector) add(r TabRequest) {
+	c.mu.Lock()
+	c.reqs = append(c.reqs, r)
+	c.mu.Unlock()
+}
+
+func (c *reqCollector) snapshot() []TabRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]TabRequest(nil), c.reqs...)
+}
+
 // SyncTabs — 모든 웹 탭에 현재 소유권을 미러하고(작업 탭은 target=1), 버튼 요청을 회수한다.
 // 탭마다 병렬로 한 번의 Eval 왕복(쓰기+읽기)만 쓰고 fxBudget으로 전체를 마감한다.
 func SyncTabs(b *rod.Browser, c Control, targetURL, targetTitle string) []TabRequest {
-	pages, err := webPages(b, "")
+	wps, err := webPages(b, "")
 	if err != nil {
 		return nil
 	}
-	var mu sync.Mutex
-	var reqs []TabRequest
-	forEachPage(pages, fxBudget, func(p *rod.Page) {
-		info, err := p.Info()
-		if err != nil {
-			return
-		}
-		target := targetURL != "" && info.URL == targetURL
+	urls := urlsByPage(wps)
+	var col reqCollector
+	forEachPage(pagesOf(wps), fxBudget, func(p *rod.Page) {
+		target := targetURL != "" && urls[p] == targetURL
 		res, err := p.Timeout(fxBudget).Eval(syncJS, MirrorValue(c, target, targetTitle), ownerAttr, requestAttr)
 		if err != nil {
 			return
 		}
 		if ev, at, ok := ParseRequest(res.Value.Str()); ok {
-			mu.Lock()
-			reqs = append(reqs, TabRequest{Event: ev, At: at})
-			mu.Unlock()
+			col.add(TabRequest{Event: ev, At: at})
 		}
 	})
-	return reqs
+	return col.snapshot()
 }
 
 // LatestRequest — 여러 탭에서 온 요청 중 가장 최신.

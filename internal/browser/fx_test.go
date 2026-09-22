@@ -169,3 +169,19 @@ func TestLatestRequest(t *testing.T) {
 		t.Fatalf("최신은 stop: %v %v", ev, ok)
 	}
 }
+
+// TestReqCollectorSnapshotIsRaceFree — SyncTabs가 쓰는 것과 같은 모양(forEachPage로
+// 예산을 넘긴 고루틴을 버리고, 그 고루틴들이 반환 뒤에도 add를 계속 부름)을 재현해
+// snapshot()이 돌려준 슬라이스가 뒤늦은 add에 물들지 않는지 -race로 검증한다.
+func TestReqCollectorSnapshotIsRaceFree(t *testing.T) {
+	var col reqCollector
+	pages := make([]*rod.Page, 5)
+	forEachPage(pages, 50*time.Millisecond, func(*rod.Page) {
+		// 예산(50ms)보다 오래 걸려 forEachPage가 기다리지 않고 반환한 뒤에도 도착한다.
+		time.Sleep(200 * time.Millisecond)
+		col.add(TabRequest{Event: EvCall, At: 1})
+	})
+	out := col.snapshot()
+	_ = out // 이 시점 스냅샷 — 아래 add들이 이 슬라이스의 배킹 배열을 건드리면 안 된다.
+	time.Sleep(250 * time.Millisecond)
+}
