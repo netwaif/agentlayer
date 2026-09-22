@@ -44,6 +44,8 @@ type Config struct {
 	// BrowserControlWaitSeconds — 사용자가 「내가 조작하기」로 제어권을 가진 동안 프록시가
 	// 도구 호출을 잡고 기다리는 상한(초). 0 이하·미설정은 120.
 	BrowserControlWaitSeconds int `json:"browser_control_wait_seconds,omitempty"`
+	// BrowserTrimSnapshots — wait_for·navigate_page 응답의 자동 스냅샷을 잘라낼지. 기본 true.
+	BrowserTrimSnapshots *bool `json:"browser_trim_snapshots,omitempty"`
 }
 
 const (
@@ -115,6 +117,14 @@ func (c *Config) BrowserControlWait() time.Duration {
 		return defaultBrowserControlWait
 	}
 	return time.Duration(c.BrowserControlWaitSeconds) * time.Second
+}
+
+// BrowserTrimSnapshotsEnabled는 기본값(true)을 반영한 접근자.
+func (c *Config) BrowserTrimSnapshotsEnabled() bool {
+	if c.BrowserTrimSnapshots == nil {
+		return true
+	}
+	return *c.BrowserTrimSnapshots
 }
 
 // BrowserPortOrDefault는 browser_port를 반영한 디버깅 포트. 범위 밖(0 이하·65535 초과)은 기본값.

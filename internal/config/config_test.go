@@ -150,3 +150,15 @@ func TestBrowserControlWait(t *testing.T) {
 		t.Fatal("0 이하는 기본")
 	}
 }
+
+func TestBrowserTrimSnapshotsEnabled(t *testing.T) {
+	var c Config
+	if !c.BrowserTrimSnapshotsEnabled() {
+		t.Fatal("기본 true")
+	}
+	f := false
+	c.BrowserTrimSnapshots = &f
+	if c.BrowserTrimSnapshotsEnabled() {
+		t.Fatal("false 반영")
+	}
+}

@@ -766,10 +766,15 @@ func browserMCPServe() error {
 				// pm 갱신은 클라이언트가 이 줄을 받고 바로 다음 tools/call을 보낼 수 있으므로
 				// stdout에 내보내기 전에 끝내 둔다 — 그래야 그 다음 호출의 pageId→url 조회가 최신이다.
 				pm.Update(browser.ResultText(line))
+				tool := fx.OnServerLine(line)
 				if fwd != nil {
+					// 호출 효율(trim.go): wait_for·navigate_page 응답에 딸려오는 전체 페이지
+					// 스냅샷을 잘라낸다(스펙 5절, 실측 1만 5천 토큰/회). 기본 켜짐.
+					if cfg.BrowserTrimSnapshotsEnabled() {
+						fwd = browser.TrimSnapshot(fwd, tool)
+					}
 					_, _ = os.Stdout.Write(fwd)
 				}
-				fx.OnServerLine(line)
 			}
 			if rerr != nil {
 				return
@@ -840,22 +845,23 @@ func newFxSignaler(enabled bool, connect func() (*rod.Browser, error)) *fxSignal
 	return &fxSignaler{enabled: enabled, connect: connect, sync: browser.SyncTabs}
 }
 
+// OnClientLine은 tools/call이면 id→도구명을 기억한다(trim이 End에서 꺼내 쓰므로
+// browser_fx 꺼짐과 무관하게 항상 기록). FX 신호는 enabled일 때만 보낸다.
 func (f *fxSignaler) OnClientLine(line []byte) {
-	if !f.enabled {
-		return
-	}
-	if tool, ok := f.tracker.Start(line); ok {
+	tool, ok := f.tracker.Start(line)
+	if f.enabled && ok {
 		f.signal(tool, true)
 	}
 }
 
-func (f *fxSignaler) OnServerLine(line []byte) {
-	if !f.enabled {
-		return
-	}
-	if _, last := f.tracker.End(line); last {
+// OnServerLine은 추적 중인 호출의 응답이면 그 도구명을 돌려준다(trim이 키로 쓴다).
+// FX 신호는 enabled일 때만 보낸다 — 도구명 조회는 enabled와 무관하게 항상 한다.
+func (f *fxSignaler) OnServerLine(line []byte) (tool string) {
+	tool, last := f.tracker.End(line)
+	if f.enabled && last {
 		f.signal("", false)
 	}
+	return tool
 }
 
 func (f *fxSignaler) signal(tool string, on bool) {
