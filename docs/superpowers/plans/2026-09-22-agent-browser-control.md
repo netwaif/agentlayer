@@ -2361,3 +2361,114 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 **형 일관성**: `browser.SignalFx(b, tool, on, targetURL)` 4인자(Task 3 정의, Task 4 사용) / `FxTracker.End` → `(string, bool)`(Task 3 정의, Task 4·6 사용) / `browser.Control`·`Event` 이름(Task 1 정의, Task 3·4 사용) / `PageMap.URLFor` → `(string, bool)`이며 `fxSignaler.setTarget(url string, ok bool)`이 그 두 값을 받음(Task 4) / `HangOps` 필드명(Task 8 정의·테스트 일치) / `RewriteNewPage(line, browserInFront bool)`(Task 5).
 
 **자리표시자**: 없음. Task 4 `continue` 처리는 "handled 플래그"로 명시. Task 5 `frontSleep` 변수는 본문에 명시.
+
+---
+
+### Task 10: 접힌 스레드 행의 상태 요약 배지 (사용자 요청 2026-09-22 추가)
+
+**배경:** `state.Fold`가 봇 스레드 pane을 메인 행에 접고 대표 상태를 "가장 급한 쪽"(Priority 낮은 값)으로 고른다. 메인이 WAIT면 스레드가 WORK여도 행은 WAIT·"(스레드 2)"만 보여 실행 중인 스레드가 안 보인다(사용자 캡처: `search-youtube-bot (스레드 2)` WAIT, 실제로는 스레드가 실행 중).
+
+**Files:**
+- Modify: `internal/state/fold.go` (`ThreadBadge`, `Fold`)
+- Modify: `internal/state/types.go` (`Agent`에 표시용 필드 추가)
+- Test: `internal/state/fold_test.go`
+
+**Interfaces:**
+- Produces: `Agent.ThreadStates map[AgentState]int` (`json:"-"`, Fold가 채움 — 접힌 스레드의 상태별 개수, idle 제외) / `ThreadBadge()`가 `"스레드 N · 작업 a · 대기 b · 완료 c · 오류 d"`(0인 항목 생략, 순서 고정: 대기→완료→오류→작업 = Priority 순) / `func threadStateWord(s AgentState) string` — WAITING "대기", DONE_UNREAD "완료", ERROR "오류", WORKING "작업", 그 외 "".
+
+- [ ] **Step 1: 실패하는 테스트 작성** (`internal/state/fold_test.go`에 추가; 기존 테스트의 헬퍼 이름을 확인해 같은 방식으로 에이전트를 만든다)
+
+```go
+func TestFoldThreadBadgeSummarizesThreadStates(t *testing.T) {
+	main := &Agent{ID: "claude-%1", Kind: "claude", State: StateWaiting, Tmux: TmuxRef{Session: "bot", PaneID: "%1"}}
+	t1 := &Agent{ID: "claude-%2", Kind: "claude", State: StateWorking, Tmux: TmuxRef{Session: "bot", WindowName: "t000001", PaneID: "%2"}}
+	t2 := &Agent{ID: "claude-%3", Kind: "claude", State: StateDoneUnread, Tmux: TmuxRef{Session: "bot", WindowName: "t000002", PaneID: "%3"}}
+	t3 := &Agent{ID: "claude-%4", Kind: "claude", State: StateIdle, Tmux: TmuxRef{Session: "bot", WindowName: "t000003", PaneID: "%4"}}
+	out := Fold([]*Agent{main, t1, t2, t3})
+	if len(out) != 1 {
+		t.Fatalf("접혀서 1행: %d", len(out))
+	}
+	if out[0].State != StateWaiting {
+		t.Fatalf("대표는 가장 급한 WAIT: %v", out[0].State)
+	}
+	if got := out[0].ThreadBadge(); got != "스레드 3 · 완료 1 · 작업 1" {
+		t.Fatalf("배지 = %q", got)
+	}
+	// 전부 idle이면 개수만
+	t1.State, t2.State = StateIdle, StateIdle
+	out = Fold([]*Agent{main, t1, t2, t3})
+	if got := out[0].ThreadBadge(); got != "스레드 3" {
+		t.Fatalf("idle만이면 개수만: %q", got)
+	}
+}
+```
+
+- [ ] **Step 2: 실패 확인** — `go test ./internal/state -run TestFoldThreadBadgeSummarizesThreadStates -v` → FAIL(배지 불일치 또는 필드 없음).
+
+- [ ] **Step 3: 구현**
+
+`types.go` `Agent`에 `Threads int` 옆:
+```go
+	// ThreadStates는 표시용 — 접힌 스레드의 상태별 개수(idle 제외). Fold가 채우고 저장하지 않는다.
+	ThreadStates map[AgentState]int `json:"-"`
+```
+
+`fold.go`:
+```go
+// threadStateWord — 배지에 쓰는 상태 한 단어. idle·dead는 세지 않는다.
+func threadStateWord(s AgentState) string {
+	switch s {
+	case StateWaiting:
+		return "대기"
+	case StateDoneUnread:
+		return "완료"
+	case StateError:
+		return "오류"
+	case StateWorking:
+		return "작업"
+	}
+	return ""
+}
+
+// badgeOrder — 요약 순서는 급한 순(Priority)과 같다.
+var badgeOrder = []AgentState{StateWaiting, StateDoneUnread, StateError, StateWorking}
+
+func (a *Agent) ThreadBadge() string {
+	switch {
+	case a.Threads > 0:
+		s := fmt.Sprintf("스레드 %d", a.Threads)
+		for _, st := range badgeOrder {
+			if n := a.ThreadStates[st]; n > 0 {
+				s += fmt.Sprintf(" · %s %d", threadStateWord(st), n)
+			}
+		}
+		return s
+	case a.IsThread():
+		return "스레드 " + a.Tmux.WindowName
+	}
+	return ""
+}
+```
+`Fold`에서 대표 복사본 `cp`를 만든 뒤 `cp.Threads = len(g.threads)`를 두는 자리에:
+```go
+		cp.ThreadStates = map[AgentState]int{}
+		for _, t := range g.threads {
+			if threadStateWord(t.State) != "" {
+				cp.ThreadStates[t.State]++
+			}
+		}
+```
+`internal/ui/view.go`의 SESSION 열 너비(`sessionColWidth`, "이름 (스레드 N)" 기준)가 배지를 그대로 쓰므로 자동으로 넓어진다 — 상한이 있으면 배지가 잘리지 않게 확인한다(`… ` 말줄임 규칙이 있으면 그대로 둔다).
+
+- [ ] **Step 4: 통과 확인** — `go test ./internal/state -v -run 'TestFold'` 전부 PASS, `go build ./...`. `internal/ui` 테스트는 샌드박스에서 멈추므로(메모리) 이 태스크에선 돌리지 않는다 — 대신 `go vet ./internal/ui`.
+
+- [ ] **Step 5: 실측** — `make install` 뒤 관제탑에서 스레드가 돌고 있는 봇 행이 `(스레드 N · 작업 k)`로 보이는지 확인.
+
+- [ ] **Step 6: 커밋**
+
+```bash
+git add internal/state/fold.go internal/state/types.go internal/state/fold_test.go
+git commit -m "feat(state): 접힌 스레드 행 배지에 상태 요약(작업·대기·완료·오류 개수) — 실행 중인 스레드가 보이게
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
