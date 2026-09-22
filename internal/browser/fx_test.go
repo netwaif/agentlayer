@@ -3,6 +3,7 @@ package browser
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -11,6 +12,18 @@ import (
 
 	"github.com/go-rod/rod"
 )
+
+func TestContentScriptWithNode(t *testing.T) {
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node 없음")
+	}
+	cmd := exec.Command(node, "fx/content_test.mjs")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("content_test.mjs 실패: %v\n%s", err, out)
+	}
+}
 
 func TestInstallFxWritesExtension(t *testing.T) {
 	dir, err := InstallFx(t.TempDir())
