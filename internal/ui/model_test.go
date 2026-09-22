@@ -728,7 +728,7 @@ func TestLoadAgentsFoldsBotThreadWindow(t *testing.T) {
 	m := fixtureModel(t)
 	m.agents = agents
 	v := m.View()
-	if !strings.Contains(v, "dev-claudecode (스레드 1)") {
+	if !strings.Contains(v, "dev-claudecode (스레드 1 · 작업 1)") {
 		t.Errorf("TUI 행에 스레드 배지:\n%s", v)
 	}
 	if strings.Count(v, "dev-claudecode") != 1 {

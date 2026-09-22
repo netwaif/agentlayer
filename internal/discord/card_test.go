@@ -210,7 +210,7 @@ func TestBuildCardFoldsBotThreadWindow(t *testing.T) {
 	if n := strings.Count(s, "**dev-claudecode**"); n != 1 {
 		t.Errorf("세션 행은 1개여야 함(%d):\n%s", n, s)
 	}
-	if !strings.Contains(s, "**dev-claudecode** (스레드 1)") {
+	if !strings.Contains(s, "**dev-claudecode** (스레드 1 · 작업 1)") {
 		t.Errorf("스레드 배지 없음:\n%s", s)
 	}
 	if !strings.Contains(s, "작업중 1") || strings.Contains(s, "대기 1") {

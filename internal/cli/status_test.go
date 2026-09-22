@@ -186,7 +186,7 @@ func TestStatusTextFoldsBotThreadWindow(t *testing.T) {
 		t.Fatalf("헤더+1행이어야 함:\n%s", out)
 	}
 	row := lines[1]
-	for _, want := range []string{"[WORK]", "dev-claudecode (스레드 1) ⌁", "스레드 작업"} {
+	for _, want := range []string{"[WORK]", "dev-claudecode (스레드 1 · 작업 1) ⌁", "스레드 작업"} {
 		if !strings.Contains(row, want) {
 			t.Errorf("행에 %q 있어야 함: %q", want, row)
 		}
