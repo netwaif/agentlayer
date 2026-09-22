@@ -29,6 +29,25 @@ func TestTrimSnapshot(t *testing.T) {
 	}
 }
 
+// TestTrimSnapshotPreservesLargeAndStringIDs — 게이트 리뷰 1차: map[string]any 왕복이
+// float64를 거치면 2^53을 넘는 id의 자릿수가 뭉개진다(9007199254740993 → ...992).
+// UseNumber로 원본 자릿수를 그대로 들고 있는지, 문자열 id도 그대로 살아남는지 확인.
+func TestTrimSnapshotPreservesLargeAndStringIDs(t *testing.T) {
+	body := "ok\n## Latest page snapshot\nuid=1_0 RootWebArea\n"
+
+	bigLine := []byte(`{"jsonrpc":"2.0","id":9007199254740993,"result":{"content":[{"type":"text","text":` + jsonStr(body) + `}]}}` + "\n")
+	out := TrimSnapshot(bigLine, "wait_for")
+	if !strings.Contains(string(out), `"id":9007199254740993`) {
+		t.Fatalf("2^53 초과 id 자릿수 보존 실패: %s", out)
+	}
+
+	strLine := []byte(`{"jsonrpc":"2.0","id":"abc","result":{"content":[{"type":"text","text":` + jsonStr(body) + `}]}}` + "\n")
+	out = TrimSnapshot(strLine, "wait_for")
+	if !strings.Contains(string(out), `"id":"abc"`) {
+		t.Fatalf("문자열 id 보존 실패: %s", out)
+	}
+}
+
 func jsonStr(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)

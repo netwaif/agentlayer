@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 )
@@ -22,8 +23,13 @@ func TrimSnapshot(line []byte, tool string) []byte {
 	if !trimTools[tool] {
 		return line
 	}
+	// UseNumber: id 등 숫자 필드를 float64로 굴리지 않고 원본 자릿수 그대로 json.Number로
+	// 들고 있다가 재마샬링한다. 2^53을 넘는 JSON-RPC id가 있으면 float64 왕복에서
+	// 자릿수가 뭉개져(예 9007265... 계열) 클라이언트의 요청/응답 짝짓기가 깨질 수 있다.
 	var msg map[string]any
-	if json.Unmarshal(line, &msg) != nil {
+	dec := json.NewDecoder(bytes.NewReader(line))
+	dec.UseNumber()
+	if dec.Decode(&msg) != nil {
 		return line
 	}
 	result, _ := msg["result"].(map[string]any)

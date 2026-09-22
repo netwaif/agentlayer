@@ -356,6 +356,46 @@ func TestFxSignalerSyncTabsKeepsConnectionOnSuccess(t *testing.T) {
 	}
 }
 
+// TestFxSignalerDisabledStillTracksToolNames — 게이트 리뷰 1차: OnClientLine/OnServerLine의
+// "도구명 추적은 항상, FX 신호는 enabled일 때만" 분리를 검증한다. browser_fx가 꺼져도
+// trim.go가 쓸 도구명은 End에서 나와야 하고, 그 경로는 connect()(신호 송출)를 부르면 안 된다.
+func TestFxSignalerDisabledStillTracksToolNames(t *testing.T) {
+	waitForCall := []byte(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"wait_for","arguments":{}}}` + "\n")
+	waitForReply := []byte(`{"jsonrpc":"2.0","id":1,"result":{"content":[]}}` + "\n")
+
+	t.Run("disabled: 신호 없이 도구명만", func(t *testing.T) {
+		connectCalls := 0
+		f := newFxSignaler(false, func() (*rod.Browser, error) {
+			connectCalls++
+			return nil, errors.New("연결 안 함")
+		})
+		f.OnClientLine(waitForCall)
+		tool := f.OnServerLine(waitForReply)
+		if tool != "wait_for" {
+			t.Fatalf("도구명 반환: %q", tool)
+		}
+		if connectCalls != 0 {
+			t.Fatalf("enabled=false면 connect(신호 송출)를 부르면 안 됨: connectCalls=%d", connectCalls)
+		}
+	})
+
+	t.Run("enabled: 신호를 시도해도 도구명은 그대로", func(t *testing.T) {
+		connectCalls := 0
+		f := newFxSignaler(true, func() (*rod.Browser, error) {
+			connectCalls++
+			return nil, errors.New("연결 실패") // 실제 브라우저 없이 signal()의 실패-삼킴 경로만 탐
+		})
+		f.OnClientLine(waitForCall)
+		tool := f.OnServerLine(waitForReply)
+		if tool != "wait_for" {
+			t.Fatalf("도구명 반환: %q", tool)
+		}
+		if connectCalls == 0 {
+			t.Fatal("enabled=true면 신호 송출을 시도해야 함(connect 호출)")
+		}
+	})
+}
+
 func TestParseCookiesExport(t *testing.T) {
 	cases := []struct {
 		args    []string
