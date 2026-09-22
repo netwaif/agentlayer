@@ -98,6 +98,41 @@ func TestHangWatchRelaunchFailureReportsFailure(t *testing.T) {
 	}
 }
 
+// TestHangWatchResetsOnNewPid — 최종 리뷰 IMPORTANT 5-a: 관찰한 pid가 바뀌었으면
+// 그 사이 브라우저가 죽고 새로 뜬 것이므로 예전 실패 횟수를 이어 세면 안 된다.
+// (안 그러면 새 브라우저가 한 번만 삐끗해도 3회째로 세어 죽는다.)
+func TestHangWatchResetsOnNewPid(t *testing.T) {
+	dir := t.TempDir()
+	var l hangLog
+	now := time.Now()
+	saveHangState(dir, hangState{Fails: 2, LastAt: now.Add(-time.Minute), Pid: 100})
+	r, _ := HangWatch(dir, 200, fakeHangOps(&l, errors.New("timeout")), now)
+	if r || l.killed != 0 {
+		t.Fatalf("pid가 바뀌었으면 죽이면 안 됨: r=%v %+v", r, l)
+	}
+	s := loadHangState(dir)
+	if s.Fails != 1 || s.Pid != 200 {
+		t.Fatalf("새 pid로 1부터 다시 세야 함: %+v", s)
+	}
+}
+
+// TestHangWatchPartialOpsDoesNotPanic — 최종 리뷰 IMPORTANT 5-d: Ping만 채운 ops로도
+// 죽지 않는다(Sample·Kill·Relaunch nil 가드).
+func TestHangWatchPartialOpsDoesNotPanic(t *testing.T) {
+	dir := t.TempDir()
+	ops := HangOps{Ping: func() error { return errors.New("timeout") }}
+	now := time.Now()
+	HangWatch(dir, 100, ops, now)
+	HangWatch(dir, 100, ops, now.Add(11*time.Second))
+	r, diag := HangWatch(dir, 100, ops, now.Add(22*time.Second))
+	if r {
+		t.Fatal("Relaunch가 없으면 재시작 성공일 수 없다")
+	}
+	if diag != "" {
+		t.Fatalf("Sample이 없으면 진단 경로도 없다: %q", diag)
+	}
+}
+
 func TestHangWatchNoPid(t *testing.T) {
 	var l hangLog
 	if r, _ := HangWatch(t.TempDir(), 0, fakeHangOps(&l, errors.New("x")), time.Now()); r || l.killed != 0 {

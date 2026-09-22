@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -86,5 +87,23 @@ func TestRewriteNewPage(t *testing.T) {
 	other := []byte(`{"method":"tools/call","params":{"name":"click","arguments":{"pageId":1}}}` + "\n")
 	if got := RewriteNewPage(other, false); string(got) != string(other) {
 		t.Fatal("다른 도구는 그대로")
+	}
+}
+
+// TestRewriteNewPageKeepsBigID — 최종 리뷰 IMPORTANT 6: 2^53을 넘는 JSON-RPC id가
+// float64 왕복에서 뭉개지면 클라이언트의 요청/응답 짝짓기가 깨진다(TrimSnapshot과 같은 이유).
+func TestRewriteNewPageKeepsBigID(t *testing.T) {
+	in := []byte(`{"jsonrpc":"2.0","id":9007199254740993,"method":"tools/call","params":{"name":"new_page","arguments":{"url":"https://x"}}}` + "\n")
+	out := RewriteNewPage(in, false)
+	if !bytes.Contains(out, []byte(`"id":9007199254740993`)) {
+		t.Fatalf("큰 id가 원본 자릿수 그대로 남아야 함: %s", out)
+	}
+	var msg struct {
+		Params struct {
+			Arguments map[string]any `json:"arguments"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(out, &msg); err != nil || msg.Params.Arguments["background"] != true {
+		t.Fatalf("background는 그대로 채워야 함: %s (%v)", out, err)
 	}
 }

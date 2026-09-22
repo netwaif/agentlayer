@@ -151,6 +151,23 @@ func TestBrowserControlWait(t *testing.T) {
 	}
 }
 
+func TestBrowserHangwatchEnabled(t *testing.T) {
+	var c Config
+	if !c.BrowserHangwatchEnabled() {
+		t.Fatal("기본 true")
+	}
+	f := false
+	c.BrowserHangwatch = &f
+	if c.BrowserHangwatchEnabled() {
+		t.Fatal("false 반영 — 행 감시를 아예 건너뛴다")
+	}
+	tr := true
+	c.BrowserHangwatch = &tr
+	if !c.BrowserHangwatchEnabled() {
+		t.Fatal("true 반영")
+	}
+}
+
 func TestBrowserTrimSnapshotsEnabled(t *testing.T) {
 	var c Config
 	if !c.BrowserTrimSnapshotsEnabled() {

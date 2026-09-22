@@ -144,6 +144,9 @@ agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참
 - `browser_trim_snapshots`(선택): `wait_for`·`navigate_page` 응답에 자동으로 붙는
   페이지 스냅샷을 잘라 토큰을 아낀다. 기본 `true`. 구조가 필요하면 에이전트가
   `take_snapshot`을 따로 부른다
+- `browser_hangwatch`(선택): 굳은 에이전트 브라우저를 감지해 강제 종료·재기동한다.
+  기본 `true`. `false`면 훅에서 감시 자체를 건너뛴다(프로세스 조회도 안 하고, 어떤
+  경우에도 브라우저를 죽이지 않는다 — 아래 "행 감시")
 - `company_root`(선택): AI 회사 루트(`tasks/`·`runtime/inbox/`가 있는 폴더). 비면 등록된 업무의 `<root>/runtime/inbox` 경로에서 유추한다.
 - `board_stale_ready`(선택, 기본 `30m`, 하한 `1m`): 업무 보드에서 ready·blocked 카드가 이 시간 넘게 방치되면 ⚠(Go duration 문자열).
 
@@ -281,7 +284,11 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   도구 호출이 잡혀서 기다리고(기본 120초, `browser_control_wait_seconds`), 「AI에게
   돌려주기」를 누르면 이어서 실행된다. 「중단」을 누르면 에이전트에게 "재시도하지
   말고 사용자 지시를 기다리세요"가 돌아가고, 대기 시간을 넘겨도 같은 취지의
-  안내가 대신 돌아간다.
+  안내가 대신 돌아간다. 알약·버튼은 기동 시 프로필에 붙는 확장이 그리므로
+  **이미 떠 있는 브라우저에는 다음 기동부터** 보인다. 버튼을 누를 수 없는 상태에서
+  제어권이 사용자로 잠겨 에이전트 호출이 계속 막히면
+  `agentlayer browser control reset`으로 제어권을 idle로 되돌린다(정본 파일은
+  재시작해도 남으므로 이 명령이 비상구다).
 - **배경 동작(macOS만)** — 에이전트 브라우저를 기동하면 그 순간 앞에 있던 앱으로
   포커스가 곧바로 돌아간다. 브라우저가 앞에 있지 않을 때 에이전트가 새 탭을
   열면(`new_page`) 배경 탭으로 열려 사용자가 보던 화면을 뺏지 않는다. 리눅스는
@@ -293,6 +300,8 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   (재기동에 실패하면 "…강제 종료했습니다 · 재기동 실패: …"). 로그인(프로필)은
   그대로 유지된다. `--disable-hang-monitor` 플래그를 빼 뒀으므로 렌더러(페이지)
   자체가 멈추면 Chrome 본연의 "페이지 응답 없음" 안내가 먼저 뜬다.
+  `browser_hangwatch: false`면 감시 자체를 끈다. 사이에 브라우저가 죽고 새로 뜨면
+  (pid가 바뀌면) 실패 횟수는 0부터 다시 센다.
 - **스냅샷 잘라내기** — `wait_for`·`navigate_page` 응답에 자동으로 붙는 페이지
   스냅샷을 잘라 토큰을 아낀다(`browser_trim_snapshots`, 기본 `true`). 구조가
   필요하면 에이전트가 `take_snapshot`을 따로 부른다.

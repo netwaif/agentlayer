@@ -38,6 +38,10 @@ type HangOps struct {
 type hangState struct {
 	Fails  int       `json:"fails"`
 	LastAt time.Time `json:"last_at"`
+	// Pid — 실패를 센 브라우저의 pid. pid가 바뀌었다는 건 그 사이 브라우저가 죽고 다시
+	// 떴다는 뜻이라 예전 실패 횟수를 이어서 세면 안 된다(멀쩡한 새 브라우저를 2회 만에
+	// 죽일 수 있다). 다르면 0부터 다시 센다.
+	Pid int `json:"pid,omitempty"`
 }
 
 func hangStatePath(dir string) string { return filepath.Join(dir, "hangwatch.json") }
@@ -71,22 +75,36 @@ func HangWatch(dir string, pid int, ops HangOps, now time.Time) (bool, string) {
 		}
 		return false, ""
 	}
+	if s.Pid != 0 && s.Pid != pid {
+		s = hangState{} // 그 사이 브라우저가 바뀌었다 — 예전 실패는 이 프로세스의 것이 아니다
+	}
 	if s.Fails > 0 && now.Sub(s.LastAt) < hangMinGap {
 		return false, "" // 너무 이른 재판정은 세지 않는다(훅이 잦다)
 	}
 	s.Fails++
 	s.LastAt = now
+	s.Pid = pid
 	if s.Fails < hangFailsNeeded {
 		saveHangState(dir, s)
 		return false, ""
 	}
+	// Sample·Kill·Relaunch가 nil이면(부분만 채운 ops) 여기서 죽지 않게 각각 막는다.
 	diag := filepath.Join(dir, "hang", now.Format("20060102-150405")+".txt")
 	_ = os.MkdirAll(filepath.Dir(diag), 0o755)
-	if err := ops.Sample(pid, diag); err != nil {
+	if ops.Sample == nil {
+		diag = ""
+	} else if err := ops.Sample(pid, diag); err != nil {
 		diag = ""
 	}
-	_ = ops.Kill(pid)
-	relaunchErr := ops.Relaunch()
+	if ops.Kill != nil {
+		_ = ops.Kill(pid)
+	}
+	var relaunchErr error
+	if ops.Relaunch == nil {
+		relaunchErr = fmt.Errorf("재기동 수단 없음")
+	} else {
+		relaunchErr = ops.Relaunch()
+	}
 	saveHangState(dir, hangState{})
 	restarted := relaunchErr == nil
 	var msg string
@@ -218,7 +236,11 @@ func DefaultHangOps(stateDir string, port int, goos string, notify func(string))
 		},
 		Kill: func(pid int) error {
 			RemoveInstance(stateDir)
-			_ = syscall.Kill(-pid, syscall.SIGKILL) // 프로세스 그룹
+			// 프로세스 그룹 kill은 그 pid가 실제로 그룹 리더일 때만 — 아니면 우리를 띄운
+			// 셸·에이전트가 속한 남의 그룹을 통째로 죽일 수 있다(최종 리뷰 IMPORTANT 5).
+			if pgid, err := syscall.Getpgid(pid); err == nil && pgid == pid {
+				_ = syscall.Kill(-pid, syscall.SIGKILL)
+			}
 			return syscall.Kill(pid, syscall.SIGKILL)
 		},
 		Relaunch: func() error {

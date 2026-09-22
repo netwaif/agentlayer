@@ -3,6 +3,7 @@
 package browser
 
 import (
+	"bytes"
 	"encoding/json"
 	"os/exec"
 	"strings"
@@ -70,8 +71,12 @@ func RewriteNewPage(line []byte, browserInFront bool) []byte {
 	if browserInFront {
 		return line
 	}
+	// UseNumber: TrimSnapshot과 같은 이유 — id 등 숫자를 float64로 굴리면 2^53을 넘는
+	// JSON-RPC id의 자릿수가 뭉개져 클라이언트의 요청/응답 짝짓기가 깨진다.
 	var msg map[string]any
-	if json.Unmarshal(line, &msg) != nil || msg["method"] != "tools/call" {
+	dec := json.NewDecoder(bytes.NewReader(line))
+	dec.UseNumber()
+	if dec.Decode(&msg) != nil || msg["method"] != "tools/call" {
 		return line
 	}
 	params, _ := msg["params"].(map[string]any)

@@ -46,6 +46,9 @@ type Config struct {
 	BrowserControlWaitSeconds int `json:"browser_control_wait_seconds,omitempty"`
 	// BrowserTrimSnapshots — wait_for·navigate_page 응답의 자동 스냅샷을 잘라낼지. 기본 true.
 	BrowserTrimSnapshots *bool `json:"browser_trim_snapshots,omitempty"`
+	// BrowserHangwatch — 굳은 에이전트 브라우저를 감지해 강제 종료·재기동할지. 기본 true.
+	// false면 훅이 도는 정리 작업에서 행 감시 자체를 건너뛴다(lsof·CDP 프로브도 안 한다).
+	BrowserHangwatch *bool `json:"browser_hangwatch,omitempty"`
 }
 
 const (
@@ -125,6 +128,14 @@ func (c *Config) BrowserTrimSnapshotsEnabled() bool {
 		return true
 	}
 	return *c.BrowserTrimSnapshots
+}
+
+// BrowserHangwatchEnabled는 기본값(true)을 반영한 접근자.
+func (c *Config) BrowserHangwatchEnabled() bool {
+	if c.BrowserHangwatch == nil {
+		return true
+	}
+	return *c.BrowserHangwatch
 }
 
 // BrowserPortOrDefault는 browser_port를 반영한 디버깅 포트. 범위 밖(0 이하·65535 초과)은 기본값.
