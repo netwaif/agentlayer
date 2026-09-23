@@ -182,7 +182,9 @@ func TestLaunchArgs(t *testing.T) {
 	}
 	for _, need := range []string{"--user-data-dir=/p", "--remote-debugging-port=9222", "--test-type=gpu", "--disable-features=Translate,TranslateUI",
 		// 화면 굳음(2026-09-23) 재발 때 vsync 시계 로그가 남게 — 프로필의 chrome_debug.log
-		"--enable-logging", "--v=0", "--vmodule=display_link_mac=2,external_begin_frame_source_mac=2"} {
+		"--enable-logging", "--v=0", "--vmodule=display_link_mac=2,external_begin_frame_source_mac=2",
+		// 죽는 CVDisplayLink 대신 CADisplayLink(macOS 14+) — instance.go newLauncher 주석
+		"--enable-features=CADisplayLinkInGpu,CADisplayLinkInBrowser"} {
 		if !strings.Contains(args, need) {
 			t.Errorf("플래그에 %s가 있어야 한다", need)
 		}
