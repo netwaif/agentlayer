@@ -1,0 +1,172 @@
+<!doctype html>
+<!-- AgentLayer FX 데모 — content.js를 그대로 읽어 상태별 오버레이를 재생한다.
+     상태 전환은 프록시와 같은 방식으로 <html>의 data-agentlayer-owner(미러)·data-agentlayer-fx를 직접 쓴다.
+     AI 조작 중엔 방패가 페이지 클릭을 삼키므로 키보드(1~6, 0)로도 바꿀 수 있다.
+     알약 버튼(내가 조작하기·중단·AI에게 돌려주기)은 아래 미니 프록시가 data-agentlayer-request를 받아 반영한다. -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>AgentLayer FX 미리보기</title>
+<style>
+  :root { --ink:#1f1e1d; --ink2:#262624; --ink3:#2d2c2a; --terra:#d97757; --cream:#faf9f5; --gray:#a8a69d; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#f4f2ec; color:var(--ink); font:15px/1.7 -apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo",system-ui,sans-serif; }
+  header { display:flex; align-items:center; gap:14px; padding:14px 28px; background:var(--ink); color:var(--cream); }
+  header b { color:var(--terra); }
+  header input { flex:1; max-width:420px; padding:9px 14px; border-radius:10px; border:1px solid #3a3936; background:var(--ink3); color:var(--cream); font:inherit; }
+  header button { padding:9px 16px; border:0; border-radius:10px; background:var(--terra); color:#fff; font:600 14px/1 inherit; cursor:pointer; }
+  main { max-width:920px; margin:0 auto; padding:36px 28px 160px; }
+  h1 { font-size:30px; line-height:1.3; margin:0 0 8px; }
+  .lede { color:#5f5d57; margin:0 0 28px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:16px; margin:28px 0; }
+  .card { background:#fff; border-radius:14px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  .card .poster { height:110px; border-radius:10px; margin-bottom:10px; background:linear-gradient(135deg,#e9c9b6,#d97757); }
+  .card:nth-child(2) .poster { background:linear-gradient(135deg,#c9d6cf,#5f7f73); }
+  .card:nth-child(3) .poster { background:linear-gradient(135deg,#d7cfe6,#6c5f8c); }
+  .card:nth-child(4) .poster { background:linear-gradient(135deg,#efe0b8,#b98a3a); }
+  .card h3 { margin:0 0 4px; font-size:15px; }
+  .card p { margin:0; font-size:13px; color:#6b6962; }
+  #dock { position:fixed; right:16px; top:74px; z-index:10; width:236px; padding:14px; border-radius:14px; background:rgba(31,30,29,.94); color:var(--cream);
+          font-size:12px; line-height:1.5; box-shadow:0 10px 30px rgba(0,0,0,.3); }
+  #dock h4 { margin:0 0 8px; font-size:12px; color:var(--terra); letter-spacing:.04em; }
+  #dock button { display:flex; justify-content:space-between; width:100%; margin:3px 0; padding:7px 10px; border:0; border-radius:8px; background:var(--ink3); color:var(--cream);
+                 font:500 12px/1.3 inherit; text-align:left; cursor:pointer; }
+  #dock button.on { background:var(--terra); color:#fff; }
+  #dock button kbd { opacity:.6; font:inherit; }
+  #dock .hint { margin-top:8px; color:var(--gray); }
+  @media (max-width:1180px) { #dock { top:auto; bottom:110px; } }
+</style>
+</head>
+<body>
+<header>
+  <b>JustWatch</b>
+  <input id="q" placeholder="작품·배우 검색" autocomplete="off">
+  <button id="go" type="button">검색</button>
+</header>
+<main>
+  <h1>이번 주 스트리밍 신작</h1>
+  <p class="lede">넷플릭스·디즈니+·티빙·쿠팡플레이에 이번 주 새로 올라온 작품을 모았습니다. 오버레이가 켜져 있어도 이 문단이 편하게 읽혀야 합니다.</p>
+  <p>에이전트 브라우저는 AI가 조작하는 동안 화면 가장자리에 흐르는 테두리와 조준 브래킷을 띄우고, 페이지 가운데는 거의 그대로 둔다. 읽기 도구가 도는 동안엔 위에서 아래로 스캔 빔이 지나가고, 클릭·입력 도구 구간엔 AI 커서가 혜성 꼬리를 끌며 움직이다 누르는 곳에 빛이 터진다. 사용자가 「내가 조작하기」를 누르면 테두리가 안쪽으로 접히며 물러나고, 하단 알약만 남아 대기 중인 호출 수를 보여 준다.</p>
+  <div class="grid">
+    <div class="card"><div class="poster"></div><h3>더 베어 시즌 4</h3><p>디즈니+ · 드라마 · 9월 18일</p></div>
+    <div class="card"><div class="poster"></div><h3>오징어 게임: 더 챌린지 2</h3><p>넷플릭스 · 리얼리티 · 9월 19일</p></div>
+    <div class="card"><div class="poster"></div><h3>안드로메다 표류기</h3><p>티빙 · SF · 9월 20일</p></div>
+    <div class="card"><div class="poster"></div><h3>나의 여름 식탁</h3><p>쿠팡플레이 · 예능 · 9월 21일</p></div>
+  </div>
+  <p>다른 탭에서 AI가 일하는 동안 이 탭에는 화면 위쪽에 작은 캡슐 배너만 내려온다. 아무도 조작하지 않으면(idle) 오버레이는 전부 내려가고 페이지는 원래 모습 그대로다.</p>
+  <p style="height:600px"></p>
+</main>
+
+<div id="dock">
+  <h4>AGENTLAYER FX 미리보기</h4>
+  <button data-k="1">AI 조작 중 (읽기 도구)<kbd>1</kbd></button>
+  <button data-k="2">입력 도구 구간 (click)<kbd>2</kbd></button>
+  <button data-k="3">사용자가 제어 중<kbd>3</kbd></button>
+  <button data-k="4">중단됨<kbd>4</kbd></button>
+  <button data-k="5">다른 탭 (배너만)<kbd>5</kbd></button>
+  <button data-k="6">idle<kbd>6</kbd></button>
+  <button data-k="0">▶ 자동 순회<kbd>0</kbd></button>
+  <div class="hint">AI 조작 중엔 방패가 클릭을 막으니 키보드로 바꾸세요. 하단 알약 버튼도 동작합니다.</div>
+</div>
+
+<script src="content.js"></script>
+<script>
+(() => {
+  const h = document.documentElement;
+  const OWNER = 'data-agentlayer-owner', FX = 'data-agentlayer-fx', REQ = 'data-agentlayer-request';
+  const S = { owner: 'idle', stopped: 0, waiting: 0, target: 1, since: Date.now(),
+    label: 'JustWatch 신작 정리', title: 'JustWatch — 이번 주 스트리밍 신작' };
+  let gen = 0, tourTimer = 0, current = '6';
+
+  // 미러 형식(content.js 주석): owner:agent:label:since_ms:last_ms:stopped:waiting:target:ack_ms:title
+  const mirror = () => S.owner === 'idle' ? 'idle:::0:0:0:0:0:0:'
+    : `${S.owner}:claude-%1:${S.label}:${S.since}:${Date.now()}:${S.stopped}:${S.waiting}:${S.target}:0:${S.title}`;
+  const writeMirror = () => h.setAttribute(OWNER, mirror());
+  const fx = (v) => h.setAttribute(FX, v === 'off' ? `off:${Date.now()}` : `on:${v}:${Date.now()}`);
+  setInterval(writeMirror, 1000); // 프록시처럼 last_ms를 계속 갱신(20초 자체 만료 방지)
+
+  const sleep = (ms, g) => new Promise((res, rej) => setTimeout(() => (g === gen ? res() : rej('cancel')), ms));
+  let mx = innerWidth * 0.7, my = innerHeight * 0.6;
+  const fire = (type, x, y) => document.dispatchEvent(new MouseEvent(type, { clientX: x, clientY: y, bubbles: true }));
+  const glide = async (tx, ty, ms, g) => {
+    const sx = mx, sy = my, n = Math.max(8, Math.round(ms / 16));
+    for (let i = 1; i <= n; i++) {
+      const t = i / n, e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      mx = sx + (tx - sx) * e + Math.sin(t * Math.PI) * 30; my = sy + (ty - sy) * e - Math.sin(t * Math.PI) * 24;
+      fire('mousemove', mx, my);
+      await sleep(16, g);
+    }
+  };
+  const center = (el) => { const b = el.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; };
+
+  const scenarios = {
+    async read(g) {
+      const tools = [['take_snapshot', 2600], ['navigate_page', 1600], ['evaluate_script', 1800], ['take_screenshot', 2200], ['wait_for', 1500]];
+      for (let i = 0; ; i = (i + 1) % tools.length) {
+        fx(tools[i][0]); await sleep(tools[i][1], g);
+        fx('off'); await sleep(900, g);
+      }
+    },
+    async input(g) {
+      const q = document.getElementById('q'), go = document.getElementById('go');
+      const words = ['오징어 게임', '더 베어', '안드로메다'];
+      for (let k = 0; ; k++) {
+        fx('click');
+        let [x, y] = center(q); await glide(x - 60, y, 750, g);
+        fire('mousedown', mx, my); fire('mouseup', mx, my); q.focus(); q.value = '';
+        await sleep(350, g);
+        fx('type_text');
+        for (const ch of words[k % words.length]) { q.value += ch; await sleep(95, g); }
+        await sleep(300, g);
+        fx('click');
+        [x, y] = center(go); await glide(x, y, 600, g);
+        fire('mousedown', mx, my); fire('mouseup', mx, my);
+        await sleep(500, g);
+        const cards = document.querySelectorAll('.card');
+        [x, y] = center(cards[k % cards.length]); fx('hover'); await glide(x, y, 800, g);
+        fire('mousedown', mx, my);
+        fx('off'); await sleep(1600, g);
+      }
+    },
+    async user(g) { for (;;) { await sleep(2200, g); S.waiting = (S.waiting + 1) % 4; writeMirror(); } },
+  };
+
+  const set = (k) => {
+    gen++; current = k;
+    const g = gen;
+    document.querySelectorAll('#dock button').forEach(b => b.classList.toggle('on', b.dataset.k === k));
+    if (h.getAttribute(FX)?.startsWith('on:')) fx('off');
+    S.stopped = 0; S.waiting = 0; S.target = 1; document.getElementById('q').value = '';
+    if (k === '1' || k === '2') { if (S.owner !== 'agent') S.since = Date.now(); S.owner = 'agent'; }
+    if (k === '3') { S.owner = 'user'; S.waiting = 1; }
+    if (k === '4') { S.owner = 'user'; S.stopped = 1; }
+    if (k === '5') { S.owner = 'agent'; S.target = 0; }
+    if (k === '6') S.owner = 'idle';
+    writeMirror();
+    const run = { 1: 'read', 2: 'input', 3: 'user' }[k];
+    if (run) scenarios[run](g).catch(() => {});
+  };
+
+  const TOUR = [['1', 7000], ['2', 9000], ['3', 5000], ['1', 5000], ['5', 5000], ['4', 4000], ['6', 3500]];
+  const tour = (i = 0) => { const [k, ms] = TOUR[i % TOUR.length]; set(k); tourTimer = setTimeout(() => tour(i + 1), ms); };
+  const choose = (k) => {
+    clearTimeout(tourTimer); tourTimer = 0;
+    if (k === '0') tour(); else set(k);
+  };
+  document.querySelectorAll('#dock button').forEach(b => b.addEventListener('click', () => choose(b.dataset.k)));
+  addEventListener('keydown', (e) => { if (e.target === document.getElementById('q')) return; if ('0123456'.includes(e.key) && e.key) choose(e.key); });
+
+  // 미니 프록시: 알약 버튼이 쓴 요청을 받아 소유권을 바꾼다(실제 프록시는 fx/sync.js로 회수·ack).
+  new MutationObserver(() => {
+    const r = h.getAttribute(REQ); if (!r) return;
+    h.removeAttribute(REQ);
+    clearTimeout(tourTimer); tourTimer = 0;
+    const kind = r.split(':')[0];
+    set(kind === 'user' ? '3' : kind === 'stop' ? '4' : '1');
+  }).observe(h, { attributes: true, attributeFilter: [REQ] });
+
+  set('6');
+})();
+</script>
+</body>
+</html>

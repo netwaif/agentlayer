@@ -240,6 +240,75 @@ const newHost = hostEl();
 assert.ok(newHost, 'render 후 host가 다시 붙어야 함');
 assert.notEqual(newHost, oldHost, '이전 host를 재사용하지 않고 새로 만들어야 한다');
 
+// ---- 연출 상태 속성: CSS가 반응하는 stage의 data-mode/data-phase/data-stopped와 일회성 효과
+const byClass = (node, cls, acc = []) => {
+  if (!node) return acc;
+  if ((node.attrs?.class || '').split(' ').includes(cls)) acc.push(node);
+  (node.children || []).forEach(c => byClass(c, cls, acc));
+  return acc;
+};
+const stageEl = () => byClass(hostEl(), 'al-stage')[0];
+const fxlEl = () => byClass(hostEl(), 'al-fxl')[0];
+assert.ok(stageEl(), 'host 안에 stage가 있어야 한다');
+assert.equal(stageEl().getAttribute('data-mode'), 'idle');
+
+html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999100:0:0:1:0:제목');
+assert.equal(stageEl().getAttribute('data-mode'), 'agent');
+assert.equal(stageEl().getAttribute('data-phase'), 'wait', '도구 호출 사이엔 wait');
+assert.equal(byClass(fxlEl(), 'al-boot').length, 1, 'idle→agent 전환엔 부트 스윕이 한 번 재생된다');
+__advance(1300);
+assert.equal(byClass(fxlEl(), 'al-boot').length, 0, '부트 스윕은 끝나면 스스로 떨어진다');
+
+// 멱등: 같은 상태로 미러가 다시 써지면 stage 속성을 다시 쓰지 않는다
+let stageWrites = 0;
+const origSet = stageEl().setAttribute;
+stageEl().setAttribute = (k, v) => { stageWrites++; origSet(k, v); };
+html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999101:0:0:1:0:제목');
+fx.render();
+assert.equal(stageWrites, 0, '값이 안 바뀌면 stage 속성도 다시 쓰지 않는다');
+stageEl().setAttribute = origSet;
+
+html.setAttribute('data-agentlayer-fx', 'on:take_snapshot:10');
+assert.equal(stageEl().getAttribute('data-phase'), 'busy', '읽기 도구 구간은 busy(스캔 빔)');
+html.setAttribute('data-agentlayer-fx', 'on:click:11');
+assert.equal(stageEl().getAttribute('data-phase'), 'input', '입력 도구 구간은 input');
+
+// 커서 꼬리: 커서와 같은 좌표를 받는다(전이 시간 차로 뒤처지는 건 CSS 몫)
+window.listeners.mousemove.forEach(cb => cb({ clientX: 120, clientY: 140 }));
+const tailEls = byClass(hostEl(), 'al-tail');
+assert.equal(tailEls.length, 3);
+assert.equal(byClass(hostEl(), 'al-cursor')[0].style.transform, 'translate(120px,140px)');
+tailEls.forEach(t => assert.equal(t.style.transform, 'translate(120px,140px)', '꼬리도 같은 목표 좌표로 간다'));
+assert.equal(byClass(hostEl(), 'al-pointer')[0].style.opacity, '1');
+
+// 클릭 버스트: mousedown마다 하나씩 생겼다가 사라진다
+window.listeners.mousedown.forEach(cb => cb({ clientX: 120, clientY: 140 }));
+const bursts = byClass(fxlEl(), 'al-burst');
+assert.equal(bursts.length, 1, 'mousedown이면 클릭 버스트가 생긴다');
+assert.equal(bursts[0].style.left, '120px');
+__advance(1000);
+assert.equal(byClass(fxlEl(), 'al-burst').length, 0, '버스트는 끝나면 떨어진다');
+
+// agent→user: 테두리 해제 연출, 모드 전환, 중단 표시
+html.setAttribute('data-agentlayer-owner', 'user:claude-%1:검색:1000:999100:1:0:1:0:제목');
+assert.equal(stageEl().getAttribute('data-mode'), 'user');
+assert.equal(stageEl().getAttribute('data-phase'), '');
+assert.equal(stageEl().getAttribute('data-stopped'), '1');
+assert.equal(byClass(fxlEl(), 'al-release').length, 1, 'agent를 떠날 땐 해제 연출');
+html.setAttribute('data-agentlayer-fx', 'off:12');
+__advance(3000);
+
+// 다른 탭 배너, idle
+html.setAttribute('data-agentlayer-owner', 'agent:claude-%1:검색:1000:999100:0:0:0:0:JustWatch 신작');
+assert.equal(stageEl().getAttribute('data-mode'), 'other');
+assert.equal(byClass(hostEl(), 'al-banner-text')[0].textContent, 'AI가 다른 탭에서 작업 중 · JustWatch 신작');
+html.setAttribute('data-agentlayer-owner', 'idle:::0:0:0:0:0:0:');
+assert.equal(stageEl().getAttribute('data-mode'), 'idle');
+assert.equal(byClass(fxlEl(), 'al-boot').length, 0, 'agent가 아닌 전환엔 부트 스윕이 없다');
+
+// 파일 크기 상한(콘텐츠 스크립트는 모든 페이지에 주입된다)
+assert.ok(Buffer.byteLength(src) <= 40 * 1024, `content.js는 40KB 이하여야 함(현재 ${Buffer.byteLength(src)}B)`);
+
 // ---- fx/sync.js — 프록시가 탭마다 한 번 Eval하는 스크립트(미러 쓰기 + fx 신호 + 요청 회수).
 // ack 규칙(최종 리뷰 IMPORTANT 2): 읽으면서 지우지 않는다 — ack된 요청만 지우고, ack보다
 // 새 요청만 돌려준다. 그래야 예산을 넘겨 버려진 탭의 클릭이 DOM에서만 사라지는 일이 없다.
