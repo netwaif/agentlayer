@@ -107,3 +107,32 @@ func TestRewriteNewPageKeepsBigID(t *testing.T) {
 		t.Fatalf("background는 그대로 채워야 함: %s (%v)", out, err)
 	}
 }
+
+// new_page 앞 탭 열기(v1.8.3): 요청 전에 잰 앞 앱을 탭이 뜬 뒤 되돌린다.
+func TestRestoreFrontAfterWaitsForBrowserThenActivatesPrev(t *testing.T) {
+	old := frontSleep
+	frontSleep = func(time.Duration) {}
+	t.Cleanup(func() { frontSleep = old })
+	calls, activated := 0, ""
+	ops := FrontOps{
+		Frontmost: func() (string, error) {
+			calls++
+			if calls < 3 {
+				return "iTerm2", nil
+			}
+			return EngineAppName, nil
+		},
+		Activate:  func(n string) error { activated = n; return nil },
+		Supported: true,
+	}
+	RestoreFrontAfter(ops, "iTerm2")
+	if activated != "iTerm2" {
+		t.Fatalf("이전 앞 앱을 되돌려야 한다: %q", activated)
+	}
+	activated = ""
+	RestoreFrontAfter(ops, EngineAppName)
+	RestoreFrontAfter(ops, "")
+	if activated != "" {
+		t.Fatal("브라우저 자신이거나 빈 값이면 아무것도 안 한다")
+	}
+}

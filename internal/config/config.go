@@ -37,6 +37,8 @@ type Config struct {
 	BrowserPort int `json:"browser_port,omitempty"`
 	// 에이전트가 브라우저를 조작할 때 AI 커서·테두리 글로우를 그린다. 기본 켜짐.
 	BrowserFx *bool `json:"browser_fx,omitempty"`
+	// new_page를 숨은(background) 탭으로 열지. 기본 꺼짐 — BrowserBackgroundTabsEnabled 주석.
+	BrowserBackgroundTabs *bool `json:"browser_background_tabs,omitempty"`
 	// AI 회사 루트(tasks/·runtime/inbox/가 있는 폴더). 비면 등록된 업무의 inbox 경로에서 유추한다.
 	CompanyRoot string `json:"company_root,omitempty"`
 	// 업무 보드에서 ready·blocked 카드가 이 시간 넘게 방치되면 ⚠ (Go duration, 기본 30m, 하한 1m).
@@ -93,6 +95,18 @@ func (c *Config) BrowserFxEnabled() bool {
 		return true
 	}
 	return *c.BrowserFx
+}
+
+// BrowserBackgroundTabsEnabled — new_page를 숨은 탭으로 열지(기본 false).
+//
+// v1.7.0의 "배경 동작"은 브라우저가 앞 앱이 아니면 new_page를 background 탭으로 바꿨다.
+// 그런데 사람이 화면을 보고 있어도(촬영·감시) 에이전트의 작업은 숨은 탭에서 벌어져
+// 아무것도 안 보이고, 숨은 탭은 requestAnimationFrame이 멈춰 chrome-devtools-mcp의
+// click이 "did not become interactive"로 줄줄이 실패했다(2026-09-24 Codex 촬영 사고).
+// 그래서 기본은 앞 탭이다. 앱 자체가 앞으로 튀어나오지 않게 하는 건 기동 때 앞 앱
+// 복원(front.go RestoreFront)이 따로 맡는다.
+func (c *Config) BrowserBackgroundTabsEnabled() bool {
+	return c.BrowserBackgroundTabs != nil && *c.BrowserBackgroundTabs
 }
 
 const (

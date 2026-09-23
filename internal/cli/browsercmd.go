@@ -881,9 +881,18 @@ func browserMCPServe() error {
 				}
 			}
 			if !handled {
+				// 숨은 탭으로 열기는 설정으로만 켠다(config.go BrowserBackgroundTabsEnabled 주석 —
+				// 기본은 앞 탭: 사람이 보는 화면에서 작업이 벌어져야 하고, 숨은 탭은 rAF가 멈춰
+				// click이 줄줄이 타임아웃됐다. 2026-09-24 Codex 촬영 사고).
 				if frontOps.Supported && toolCallName(line) == "new_page" {
 					front, _ := frontOps.Frontmost()
-					line = browser.RewriteNewPage(line, front == browser.EngineAppName)
+					if cfg.BrowserBackgroundTabsEnabled() {
+						line = browser.RewriteNewPage(line, front == browser.EngineAppName)
+					} else {
+						// 앞 탭으로 열면 Chrome이 앱을 앞으로 끌어온다 — 요청 전에 잰 앞 앱을
+						// 탭이 뜬 뒤 되돌린다(front.go RestoreFrontAfter). 탭은 보이고 앱은 안 튄다.
+						go browser.RestoreFrontAfter(frontOps, front)
+					}
 				}
 				fx.Flush() // 미러 왕복에 못 실렸으면 여기서 따로 — 도구가 손대기 전에 신호가 먹어야 한다
 				if werr := writeServer(roots.FromClient(line)); werr != nil {

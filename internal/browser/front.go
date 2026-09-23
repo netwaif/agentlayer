@@ -56,6 +56,18 @@ func RestoreFront(ops FrontOps, launch func() error) error {
 	if err := launch(); err != nil {
 		return err
 	}
+	RestoreFrontAfter(ops, prev)
+	return nil
+}
+
+// RestoreFrontAfter — 브라우저가 앞으로 올 때까지(최대 3초, 0.5초 간격) 기다렸다가 prev를
+// 다시 앞으로 보낸다. new_page에도 쓴다: 앞 탭으로 열면(v1.8.3, 숨은 탭 폐기) Chrome이
+// 앱을 앞으로 끌어오므로, 요청을 보내기 전에 잰 앞 앱을 응답 뒤 되돌려 "탭은 보이되 앱은
+// 튀어나오지 않게" 한다. prev가 비었거나 브라우저 자신이면 아무것도 안 한다.
+func RestoreFrontAfter(ops FrontOps, prev string) {
+	if prev == "" || prev == EngineAppName {
+		return
+	}
 	for i := 0; i < 6; i++ {
 		if cur, err := ops.Frontmost(); err == nil && cur == EngineAppName {
 			break
@@ -63,7 +75,6 @@ func RestoreFront(ops FrontOps, launch func() error) error {
 		frontSleep(500 * time.Millisecond)
 	}
 	_ = ops.Activate(prev)
-	return nil
 }
 
 // RewriteNewPage — new_page 호출에 background가 없고 브라우저가 앞이 아니면 background:true.
