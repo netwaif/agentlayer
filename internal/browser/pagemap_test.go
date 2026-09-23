@@ -135,3 +135,29 @@ func TestPageMapUnparsedLineTracking(t *testing.T) {
 		t.Fatalf("Unparsed() = %d, want 1", m.Unparsed())
 	}
 }
+
+// "Page navigated to <url>." 응답으로 한 페이지의 url만 갱신한다(SetURL 주석).
+func TestNavigatedURLAndSetURL(t *testing.T) {
+	var m PageMap
+	m.Update("## Pages\n1: 새 탭 (chrome://new-tab-page/)\n2: Wikipedia (https://www.wikipedia.org/) [selected]\n")
+	u, ok := NavigatedURL("Successfully clicked on the element\nPage navigated to https://ko.wikipedia.org/wiki/%EC%9D%B8.\n")
+	if !ok || u != "https://ko.wikipedia.org/wiki/%EC%9D%B8" {
+		t.Fatalf("이동 url을 뽑아야 한다: %q %v", u, ok)
+	}
+	if _, ok := NavigatedURL("Successfully clicked on the element"); ok {
+		t.Fatal("문구가 없으면 false")
+	}
+	if _, ok := NavigatedURL("Page navigated to chrome://newtab."); ok {
+		t.Fatal("웹 url이 아니면 false")
+	}
+	m.SetURL(2, u)
+	if got, _ := m.URLFor(2); got != u {
+		t.Fatalf("URLFor(2)=%q", got)
+	}
+	if m.TitleFor(2) != "Wikipedia" {
+		t.Fatalf("제목은 그대로여야 한다: %q", m.TitleFor(2))
+	}
+	if got, _ := m.URLFor(1); got != "chrome://new-tab-page/" {
+		t.Fatalf("다른 페이지는 그대로: %q", got)
+	}
+}

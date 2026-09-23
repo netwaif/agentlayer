@@ -824,8 +824,17 @@ func browserMCPServe() error {
 				}
 				// pm 갱신은 클라이언트가 이 줄을 받고 바로 다음 tools/call을 보낼 수 있으므로
 				// stdout에 내보내기 전에 끝내 둔다 — 그래야 그 다음 호출의 pageId→url 조회가 최신이다.
-				pm.Update(browser.ResultText(line))
+				text := browser.ResultText(line)
+				pm.Update(text)
 				tool := fx.OnServerLine(line)
+				// 클릭·입력으로 페이지가 이동하면 "## Pages" 목록 없이 "Page navigated to
+				// <url>."만 온다 — 그 pageId의 url을 바로 고쳐 다음 호출의 작업 탭 판정이
+				// 옛 주소에 묶이지 않게 한다(pagemap.go SetURL 주석, 2026-09-24 실측).
+				if page, ok := fx.popPage(line); ok {
+					if u, ok := browser.NavigatedURL(text); ok {
+						pm.SetURL(page, u)
+					}
+				}
 				if fwd != nil {
 					// 호출 효율(trim.go): wait_for·navigate_page 응답에 딸려오는 전체 페이지
 					// 스냅샷을 잘라낸다(스펙 5절, 실측 1만 5천 토큰/회). 기본 켜짐.
@@ -910,6 +919,10 @@ type fxSignaler struct {
 	pendingTool string
 	pendingOn   bool
 	pendingSent bool // 이미 페이지에 써졌는지 — 게이트가 호출을 막으면 off로 되돌려야 한다
+	// pageOf — 요청 id → 그 호출의 pageId. 응답의 "Page navigated to <url>."을 PageMap의
+	// 어느 페이지에 반영할지 알기 위해서다(pagemap.go SetURL 주석). enabled와 무관하게 기록.
+	pmu    sync.Mutex
+	pageOf map[string]int
 }
 
 func newFxSignaler(enabled bool, connect func() (*rod.Browser, error)) *fxSignaler {
@@ -921,6 +934,18 @@ func newFxSignaler(enabled bool, connect func() (*rod.Browser, error)) *fxSignal
 // 않고 "장전"만 한다 — 게이트가 어차피 탭마다 미러를 쓰므로 그 왕복에 얹는다.
 func (f *fxSignaler) OnClientLine(line []byte) {
 	tool, ok := f.tracker.Start(line)
+	if ok {
+		if page, has := browser.PageIDFromCall(line); has {
+			if id := browser.RPCID(line); id != "" {
+				f.pmu.Lock()
+				if f.pageOf == nil {
+					f.pageOf = map[string]int{}
+				}
+				f.pageOf[id] = page
+				f.pmu.Unlock()
+			}
+		}
+	}
 	if !f.enabled || !ok {
 		return
 	}
@@ -957,6 +982,7 @@ func (f *fxSignaler) Flush() {
 // 안 와 FX 종료 신호가 막힌다), 이미 켠 신호는 꺼 준다.
 func (f *fxSignaler) Cancel(line []byte) {
 	f.tracker.Cancel(line)
+	f.popPage(line)
 	f.tmu.Lock()
 	sent := f.pendingSent
 	f.pendingOn, f.pendingSent = false, false
@@ -974,6 +1000,22 @@ func (f *fxSignaler) OnServerLine(line []byte) (tool string) {
 		f.signal("", false)
 	}
 	return tool
+}
+
+// popPage — 이 응답이 pageId를 지정한 호출의 것이면 그 pageId(한 번만). 게이트가 막아
+// 서버로 안 나간 호출의 항목은 Cancel이 지운다.
+func (f *fxSignaler) popPage(line []byte) (int, bool) {
+	id := browser.RPCID(line)
+	if id == "" {
+		return 0, false
+	}
+	f.pmu.Lock()
+	defer f.pmu.Unlock()
+	page, ok := f.pageOf[id]
+	if ok {
+		delete(f.pageOf, id)
+	}
+	return page, ok
 }
 
 func (f *fxSignaler) signal(tool string, on bool) {

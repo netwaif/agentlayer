@@ -533,3 +533,20 @@ func TestParseCookiesExport(t *testing.T) {
 		}
 	}
 }
+
+// 응답을 그 호출의 pageId와 짝짓는다 — "Page navigated to" 반영용(browsercmd.go popPage).
+func TestFxSignalerPopPage(t *testing.T) {
+	f := newFxSignaler(false, func() (*rod.Browser, error) { return nil, nil })
+	f.OnClientLine([]byte(`{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"click","arguments":{"pageId":3,"uid":"1_2"}}}` + "\n"))
+	f.OnClientLine([]byte(`{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"list_pages","arguments":{}}}` + "\n"))
+	if _, ok := f.popPage([]byte(`{"jsonrpc":"2.0","id":8,"result":{}}`)); ok {
+		t.Fatal("pageId 없는 호출의 응답은 false")
+	}
+	page, ok := f.popPage([]byte(`{"jsonrpc":"2.0","id":7,"result":{}}`))
+	if !ok || page != 3 {
+		t.Fatalf("id 7 → pageId 3이어야 한다: %d %v", page, ok)
+	}
+	if _, ok := f.popPage([]byte(`{"jsonrpc":"2.0","id":7,"result":{}}`)); ok {
+		t.Fatal("한 번 꺼내면 비어야 한다")
+	}
+}

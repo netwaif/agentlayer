@@ -121,10 +121,54 @@ func (m *PageMap) Selected() (url, title string, ok bool) {
 	return u, m.titles[m.selected], ok
 }
 
+// SetURL — 한 페이지의 url만 바꾼다(제목은 그대로). 클릭·입력으로 페이지가 이동하면
+// 서버 응답에 "Page navigated to <url>."이 실리는데 "## Pages" 목록은 안 오므로, 그
+// 문구로 표를 바로 고쳐야 다음 호출의 작업 탭 판정(url 일치)이 옛 주소에 묶이지 않는다.
+// 교차 사이트 이동에서 Chrome이 탭의 타깃 id를 바꾸는 경우(프리렌더 활성화 등)엔
+// fx.go의 기억한 id도 못 쓰므로 이 url 갱신이 유일한 실마리다(2026-09-24 드릴 실측).
+func (m *PageMap) SetURL(id int, url string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.urls == nil {
+		m.urls = map[int]string{}
+	}
+	m.urls[id] = url
+}
+
+// NavigatedURL — 도구 응답 본문의 "Page navigated to <url>." 문구에서 url을 뽑는다.
+func NavigatedURL(text string) (string, bool) {
+	const marker = "Page navigated to "
+	i := strings.Index(text, marker)
+	if i < 0 {
+		return "", false
+	}
+	rest := text[i+len(marker):]
+	if j := strings.IndexAny(rest, " \n\r\t"); j >= 0 {
+		rest = rest[:j]
+	}
+	rest = strings.TrimSuffix(rest, ".")
+	if !IsWebURL(rest) {
+		return "", false
+	}
+	return rest, true
+}
+
 func (m *PageMap) TitleFor(id int) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.titles[id]
+}
+
+// RPCID — JSON-RPC 줄의 id를 원문 그대로(숫자든 문자열이든) 돌려준다. 없으면 "".
+// 요청과 응답을 짝지어 "이 응답이 어느 pageId를 향한 호출의 것인지" 알 때 쓴다.
+func RPCID(line []byte) string {
+	var msg struct {
+		ID json.RawMessage `json:"id"`
+	}
+	if json.Unmarshal(line, &msg) != nil {
+		return ""
+	}
+	return string(msg.ID)
 }
 
 // PageIDFromCall — tools/call의 params.arguments.pageId. 없으면 false.

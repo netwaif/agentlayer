@@ -208,6 +208,58 @@ func webTargets(b *rod.Browser, targetURL string) ([]webTarget, error) {
 	return out, nil
 }
 
+// stickyTarget — 작업 탭을 CDP 타깃 id로 기억한다.
+//
+// 프록시는 작업 탭을 PageMap의 url(마지막 "## Pages" 목록)로만 안다. 그런데 클릭으로
+// 페이지가 이동하거나 SPA가 pushState로 주소를 바꾸면 그 탭의 실제 url은 바뀌는데
+// PageMap은 다음 탭 목록 응답까지 옛 url을 들고 있다. 그동안 url 일치가 실패해
+// 정작 조작 중인 탭에 "AI가 다른 탭에서 작업 중" 띠가 뜨고 방패·커서·알약은 빠졌다
+// (2026-09-23 위키백과 검색 클릭·CGV 예매 SPA에서 실측). 그래서 url이 한 번 일치한
+// 타깃의 id를 기억해 두고, url 일치가 없으면 그 타깃이 아직 살아 있는 한 그대로
+// 작업 탭으로 본다. 에이전트가 다른 탭으로 옮기면 새 목록의 url이 그 탭과 일치해
+// 기억이 갱신된다.
+type stickyTarget struct {
+	mu sync.Mutex
+	id proto.TargetTargetID
+}
+
+var sticky stickyTarget
+
+// ResetStickyTarget — 테스트용. 기억한 작업 탭을 지운다.
+func ResetStickyTarget() { sticky.mu.Lock(); sticky.id = ""; sticky.mu.Unlock() }
+
+// resolveTarget — ts 중 작업 탭의 타깃 id. targetURL이 비었으면("", false): 미상.
+// 규칙: ① url이 일치하는 탭(여럿이면 기억한 id 우선, 없으면 첫 번째) → 기억 갱신
+// ② 일치가 없으면 기억한 id가 ts에 살아 있을 때 그것 ③ 둘 다 아니면 없음.
+func resolveTarget(ts []webTarget, targetURL string) (proto.TargetTargetID, bool) {
+	if targetURL == "" {
+		return "", false
+	}
+	sticky.mu.Lock()
+	defer sticky.mu.Unlock()
+	var first proto.TargetTargetID
+	alive := false
+	for _, t := range ts {
+		if t.id == sticky.id {
+			alive = true
+			if t.url == targetURL {
+				return t.id, true
+			}
+		}
+		if t.url == targetURL && first == "" {
+			first = t.id
+		}
+	}
+	if first != "" {
+		sticky.id = first
+		return first, true
+	}
+	if alive {
+		return sticky.id, true
+	}
+	return "", false
+}
+
 // evalTabs — 탭마다 병렬로 핸들을 얻어 fn을 돌린다. 전체 마감은 fxBudget 하나,
 // 각 Eval도 fxBudget으로 묶는다(굳은 탭이 예산을 넘겨도 호출자는 제때 돌아온다).
 func evalTabs(b *rod.Browser, ts []webTarget, fn func(p *rod.Page, t webTarget)) {
@@ -225,9 +277,20 @@ func evalTabs(b *rod.Browser, ts []webTarget, fn func(p *rod.Page, t webTarget))
 // 탭마다 병렬로 쓰고 fxBudget 하나로 전체를 마감 — 느린 탭 때문에 도구 호출이 밀리지 않는다.
 // 실패는 효과 누락일 뿐이라 삼킨다.
 func SignalFx(b *rod.Browser, tool string, on bool, targetURL string) error {
-	ts, err := webTargets(b, targetURL)
+	ts, err := webTargets(b, "")
 	if err != nil {
 		return err
+	}
+	// 작업 탭이 특정되면 그 탭에만 — url 일치가 깨진 동안(페이지 이동 직후)에도
+	// 기억한 타깃을 쓴다(stickyTarget 주석). 미상이면 모든 탭.
+	if id, ok := resolveTarget(ts, targetURL); ok {
+		only := ts[:0:0]
+		for _, t := range ts {
+			if t.id == id {
+				only = append(only, t)
+			}
+		}
+		ts = only
 	}
 	v := fxValue(tool, on)
 	evalTabs(b, ts, func(p *rod.Page, _ webTarget) {
@@ -282,10 +345,12 @@ func SyncTabs(b *rod.Browser, c Control, targetURL, targetTitle, fxOn string) ([
 		return nil, err
 	}
 	var col reqCollector
+	// 작업 탭 판정은 url 일치가 아니라 resolveTarget(타깃 id, 이동 뒤에도 유지)으로.
+	targetID, hasTarget := resolveTarget(ts, targetURL)
 	evalTabs(b, ts, func(p *rod.Page, t webTarget) {
-		target := targetURL != "" && t.url == targetURL
+		target := hasTarget && t.id == targetID
 		fx := ""
-		if fxOn != "" && (target || targetURL == "") {
+		if fxOn != "" && (target || !hasTarget) {
 			fx = fxOn
 		}
 		res, err := p.Timeout(fxBudget).Eval(syncJS,
