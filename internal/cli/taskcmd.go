@@ -13,6 +13,7 @@ import (
 
 	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/config"
+	"github.com/netwaif/agentlayer/internal/remote"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
 )
@@ -21,7 +22,8 @@ const taskUsage = `사용법:
   agentlayer task assign <업무ID> <세션[:창]> --inbox <폴더> [--root <회사루트>] [--replace]
   agentlayer task list [--json]
   agentlayer task done <업무ID> [--root <회사루트>]
-  agentlayer task watch <inbox> [--once] [--interval 200ms]`
+  agentlayer task watch <inbox> [--once] [--interval 200ms]
+  agentlayer task message [--task <업무ID>] <본문|->   # 직원 pane에서: 총괄에게 편지(MESSAGE)`
 
 // RunTask — 업무 ↔ 세션 등록과 수신함 감시. 보고 자체는 hook이 쓴다(main.go).
 func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string, args []string, now time.Time) error {
@@ -36,7 +38,7 @@ func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string,
 	case "done":
 		return taskDone(w, st, stateDir, args[1:], now)
 	case "watch":
-		return taskWatch(ctx, w, args[1:])
+		return taskWatch(ctx, w, st, stateDir, args[1:])
 	default:
 		return fmt.Errorf("알 수 없는 task 명령: %s\n%s", args[0], taskUsage)
 	}
@@ -65,6 +67,7 @@ func taskDone(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	}
 	// 등록에서 루트·inbox를 얻는다(있으면). 없으면 --root가 있어야 보드를 닫을 수 있다.
 	inbox, found := "", false
+	var remoteRef *task.RemoteRef
 	list, err := task.List(stateDir)
 	if err != nil {
 		return err
@@ -73,6 +76,9 @@ func taskDone(w io.Writer, st *state.Store, stateDir string, args []string, now 
 		if as.TaskID == id {
 			found = true
 			inbox = as.Inbox
+			if as.Remote != nil && as.Remote.Handle != "" {
+				remoteRef = as.Remote
+			}
 			if root == "" {
 				if r, _ := as.BoardRootID(); r != "" {
 					root = r
@@ -109,6 +115,16 @@ func taskDone(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	ready, err := task.MarkDone(root, id, inbox, now)
 	if err != nil {
 		return err
+	}
+	// 원격 직원이면 실행기 쪽 카드도 닫는다(archive). 실패는 경고만 — 보드·등록 해제는 그대로 간다.
+	if remoteRef != nil {
+		if r, ok, _ := remote.Load(stateDir, remoteRef.Name); ok {
+			if ad, err := OpenRemote(*r, stateDir); err == nil {
+				if err := ad.Finish(context.Background(), remoteRef.Handle); err != nil {
+					fmt.Fprintln(w, "  ⚠ 원격 카드 마감(archive) 실패:", err)
+				}
+			}
+		}
 	}
 	if found {
 		if _, err := task.Done(stateDir, id); err != nil {
@@ -200,6 +216,9 @@ func taskAssign(w io.Writer, st *state.Store, stateDir string, args []string, no
 			return err
 		}
 	}
+	if r, ok, err := remote.Load(stateDir, pos[1]); err == nil && ok {
+		return taskAssignRemote(w, st, stateDir, r, pos[0], abs, root, replace, now)
+	}
 	agents, err := st.List()
 	if err != nil {
 		return err
@@ -267,6 +286,14 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	var rows []row
 	for _, as := range list {
 		s := "gone"
+		if as.Remote != nil {
+			s = string(state.StateIdle)
+			if as.Remote.LastState != "" {
+				s = string(as.Remote.LastState)
+			}
+			rows = append(rows, row{as, s})
+			continue
+		}
 		if a, ok := byID[as.AgentID]; ok {
 			if a.Tmux.Session != as.Session || a.Tmux.PaneID != as.Pane {
 				s = "stale" // 에이전트 ID는 살아 있지만 세션·pane이 등록 당시와 다름(재사용)
@@ -289,6 +316,13 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	fmt.Fprintln(w, PadRight("업무ID", 24)+PadRight("세션", 30)+PadRight("상태", 8)+"경과")
 	for _, r := range rows {
 		label := targetLabel(r.Session, r.Window)
+		if r.Remote != nil {
+			kind := "remote"
+			if rr, ok, _ := remote.Load(stateDir, r.Remote.Name); ok {
+				kind = rr.Kind
+			}
+			label = r.Session + " (" + kind + ")"
+		}
 		fmt.Fprintln(w, PadRight(r.TaskID, 24)+PadRight(label, 30)+PadRight(StateWord(state.AgentState(r.State)), 8)+Since(r.AssignedAt, now))
 	}
 	return nil
@@ -323,7 +357,7 @@ func StateWord(s state.AgentState) string {
 	return string(s)
 }
 
-func taskWatch(ctx context.Context, w io.Writer, args []string) error {
+func taskWatch(ctx context.Context, w io.Writer, st *state.Store, stateDir string, args []string) error {
 	if len(args) == 0 {
 		return errors.New(taskUsage)
 	}
@@ -350,10 +384,70 @@ func taskWatch(ctx context.Context, w io.Writer, args []string) error {
 	if err != nil {
 		return err
 	}
+	// 원격 직원 폴링은 감시가 켜져 있는 동안만 돈다(데몬 없음). 전이는 inbox 파일로 떨어져 아래 Watch가 같은 길로 흘린다.
+	pctx, pcancel := context.WithCancel(ctx)
+	defer pcancel()
+	opener := func(name string) (remote.Adapter, *remote.Remote, error) {
+		r, ok, err := remote.Load(stateDir, name)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !ok {
+			return nil, nil, fmt.Errorf("원격 %q 등록 없음", name)
+		}
+		ad, err := OpenRemote(*r, stateDir)
+		return ad, r, err
+	}
+	go func() {
+		_ = task.RunRemotePolling(pctx, stateDir, abs, opener, func(s string) { fmt.Fprintln(os.Stderr, "agentlayer remote:", s) }, time.Now)
+	}()
 	enc := json.NewEncoder(w)
-	err = task.Watch(ctx, abs, interval, once, func(r *task.Report) { _ = enc.Encode(r) })
+	err = task.Watch(ctx, abs, interval, once, func(r *task.Report) {
+		_ = enc.Encode(r)
+		refreshBoard(io.Discard, st, stateDir, time.Now())
+	})
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return nil
 	}
 	return err
+}
+
+// taskAssignRemote — 원격 직원 등록. 카드는 만들지 않는다(첫 send가 만든다). agents/에는 기록하지 않는다.
+func taskAssignRemote(w io.Writer, st *state.Store, stateDir string, r *remote.Remote, taskID, inbox, root string, replace bool, now time.Time) error {
+	as := task.Assignment{TaskID: taskID, AgentID: task.RemoteAgentID(r.Name), Session: r.Name, Pane: "remote", Inbox: inbox, AssignedAt: now,
+		Remote: &task.RemoteRef{Name: r.Name}}
+	if root == "" {
+		root = board.InferRoot(inbox)
+	}
+	warn := ""
+	if root != "" {
+		if _, err := board.ReadTaskFile(root, taskID); err == nil {
+			as.TaskDir = board.TaskDir(root, taskID)
+		}
+	}
+	if as.TaskDir == "" {
+		warn = "  ⚠ tasks/" + taskID + "/task.md가 없어 보드에 표시되지 않음"
+	}
+	if err := task.Assign(stateDir, as, replace); err != nil {
+		return err
+	}
+	if as.TaskDir != "" {
+		if err := board.RememberRoot(stateDir, root); err != nil {
+			fmt.Fprintln(w, "  ⚠ 회사 루트 기억 실패:", err)
+		}
+		if err := board.SetStatus(root, taskID, "in_progress", now); err != nil {
+			fmt.Fprintln(w, "  ⚠ task.md status 갱신 실패:", err)
+		}
+		label := fmt.Sprintf("%s (%s:%s@%s)", r.Name, r.Kind, r.Profile, r.SSH)
+		if r.Kind == "exec" {
+			label = fmt.Sprintf("%s (exec)", r.Name)
+		}
+		if err := board.AppendLog(root, taskID, "ASSIGN", label, now); err != nil {
+			fmt.Fprintln(w, "  ⚠ log.md 기록 실패:", err)
+		}
+	}
+	fmt.Fprintf(w, "업무 %s → 원격 %s (%s) 등록. 첫 'agentlayer send %s …'가 실행기에 카드를 만들고, 보고는 %s/pending/ 에 떨어집니다(task watch가 켜져 있을 때).%s\n",
+		taskID, r.Name, r.Kind, r.Name, ShortenHome(inbox), warn)
+	refreshBoard(w, st, stateDir, now)
+	return nil
 }
