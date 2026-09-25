@@ -176,6 +176,42 @@ agentlayer task done VIDEO-07
 - inbox는 로컬 경로여야 한다(NAS·SMB 마운트 금지) — hook은 2초 안에 못 쓰면 보고를 포기하고 에이전트를 막지 않는다.
 - 여러 줄 본문(`-`)은 `\r`·제어문자를 제거하고 64KiB까지만 보낸다. 여러 줄은 tmux 붙여넣기(브래킷)로 들어가 Claude Code·codex·gemini 입력창에서 줄바꿈이 그대로 살아 있다(한 줄은 예전대로 키 입력).
 
+### 원격 직원 (호스팅어 Hermes 등)
+
+다른 머신의 실행기를 직원으로 붙인다. 등록 뒤에는 총괄 절차가 로컬 직원과 같다 — `task assign` → `send` → Monitor 이벤트 → `task done`.
+
+```bash
+agentlayer remote add hermes-qa --kind hermes --ssh hostinger --profile tech-qa \
+    --exec "docker exec -i -u hermes hermes-agent-iqxn-hermes-agent-1" --workspace-root /opt/data/ai-company/결과물
+agentlayer remote check hermes-qa            # ssh 왕복·버전·프로필 확인
+agentlayer task assign PING-2 hermes-qa --inbox ~/ai-folder/company/runtime/inbox
+agentlayer send hermes-qa - < 업무요청/PING-2.md   # 첫 send가 칸반 카드를 만들고 dispatch로 띄운다
+agentlayer send hermes-qa "답: a.txt로"            # 카드가 blocked(질문)면 unblock --reason = 답변
+agentlayer task done PING-2                        # 서버 카드 archive까지
+```
+
+- 보고는 훅이 아니라 **`task watch`의 폴링**(기본 5초)이 만든다 — 감시가 켜져 있어야 온다. 카드 상태 대응: running→`WORKING`, blocked→`WAITING`(ask = block 사유), done→`DONE_UNREAD`, crashed/timed_out→`ERROR`.
+- 완료 시 원격 작업 폴더를 `결과물/<업무ID>/remote/`로 회수하고 `RESULT.md`(result·summary·카드 ID)를 쓴다(50MiB 상한). 보고 JSON의 `cwd`가 그 폴더다.
+- 작업 중(`WORKING`)인 원격에는 `--force`로도 보내지 않는다. 기동 실패(프로필 동시 실행 상한 등)는 `send`가 사유를 그대로 보여 주고, 다음 `send`가 같은 카드로 재시도한다.
+- 원격 직원은 `agentlayer status`·대시보드에 나오지 않는다(`task list`·`remote list`로 본다).
+- ssh는 아이맥이 연다(원격→로컬 방향 없음). 연결이 5분 넘게 끊기면 `ERROR` 한 번 보고.
+
+**편지함 — 직원이 먼저 말 걸기.** 배정과 무관하게 직원이 총괄에게 자료·의견을 보낸다. 총괄은 `to: "MESSAGE"` 이벤트(`from`·본문·있으면 `task_id`)로 받는다. 편지는 언제 올지 모르므로 총괄 감시는 상시로 둔다.
+
+```bash
+agentlayer task message "정리본을 결과물/VIDEO-07/에 두었습니다"      # 로컬 직원 pane에서 (Claude·Codex·Gemini 공통)
+agentlayer task message --task VIDEO-07 - < 정리본.md                 # 업무ID를 붙이면 log.md에 [MESSAGE]
+hermes kanban create "[VIDEO-07] 정리본" --assignee imac-manager --body "…"   # 원격 Hermes 쪽(예약 담당자 = 편지함)
+```
+
+**다른 실행기 붙이기(exec 어댑터).** Hermes가 아니라도 명령 몇 개와 JSON 응답 규격만 맞추면 직원이 된다. `docs/remote-exec-example/`에 Hermes CLI를 이 규격으로 감싼 예시가 있다.
+
+```bash
+agentlayer remote add oc --kind exec --file oc-adapter.json
+```
+
+`oc-adapter.json`의 `commands`: `dispatch`(→`{"handle":"…"}`), `poll`(→`{"status":"idle|working|waiting|done|error","summary","ask","error","seen"}`), 선택 `reply`·`pull`·`mailbox`(→`[{"id","from","text","task_id","at"}]`)·`finish`·`check`. 자리표시자 `{task_id}` `{title}` `{body_file}` `{parent}` `{handle}` `{text_file}` `{dest_dir}`. 본문·답변은 파일로 넘어온다.
+
 ### 업무 보드 (칸반 라이트)
 
 회사 루트(`tasks/<업무ID>/task.md`·`log.md`)를 agentlayer가 자동으로 갱신하고 보여 준다. 상태값은 mat과 같은
