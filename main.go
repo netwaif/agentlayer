@@ -24,6 +24,7 @@ import (
 	"github.com/netwaif/agentlayer/internal/hookcmd"
 	"github.com/netwaif/agentlayer/internal/notify"
 	"github.com/netwaif/agentlayer/internal/popup"
+	"github.com/netwaif/agentlayer/internal/remote"
 	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/starter"
 	"github.com/netwaif/agentlayer/internal/state"
@@ -78,6 +79,14 @@ func run(args []string) error {
 			return err
 		}
 		return cli.RunSend(os.Stdout, os.Stdin, st, state.DefaultDir(), tmuxx.Tmux{}, args[1:])
+	case "remote":
+		st, err := storeWithSync()
+		if err != nil {
+			return err
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return cli.RunRemote(ctx, os.Stdout, st, state.DefaultDir(), remote.Open, args[1:], time.Now())
 	case "task":
 		st, err := storeWithSync()
 		if err != nil {
