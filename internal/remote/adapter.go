@@ -78,7 +78,11 @@ func ControlDir() string { return fmt.Sprintf("/tmp/agentlayer-ssh-%d", os.Getui
 func Open(r Remote, stateDir string) (Adapter, error) {
 	switch r.Kind {
 	case "hermes":
-		return &Hermes{R: SSHRunner{Host: r.SSH, Exec: r.Exec, ControlDir: ControlDir()}, Profile: r.Profile, Board: r.Board,
+		var runner Runner = SSHRunner{Host: r.SSH, Exec: r.Exec, ControlDir: ControlDir()}
+		if r.Local {
+			runner = LocalRunner{Exec: r.Exec}
+		}
+		return &Hermes{R: runner, Profile: r.Profile, Board: r.Board,
 			WorkspaceRoot: r.WorkspaceRoot, MailboxAssignee: r.Mailbox, MaxRuntime: r.MaxRuntime,
 			AttachRoot: filepath.Dir(r.WorkspaceRoot) + "/참고자료/from-imac", Now: time.Now}, nil
 	case "exec":

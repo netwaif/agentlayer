@@ -183,6 +183,7 @@ agentlayer task done VIDEO-07
 ```bash
 agentlayer remote add hermes-qa --kind hermes --ssh hostinger --profile tech-qa \
     --exec "docker exec -i -u hermes hermes-agent-iqxn-hermes-agent-1" --workspace-root /opt/data/ai-company/결과물
+agentlayer remote add hermes --kind hermes --local --profile tech-qa --workspace-root ~/.hermes/ai-company/결과물   # 같은 PC의 Hermes: ssh 없이 직접 실행
 agentlayer remote check hermes-qa            # ssh 왕복·버전·프로필 확인
 agentlayer task assign PING-2 hermes-qa --inbox ~/ai-folder/company/runtime/inbox
 agentlayer send hermes-qa - < 업무요청/PING-2.md   # 첫 send가 칸반 카드를 만들고 dispatch로 띄운다

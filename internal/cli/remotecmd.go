@@ -16,7 +16,7 @@ import (
 )
 
 const remoteUsage = `사용법:
-  agentlayer remote add <이름> --kind hermes --ssh <호스트> --profile <프로필> --workspace-root <원격절대경로>
+  agentlayer remote add <이름> --kind hermes (--ssh <호스트> | --local) --profile <프로필> --workspace-root <절대경로>
                       [--exec "<원격 명령 접두어>"] [--board <보드>] [--mailbox <담당자>] [--max-runtime 2h] [--poll 5s] [--no-check]
   agentlayer remote add <이름> --kind exec --file <어댑터 정의 JSON> [--no-check]
   agentlayer remote list [--json]
@@ -75,6 +75,10 @@ func remoteAdd(ctx context.Context, w io.Writer, st *state.Store, stateDir strin
 		flag := args[i]
 		if flag == "--no-check" {
 			noCheck = true
+			continue
+		}
+		if flag == "--local" {
+			r.Local = true
 			continue
 		}
 		if !strings.HasPrefix(flag, "--") {
@@ -201,6 +205,9 @@ func remoteList(w io.Writer, stateDir string, args []string) error {
 	fmt.Fprintln(w, PadRight("이름", 20)+PadRight("종류", 8)+PadRight("대상", 40)+"폴링")
 	for _, r := range list {
 		target := r.SSH + " " + r.Profile
+		if r.Local {
+			target = "(local) " + r.Profile
+		}
 		if r.Kind == "exec" {
 			target = strings.Join(r.Commands["dispatch"], " ")
 		}

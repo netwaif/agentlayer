@@ -59,3 +59,26 @@ func TestOpenHermesControlPathFitsUnixSocket(t *testing.T) {
 		t.Errorf("ControlDir %q가 너무 길다(%d바이트 예상 > 104)", dir, n)
 	}
 }
+
+// 같은 PC에 Hermes가 있으면 ssh 없이 직접 실행한다(시청자 기본 구성).
+func TestLocalRunnerRunsDirectly(t *testing.T) {
+	r := LocalRunner{Exec: []string{"sh", "-c"}}
+	out, err := r.Run(context.Background(), strings.NewReader("hi"), "cat; echo :$1", "_", "ok")
+	if err != nil || strings.TrimSpace(string(out)) != "hi:ok" {
+		t.Errorf("out=%q err=%v", out, err)
+	}
+}
+
+func TestValidateLocalHermesNeedsNoSSH(t *testing.T) {
+	r := Remote{Name: "hermes", Kind: "hermes", Local: true, Profile: "tech-qa", WorkspaceRoot: "/Users/x/.hermes/ai-company/결과물"}
+	if err := r.Validate(); err != nil {
+		t.Errorf("--local이면 ssh 불필요: %v", err)
+	}
+	ad, err := Open(r, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := ad.(*Hermes).R.(LocalRunner); !ok {
+		t.Errorf("local 등록은 LocalRunner: %T", ad.(*Hermes).R)
+	}
+}

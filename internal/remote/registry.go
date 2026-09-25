@@ -22,6 +22,7 @@ type Remote struct {
 	Poll    string    `json:"poll,omitempty"`
 	AddedAt time.Time `json:"added_at"`
 
+	Local         bool     `json:"local,omitempty"` // 같은 PC의 Hermes — ssh 없이 직접 실행
 	SSH           string   `json:"ssh,omitempty"`
 	Exec          []string `json:"exec,omitempty"`
 	Profile       string   `json:"profile,omitempty"`
@@ -61,8 +62,8 @@ func (r Remote) Validate() error {
 	}
 	switch r.Kind {
 	case "hermes":
-		if r.SSH == "" || r.Profile == "" || r.WorkspaceRoot == "" {
-			return errors.New("hermes 원격은 --ssh, --profile, --workspace-root가 필수")
+		if (r.SSH == "" && !r.Local) || r.Profile == "" || r.WorkspaceRoot == "" {
+			return errors.New("hermes 원격은 --ssh(또는 --local), --profile, --workspace-root가 필수")
 		}
 		if !strings.HasPrefix(r.WorkspaceRoot, "/") {
 			return errors.New("--workspace-root는 원격 절대경로")

@@ -72,6 +72,31 @@ func (s SSHRunner) Run(ctx context.Context, stdin io.Reader, args ...string) ([]
 	return out.Bytes(), nil
 }
 
+// LocalRunner는 같은 머신에서 `<Exec…> <args…>`를 직접 실행한다(ssh 없음). Exec는 보통 비어 있고,
+// Hermes가 도커 안이면 "docker exec -i -u hermes <컨테이너>" 같은 접두어를 둔다.
+type LocalRunner struct {
+	Exec []string
+}
+
+func (l LocalRunner) Run(ctx context.Context, stdin io.Reader, args ...string) ([]byte, error) {
+	argv := append(append([]string{}, l.Exec...), args...)
+	if len(argv) == 0 {
+		return nil, fmt.Errorf("실행할 명령이 없습니다")
+	}
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Stdin = stdin
+	var out, errb bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errb
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(errb.String())
+		if r := []rune(msg); len(r) > 300 {
+			msg = string(r[:300]) + "…"
+		}
+		return out.Bytes(), fmt.Errorf("%s: %w: %s", argv[0], err, msg)
+	}
+	return out.Bytes(), nil
+}
+
 // FakeRunner — 테스트용. 호출 argv·stdin을 기록하고 Reply로 응답한다.
 type FakeRunner struct {
 	Calls  [][]string
