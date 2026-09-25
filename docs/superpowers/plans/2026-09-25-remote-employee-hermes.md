@@ -3798,3 +3798,11 @@ Expected: `~/ai-folder/company/CLAUDE.md`의 `store:ai-company` 블록에 원격
 ## 실측 기록
 
 (Task 13에서 채운다.)
+
+- 2026-09-25 17:19~17:26, 로컬 빌드 `/tmp/agentlayer`, 서버 Hermes v0.20.0, 프로필 `tech-qa`, ssh 왕복 1.6s(첫 연결).
+- 등록: `remote add hermes-qa …` → check OK. 첫 시도는 ControlPath가 state dir 아래라 macOS 소켓 경로 상한(104B)에 걸려 `unix_listener: path too long` → `/tmp/agentlayer-ssh-<uid>`로 옮겨 해결(테스트 `TestOpenHermesControlPathFitsUnixSocket`).
+- 1바퀴(지시→완료→회수→마감): `send` → 카드 `t_7fae8b4f` 생성·dispatch → 약 30초 뒤 `{"to":"DONE_UNREAD","task":"PONG-2","cwd":".../결과물/PING-2/remote"}` → `RESULT.md`에 `PONG-2` → `task done PING-2` → 서버 목록에서 PING-2 사라짐(archived). log.md: [ASSIGN]→[SEND]→[REPORT] DONE→[COMPLETE].
+- 2바퀴(질문→답→완료): 카드 `t_3f2a4e0e`. Hermes가 지시대로 `block --kind needs_input` → `{"to":"WAITING","ask":"어떤 단어로 답할까요?"}`(task.md `waiting_hermes-qa`, [ASK]) → `send hermes-qa "PONG-3"` → `[WAITING] 답변`(unblock --reason + dispatch) → `{"to":"DONE_UNREAD","task":"PONG-3"}`. 서버 이벤트: blocked→commented→unblocked→claimed→spawned→completed, 코멘트 `UNBLOCK: PONG-3`(author default).
+- 3바퀴(편지함): 서버 `kanban create "[PING-3] 편지 시험" --assignee imac-manager --created-by default` → `{"to":"MESSAGE","from":"default","task_id":"PING-3","kind":"letter"}`, 카드는 done(수신 확인). 로컬 `task message "로컬 직원 편지 시험"`(pane %17, 세션 agentlayer-dev) → `{"to":"MESSAGE","from":"agentlayer-dev","task_id":"-","kind":"message"}`.
+- 발견·수정: 카드 제목에 업무ID 중복(`PING-2 PING-2 …`) → 제목이 ID로 시작하면 안 붙임(`TestHermesDispatchTitleAlreadyHasID`).
+- 정리: 시험 카드 `t_40b3eb2f`·`t_7019c9ff` archive, 회사 루트의 PING-2·PING-3(tasks·업무요청·결과물·received 보고) 삭제. 원격 등록 `hermes-qa`는 유지.
