@@ -62,6 +62,8 @@ func Open(r Remote, stateDir string) (Adapter, error) {
 	case "hermes":
 		return &Hermes{R: SSHRunner{Host: r.SSH, Exec: r.Exec, ControlDir: Dir(stateDir)}, Profile: r.Profile, Board: r.Board,
 			WorkspaceRoot: r.WorkspaceRoot, MailboxAssignee: r.Mailbox, MaxRuntime: r.MaxRuntime, Now: time.Now}, nil
+	case "exec":
+		return &Exec{Commands: r.Commands}, nil
 	}
 	return nil, fmt.Errorf("알 수 없는 kind: %q", r.Kind)
 }
