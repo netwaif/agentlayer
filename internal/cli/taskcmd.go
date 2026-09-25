@@ -25,7 +25,7 @@ const taskUsage = `사용법:
   agentlayer task done <업무ID> [--root <회사루트>]
   agentlayer task watch <inbox> [--once] [--interval 200ms]
   agentlayer task message [--task <업무ID>] <본문|->   # 직원 pane에서: 총괄에게 편지(MESSAGE)
-  agentlayer task reply <편지ID> <답|->                 # 총괄: 원격 편지(MESSAGE의 letter)에 답장`
+  agentlayer task reply <편지ID> [--attach <파일>]... <답|->   # 총괄: 원격 편지(MESSAGE의 letter)에 답장(+파일 첨부)`
 
 // RunTask — 업무 ↔ 세션 등록과 수신함 감시. 보고 자체는 hook이 쓴다(main.go).
 func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string, args []string, now time.Time) error {
@@ -461,10 +461,32 @@ func taskAssignRemote(w io.Writer, st *state.Store, stateDir string, r *remote.R
 // taskReply — 총괄이 원격 편지(MESSAGE 보고의 letter)에 답한다. 수신함은 등록 inbox → 설정 → 기억된 루트 순으로 찾는다.
 func taskReply(ctx context.Context, w io.Writer, stdin io.Reader, stateDir, companyRoot string, args []string) error {
 	if len(args) < 2 {
-		return errors.New("사용법: agentlayer task reply <편지ID> <답|->")
+		return errors.New("사용법: agentlayer task reply <편지ID> [--attach <파일>]... <답|->")
 	}
 	letterID := args[0]
-	text := strings.Join(args[1:], " ")
+	var files, pos []string
+	for i := 1; i < len(args); i++ {
+		if args[i] == "--attach" {
+			if i+1 >= len(args) {
+				return errors.New("--attach 뒤에 파일 경로가 필요합니다")
+			}
+			p, err := filepath.Abs(args[i+1])
+			if err != nil {
+				return err
+			}
+			if fi, err := os.Stat(p); err != nil || fi.IsDir() {
+				return fmt.Errorf("첨부 파일이 없거나 폴더입니다: %s (폴더는 zip으로 묶어서)", args[i+1])
+			}
+			files = append(files, p)
+			i++
+			continue
+		}
+		pos = append(pos, args[i])
+	}
+	if len(pos) == 0 {
+		return errors.New("답이 비었습니다")
+	}
+	text := strings.Join(pos, " ")
 	if text == "-" {
 		if stdin == nil {
 			return errors.New("stdin이 없습니다")
@@ -503,10 +525,14 @@ func taskReply(ctx context.Context, w io.Writer, stdin io.Reader, stateDir, comp
 		ad, err := OpenRemote(*r, stateDir)
 		return ad, r, err
 	}
-	name, err := task.ReplyLetter(ctx, stateDir, inbox, letterID, text, opener)
+	name, err := task.ReplyLetter(ctx, stateDir, inbox, letterID, text, files, opener)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "답장 완료 → %s 편지 %s (보낸 쪽이 구독해 두었으면 지금 깨어납니다)\n", name, letterID)
+	att := ""
+	if len(files) > 0 {
+		att = fmt.Sprintf(" · 첨부 %d개", len(files))
+	}
+	fmt.Fprintf(w, "답장 완료 → %s 편지 %s%s (보낸 쪽이 구독해 두었으면 지금 알림이 갑니다)\n", name, letterID, att)
 	return nil
 }

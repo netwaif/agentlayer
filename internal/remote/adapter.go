@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/state"
@@ -57,7 +58,7 @@ type Adapter interface {
 	Reply(ctx context.Context, h Handle, text string) error
 	Pull(ctx context.Context, h Handle, destDir string) error
 	Mailbox(ctx context.Context) ([]Letter, error)
-	Answer(ctx context.Context, letterID, text string) error // 편지에 답장 — 편지 카드를 답으로 닫아 보낸 쪽이 깨어나게
+	Answer(ctx context.Context, letterID, text string, files []string) error // 편지에 답장(+첨부 파일) — 편지 카드를 답으로 닫아 보낸 쪽이 깨어나게
 	Finish(ctx context.Context, h Handle) error
 	Check(ctx context.Context) (Info, error)
 }
@@ -78,7 +79,8 @@ func Open(r Remote, stateDir string) (Adapter, error) {
 	switch r.Kind {
 	case "hermes":
 		return &Hermes{R: SSHRunner{Host: r.SSH, Exec: r.Exec, ControlDir: ControlDir()}, Profile: r.Profile, Board: r.Board,
-			WorkspaceRoot: r.WorkspaceRoot, MailboxAssignee: r.Mailbox, MaxRuntime: r.MaxRuntime, Now: time.Now}, nil
+			WorkspaceRoot: r.WorkspaceRoot, MailboxAssignee: r.Mailbox, MaxRuntime: r.MaxRuntime,
+			AttachRoot: filepath.Dir(r.WorkspaceRoot) + "/참고자료/from-imac", Now: time.Now}, nil
 	case "exec":
 		return &Exec{Commands: r.Commands}, nil
 	}

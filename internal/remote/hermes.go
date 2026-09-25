@@ -22,6 +22,7 @@ type Hermes struct {
 	WorkspaceRoot   string
 	MailboxAssignee string
 	MaxRuntime      string
+	AttachRoot      string // 답장 첨부 파일을 올려 둘 원격 폴더(아래에 <편지ID>/ 를 만든다)
 	Now             func() time.Time
 }
 
@@ -344,9 +345,50 @@ func (h *Hermes) Mailbox(ctx context.Context) ([]Letter, error) {
 
 // Answer는 편지 카드를 답으로 닫는다. 보낸 Hermes가 `kanban notify-subscribe`로 자기 채널을 구독해 두었으면 게이트웨이가
 // completed 이벤트로 그 대화를 깨운다(9/14 wake 실증 경로).
-func (h *Hermes) Answer(ctx context.Context, id, text string) error {
+func (h *Hermes) Answer(ctx context.Context, id, text string, files []string) error {
+	var uploaded []string
+	for _, local := range files {
+		remotePath, err := h.upload(ctx, id, local)
+		if err != nil {
+			return err
+		}
+		if _, err := h.run(ctx, TimeoutPull, h.kanban("attach", id, remotePath, "--author", "agentlayer")...); err != nil {
+			return fmt.Errorf("첨부 등록 실패(%s): %w", remotePath, err)
+		}
+		uploaded = append(uploaded, remotePath)
+	}
+	if len(uploaded) > 0 {
+		text += "\n첨부: " + strings.Join(uploaded, ", ")
+	}
 	_, err := h.run(ctx, TimeoutQuery, h.kanban("complete", id, "--result="+text)...)
 	return err
+}
+
+// upload은 로컬 파일을 표준입력으로 흘려 원격 <AttachRoot>/<편지ID>/<이름>에 쓴다(로컬 셸 미경유, 원격은 sh -c 한 줄).
+func (h *Hermes) upload(ctx context.Context, id, local string) (string, error) {
+	f, err := os.Open(local)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err != nil {
+		return "", err
+	} else if fi.Size() > MaxPullBytes {
+		return "", fmt.Errorf("첨부 %s가 %dMiB를 넘습니다", local, MaxPullBytes>>20)
+	}
+	root := h.AttachRoot
+	if root == "" {
+		root = h.WorkspaceRoot + "/from-imac"
+	}
+	dir := root + "/" + id
+	remotePath := dir + "/" + filepath.Base(local)
+	ctx2, cancel := context.WithTimeout(ctx, TimeoutPull)
+	defer cancel()
+	cmd := fmt.Sprintf("mkdir -p %s && cat > %s", ShellQuote(dir), ShellQuote(remotePath))
+	if _, err := h.R.Run(ctx2, f, "sh", "-c", cmd); err != nil {
+		return "", fmt.Errorf("첨부 업로드 실패(%s): %w", local, err)
+	}
+	return remotePath, nil
 }
 
 func (h *Hermes) Finish(ctx context.Context, id Handle) error {

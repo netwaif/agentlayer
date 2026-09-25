@@ -183,11 +183,34 @@ func TestHermesMailbox(t *testing.T) {
 
 func TestHermesAnswerCompletesLetter(t *testing.T) {
 	f := &FakeRunner{Reply: replyTable(t, map[string]string{"hermes kanban complete": ""})}
-	if err := newHermes(f).Answer(context.Background(), "t_m1", "-답장입니다"); err != nil {
+	if err := newHermes(f).Answer(context.Background(), "t_m1", "-답장입니다", nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.Join(f.Calls[0], " "); got != "hermes kanban complete t_m1 --result=-답장입니다" {
 		t.Errorf("answer argv=%q", got)
+	}
+}
+
+func TestHermesAnswerWithAttachmentUploadsThenAttaches(t *testing.T) {
+	dir := t.TempDir()
+	local := filepath.Join(dir, "skills-a.zip")
+	os.WriteFile(local, []byte("ZIPDATA"), 0o644)
+	f := &FakeRunner{Reply: replyTable(t, map[string]string{"sh -c": "", "hermes kanban attach": "", "hermes kanban complete": ""})}
+	h := newHermes(f)
+	h.AttachRoot = "/opt/data/ai-company/참고자료/from-imac"
+	if err := h.Answer(context.Background(), "t_m1", "보냅니다", []string{local}); err != nil {
+		t.Fatal(err)
+	}
+	// 1) 파일을 stdin으로 원격에 쓴다 2) 카드에 첨부 3) 답으로 닫으며 첨부 경로를 적는다
+	want := "/opt/data/ai-company/참고자료/from-imac/t_m1/skills-a.zip"
+	if got := strings.Join(f.Calls[0], " "); !strings.Contains(got, "sh -c") || !strings.Contains(got, "cat > "+ShellQuote(want)) || f.Stdins[0] != "ZIPDATA" {
+		t.Errorf("업로드 argv=%q stdin=%q", got, f.Stdins[0])
+	}
+	if got := strings.Join(f.Calls[1], " "); got != "hermes kanban attach t_m1 "+want+" --author agentlayer" {
+		t.Errorf("attach argv=%q", got)
+	}
+	if got := strings.Join(f.Calls[2], " "); !strings.HasPrefix(got, "hermes kanban complete t_m1 --result=보냅니다") || !strings.Contains(got, "첨부: "+want) {
+		t.Errorf("complete argv=%q", got)
 	}
 }
 

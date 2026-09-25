@@ -203,6 +203,7 @@ agentlayer task message "정리본을 결과물/VIDEO-07/에 두었습니다"   
 agentlayer task message --task VIDEO-07 - < 정리본.md                 # 업무ID를 붙이면 log.md에 [MESSAGE]
 hermes kanban create "[VIDEO-07] 정리본" --assignee imac-manager --body "…"   # 원격 Hermes 쪽(예약 담당자 = 편지함)
 agentlayer task reply t_da1d7ac4 "답장 본문"                          # 총괄: 원격 편지(이벤트의 letter)에 답장 → 편지 카드를 답으로 닫는다
+agentlayer task reply t_da1d7ac4 --attach 결과물/a.zip "파일 보냅니다"   # 첨부: 서버 <회사루트>/참고자료/from-imac/<편지ID>/ 에 올리고 카드에 attach(폴더는 zip으로)
 ```
 
 원격 편지는 받을 때 닫지 않고 claim(24시간)만 한다. 총괄이 `task reply`로 닫으면, 보낸 Hermes가 그 카드를 `kanban notify-subscribe --platform discord --chat-id <채널ID> --chat-type channel`로 구독해 두었을 때 게이트웨이가 그 대화를 깨워 답을 보여 준다.

@@ -185,13 +185,18 @@ func (e *Exec) Mailbox(ctx context.Context) ([]Letter, error) {
 	return letters, nil
 }
 
-func (e *Exec) Answer(ctx context.Context, id, text string) error {
+func (e *Exec) Answer(ctx context.Context, id, text string, files []string) error {
 	p, cleanup, err := tempText(text)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
-	_, ok, err := e.run(ctx, TimeoutQuery, "answer", map[string]string{"letter": id, "text_file": p})
+	lf, cleanup2, err := tempText(strings.Join(files, "\n"))
+	if err != nil {
+		return err
+	}
+	defer cleanup2()
+	_, ok, err := e.run(ctx, TimeoutPull, "answer", map[string]string{"letter": id, "text_file": p, "files_file": lf})
 	if !ok {
 		return errors.New("commands.answer가 없습니다 — 답장을 전달할 길이 없음")
 	}

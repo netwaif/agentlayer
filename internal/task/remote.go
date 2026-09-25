@@ -144,7 +144,7 @@ func findLetter(inbox, letterID string) (*Report, bool) {
 }
 
 // ReplyLetter — 총괄의 답장. 수신함에서 편지ID의 보고를 찾아 그 원격 어댑터의 Answer를 부른다. 돌려주는 값은 원격 이름.
-func ReplyLetter(ctx context.Context, stateDir, inbox, letterID, text string, open AdapterOpener) (string, error) {
+func ReplyLetter(ctx context.Context, stateDir, inbox, letterID, text string, files []string, open AdapterOpener) (string, error) {
 	rep, ok := findLetter(inbox, letterID)
 	if !ok {
 		return "", fmt.Errorf("수신함에 편지 %q이 없습니다(%s)", letterID, inbox)
@@ -156,7 +156,7 @@ func ReplyLetter(ctx context.Context, stateDir, inbox, letterID, text string, op
 	if err != nil {
 		return rep.Session, err
 	}
-	if err := ad.Answer(ctx, letterID, text); err != nil {
+	if err := ad.Answer(ctx, letterID, text, files); err != nil {
 		return rep.Session, fmt.Errorf("%s 답장 실패: %w", rep.Session, err)
 	}
 	return rep.Session, nil

@@ -92,7 +92,7 @@ func TestExecReplyAndResumeRequireCommands(t *testing.T) {
 	if err := e.Resume(context.Background(), "h"); err == nil {
 		t.Error("commands.resume가 없으면 에러")
 	}
-	if err := e.Answer(context.Background(), "m1", "답"); err == nil {
+	if err := e.Answer(context.Background(), "m1", "답", nil); err == nil {
 		t.Error("commands.answer가 없으면 에러")
 	}
 }

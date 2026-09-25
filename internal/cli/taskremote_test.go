@@ -33,8 +33,8 @@ func (f *finishAdapter) Mailbox(context.Context) ([]remote.Letter, error) { retu
 func (f *finishAdapter) Pull(_ context.Context, _ remote.Handle, d string) error {
 	return os.MkdirAll(d, 0o755)
 }
-func (f *finishAdapter) Answer(_ context.Context, id, text string) error {
-	f.answered = append(f.answered, id+"|"+text)
+func (f *finishAdapter) Answer(_ context.Context, id, text string, files []string) error {
+	f.answered = append(f.answered, id+"|"+text+"|"+strings.Join(files, ","))
 	return nil
 }
 
@@ -160,10 +160,16 @@ func TestTaskReplyAnswersLetter(t *testing.T) {
 	OpenRemote = func(remote.Remote, string) (remote.Adapter, error) { return fa, nil }
 	t.Cleanup(func() { OpenRemote = prev })
 	var out bytes.Buffer
-	if err := RunTask(context.Background(), &out, st, stateDir, []string{"reply", "t_m1", "답장", "본문"}, time.Now()); err != nil {
+	os.MkdirAll(filepath.Join(root, "결과물"), 0o755)
+	attach := filepath.Join(root, "결과물", "a.zip")
+	writeFile(t, attach, "zip")
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"reply", "t_m1", "--attach", attach, "답장", "본문"}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if len(fa.answered) != 1 || fa.answered[0] != "t_m1|답장 본문" || !strings.Contains(out.String(), "hermes-qa") {
+	if len(fa.answered) != 1 || fa.answered[0] != "t_m1|답장 본문|"+attach || !strings.Contains(out.String(), "hermes-qa") {
 		t.Errorf("answered=%v out=%s", fa.answered, out.String())
+	}
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"reply", "t_m1", "--attach", "/nope/x.zip", "답"}, time.Now()); err == nil {
+		t.Error("없는 첨부 파일은 에러")
 	}
 }

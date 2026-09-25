@@ -157,8 +157,8 @@ func (f *fakeAdapter) Dispatch(context.Context, remote.DispatchRequest) (remote.
 	return "h", nil
 }
 func (f *fakeAdapter) Resume(context.Context, remote.Handle) error { return nil }
-func (f *fakeAdapter) Answer(_ context.Context, id, text string) error {
-	f.answered = append(f.answered, id+"|"+text)
+func (f *fakeAdapter) Answer(_ context.Context, id, text string, files []string) error {
+	f.answered = append(f.answered, id+"|"+text+"|"+strings.Join(files, ","))
 	return nil
 }
 func (f *fakeAdapter) Poll(context.Context, remote.Handle) (remote.Status, error) {
@@ -282,11 +282,11 @@ func TestReplyLetterFindsRemoteFromInbox(t *testing.T) {
 		r, _, _ := remote.Load(stateDir, name)
 		return fa, r, nil
 	}
-	name, err := ReplyLetter(context.Background(), stateDir, inbox, "t_m1", "답장", open)
-	if err != nil || name != "hermes-qa" || len(fa.answered) != 1 || fa.answered[0] != "t_m1|답장" {
+	name, err := ReplyLetter(context.Background(), stateDir, inbox, "t_m1", "답장", []string{"/tmp/a.zip"}, open)
+	if err != nil || name != "hermes-qa" || len(fa.answered) != 1 || fa.answered[0] != "t_m1|답장|/tmp/a.zip" {
 		t.Fatalf("name=%s err=%v answered=%v", name, err, fa.answered)
 	}
-	if _, err := ReplyLetter(context.Background(), stateDir, inbox, "t_none", "답", open); err == nil {
+	if _, err := ReplyLetter(context.Background(), stateDir, inbox, "t_none", "답", nil, open); err == nil {
 		t.Error("수신함에 없는 편지ID는 에러")
 	}
 }
