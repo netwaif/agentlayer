@@ -3806,3 +3806,4 @@ Expected: `~/ai-folder/company/CLAUDE.md`의 `store:ai-company` 블록에 원격
 - 3바퀴(편지함): 서버 `kanban create "[PING-3] 편지 시험" --assignee imac-manager --created-by default` → `{"to":"MESSAGE","from":"default","task_id":"PING-3","kind":"letter"}`, 카드는 done(수신 확인). 로컬 `task message "로컬 직원 편지 시험"`(pane %17, 세션 agentlayer-dev) → `{"to":"MESSAGE","from":"agentlayer-dev","task_id":"-","kind":"message"}`.
 - 발견·수정: 카드 제목에 업무ID 중복(`PING-2 PING-2 …`) → 제목이 ID로 시작하면 안 붙임(`TestHermesDispatchTitleAlreadyHasID`).
 - 정리: 시험 카드 `t_40b3eb2f`·`t_7019c9ff` archive, 회사 루트의 PING-2·PING-3(tasks·업무요청·결과물·received 보고) 삭제. 원격 등록 `hermes-qa`는 유지.
+- 2026-09-25 17:40 리뷰 반영 뒤 재검증(PING-4, 카드 `t_0e3bb4ac`): 하이픈으로 시작하는 본문(`--body=`) → WAITING(ask "단어?") → `send "-PONG-4"`(`--reason=`) → DONE_UNREAD, 작업 폴더의 `out.txt`(내용 `-PONG-4`)가 `결과물/PING-4/remote/`로 회수됨(원격 `tar | head -c` 경로). `task done` 뒤 서버 카드 archived. 시험 흔적 삭제.
