@@ -80,7 +80,7 @@ func TestHermesDispatch(t *testing.T) {
 		"hermes kanban create":   `{"id":"t_new"}`,
 		"hermes kanban dispatch": `{"spawned":[{"task_id":"t_new","assignee":"tech-qa"}],"skipped_nonspawnable":[]}`,
 	})
-	h, err := newHermes(f).Dispatch(context.Background(), "PING-2", "연결 시험", "본문 it's", "")
+	h, err := newHermes(f).Dispatch(context.Background(), DispatchRequest{TaskID: "PING-2", Title: "연결 시험", Body: "본문 it's", Attempt: "a1"})
 	if err != nil || h != "t_new" {
 		t.Fatalf("Dispatch: %q %v", h, err)
 	}
@@ -88,8 +88,8 @@ func TestHermesDispatch(t *testing.T) {
 		t.Errorf("첫 호출은 mkdir -p <ws>: %v", f.Calls[0])
 	}
 	create := strings.Join(f.Calls[1], " ")
-	for _, want := range []string{"create PING-2 연결 시험", "--assignee tech-qa", "--idempotency-key agentlayer:PING-2", "--created-by agentlayer",
-		"--workspace dir:/opt/data/ai-company/결과물/PING-2", "--max-runtime 2h", "--body 본문 it's", "--json"} {
+	for _, want := range []string{"create PING-2 연결 시험", "--assignee tech-qa", "--idempotency-key agentlayer:PING-2:a1", "--created-by agentlayer",
+		"--workspace dir:/opt/data/ai-company/결과물/PING-2", "--max-runtime 2h", "--body=본문 it's", "--json"} {
 		if !strings.Contains(create, want) {
 			t.Errorf("create에 %q 없음: %s", want, create)
 		}
@@ -98,11 +98,11 @@ func TestHermesDispatch(t *testing.T) {
 		t.Error("parent 없으면 --parent 없음")
 	}
 	f.Calls = nil
-	if _, err := newHermes(f).Dispatch(context.Background(), "PING-2", "연결 시험", "후속", "t_prev"); err != nil {
+	if _, err := newHermes(f).Dispatch(context.Background(), DispatchRequest{TaskID: "PING-2", Title: "연결 시험", Body: "후속", Parent: "t_prev", Attempt: "a1"}); err != nil {
 		t.Fatal(err)
 	}
 	create = strings.Join(f.Calls[1], " ")
-	if !strings.Contains(create, "--parent t_prev") || !strings.Contains(create, "--idempotency-key agentlayer:PING-2:t_prev") {
+	if !strings.Contains(create, "--parent t_prev") || !strings.Contains(create, "--idempotency-key agentlayer:PING-2:a1:t_prev") {
 		t.Errorf("후속 카드 옵션: %s", create)
 	}
 }
@@ -112,7 +112,7 @@ func TestHermesDispatchNotSpawned(t *testing.T) {
 		"hermes kanban create":   `{"id":"t_new"}`,
 		"hermes kanban dispatch": `{"spawned":[],"skipped_per_profile_capped":["t_new"]}`,
 	})}
-	h, err := newHermes(f).Dispatch(context.Background(), "PING-2", "", "본문", "")
+	h, err := newHermes(f).Dispatch(context.Background(), DispatchRequest{TaskID: "PING-2", Body: "본문", Attempt: "a1"})
 	if err == nil || !strings.Contains(err.Error(), "skipped_per_profile_capped") {
 		t.Fatalf("기동 실패는 사유를 담은 에러: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestHermesPollReplyFinish(t *testing.T) {
 	if err := h.Reply(context.Background(), "t_1", "이름은 a.txt"); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(f.Calls[1], " "); got != "hermes kanban unblock t_1 --reason 이름은 a.txt" {
+	if got := strings.Join(f.Calls[1], " "); got != "hermes kanban unblock t_1 --reason=이름은 a.txt" {
 		t.Errorf("unblock argv=%q", got)
 	}
 	if err := h.Finish(context.Background(), "t_1"); err != nil {
@@ -197,7 +197,7 @@ func TestHermesMailboxSkipsOnAckFailure(t *testing.T) {
 func TestHermesPullWritesResult(t *testing.T) {
 	tarBytes := tarOf(t, map[string]string{"out.txt": "hello"})
 	f := &FakeRunner{Reply: func(args []string) ([]byte, error) {
-		if args[0] == "tar" {
+		if args[0] == "sh" {
 			return tarBytes, nil
 		}
 		return []byte(showDone), nil
@@ -213,7 +213,8 @@ func TestHermesPullWritesResult(t *testing.T) {
 	if !strings.Contains(string(res), "PONG-OK") || !strings.Contains(string(res), "t_40b3eb2f") {
 		t.Errorf("RESULT.md=%s", res)
 	}
-	if got := strings.Join(f.Calls[1], " "); got != "tar -C /opt/data/kanban/workspaces/t_40b3eb2f -cf - ." {
+	// 원격에서 잘라 받는다(메모리·대역폭 상한): sh -c 'tar … | head -c <상한+1>'
+	if got := strings.Join(f.Calls[1], " "); !strings.HasPrefix(got, "sh -c tar -C '/opt/data/kanban/workspaces/t_40b3eb2f' -cf - . | head -c ") {
 		t.Errorf("tar argv=%q", got)
 	}
 }
@@ -234,10 +235,34 @@ func TestHermesDispatchTitleAlreadyHasID(t *testing.T) {
 		"hermes kanban create":   `{"id":"t_x"}`,
 		"hermes kanban dispatch": `{"spawned":[{"task_id":"t_x"}]}`,
 	})}
-	if _, err := newHermes(f).Dispatch(context.Background(), "PING-2", "PING-2 원격 연결 시험", "b", ""); err != nil {
+	if _, err := newHermes(f).Dispatch(context.Background(), DispatchRequest{TaskID: "PING-2", Title: "PING-2 원격 연결 시험", Body: "b", Attempt: "a1"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.Calls[1][3]; got != "PING-2 원격 연결 시험" {
 		t.Errorf("제목이 업무ID로 시작하면 ID를 다시 붙이지 않는다: %q", got)
+	}
+}
+
+func TestHermesResumeDispatchesOnly(t *testing.T) {
+	f := &FakeRunner{Reply: replyTable(t, map[string]string{"hermes kanban dispatch": `{"spawned":[{"task_id":"t_1"}]}`})}
+	if err := newHermes(f).Resume(context.Background(), "t_1"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Calls) != 1 || f.Calls[0][2] != "dispatch" {
+		t.Errorf("Resume는 create 없이 dispatch만: %v", f.Calls)
+	}
+}
+
+func TestHermesPullRejectsOversize(t *testing.T) {
+	big := make([]byte, MaxPullBytes+1)
+	f := &FakeRunner{Reply: func(args []string) ([]byte, error) {
+		if args[0] == "sh" {
+			return big, nil
+		}
+		return []byte(showDone), nil
+	}}
+	err := newHermes(f).Pull(context.Background(), "t_40b3eb2f", filepath.Join(t.TempDir(), "r"))
+	if err == nil || !strings.Contains(err.Error(), "초과") {
+		t.Errorf("상한 초과 스트림은 거부: %v", err)
 	}
 }

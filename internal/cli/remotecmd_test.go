@@ -114,4 +114,8 @@ func TestRemoteAddExecFromFile(t *testing.T) {
 	if r.Kind != "exec" || len(r.Commands["dispatch"]) != 3 || r.PollInterval() != 10*time.Second {
 		t.Errorf("%+v", r)
 	}
+	// 상대경로 명령은 정의 파일 위치 기준으로 절대화한다 — task watch는 회사 루트에서 돌기 때문
+	if r.Commands["dispatch"][0] != dir+"/d.sh" || r.Commands["poll"][0] != dir+"/p.sh" {
+		t.Errorf("절대화: %v %v", r.Commands["dispatch"], r.Commands["poll"])
+	}
 }

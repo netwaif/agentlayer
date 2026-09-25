@@ -39,6 +39,7 @@ type RemoteRef struct {
 	LastState state.AgentState `json:"last_state,omitempty"`
 	Seen      int64            `json:"seen,omitempty"`
 	Workspace string           `json:"workspace,omitempty"`
+	Parent    string           `json:"parent,omitempty"` // DONE 뒤 후속 카드의 직전 handle(재시도 때 같은 값 전달)
 }
 
 // RemoteAgentID는 원격 직원의 에이전트 ID(agents/에는 저장하지 않는다 — tasks/<id>.json 파일명으로만 쓴다).

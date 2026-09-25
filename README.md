@@ -210,7 +210,7 @@ hermes kanban create "[VIDEO-07] 정리본" --assignee imac-manager --body "…"
 agentlayer remote add oc --kind exec --file oc-adapter.json
 ```
 
-`oc-adapter.json`의 `commands`: `dispatch`(→`{"handle":"…"}`), `poll`(→`{"status":"idle|working|waiting|done|error","summary","ask","error","seen"}`), 선택 `reply`·`pull`·`mailbox`(→`[{"id","from","text","task_id","at"}]`)·`finish`·`check`. 자리표시자 `{task_id}` `{title}` `{body_file}` `{parent}` `{handle}` `{text_file}` `{dest_dir}`. 본문·답변은 파일로 넘어온다.
+`oc-adapter.json`의 `commands`: `dispatch`(→`{"handle":"…"}`), `poll`(→`{"status":"idle|working|waiting|done|error","summary","ask","error","seen"}`), 선택 `reply`(답변 — 없으면 답변 전달이 에러)·`resume`(기동 실패 재시도)·`pull`·`mailbox`(→`[{"id","from","text","task_id","at"}]`)·`finish`·`check`. 자리표시자 `{task_id}` `{title}` `{body_file}` `{parent}` `{attempt}` `{handle}` `{text_file}` `{dest_dir}`. 본문·답변은 파일로 넘어온다. 편지함은 30초마다, 카드 상태는 `poll` 간격마다 본다. 정의 파일 안의 상대경로 명령은 그 파일 위치 기준으로 절대화된다.
 
 ### 업무 보드 (칸반 라이트)
 

@@ -61,21 +61,30 @@ func sendRemote(w io.Writer, stateDir string, r *remote.Remote, message string, 
 			title = tf.Title
 		}
 	}
-	action := ""
-	switch cur {
-	case state.StateWaiting:
+	action, note := "", ""
+	switch {
+	case cur == state.StateWaiting:
 		if err := ad.Reply(ctx, as.Remote.Handle, message); err != nil {
 			return fmt.Errorf("%s 답변 전달 실패: %w", r.Name, err)
 		}
 		action = "답변"
-	default: // IDLE(첫 지시 또는 기동 실패 재시도) · DONE(후속 지시 = 새 카드, parent=직전)
+	case cur == state.StateIdle && as.Remote.Handle != "":
+		// 카드는 있는데 기동이 안 됐던 경우(프로필 상한 등): create를 다시 부르면 멱등 키가 옛 카드를 돌려주므로 재기동만.
+		if err := ad.Resume(ctx, as.Remote.Handle); err != nil {
+			return fmt.Errorf("%s: %w", r.Name, err)
+		}
+		action = "재기동"
+		note = "  ⚠ 기존 카드를 다시 띄웠습니다 — 이번 본문은 카드에 들어가지 않음(원래 지시 그대로)"
+	default: // IDLE(첫 지시) · DONE(후속 지시 = 새 카드, parent=직전)
 		parent := ""
 		if cur == state.StateDoneUnread {
 			parent = as.Remote.Handle
 		}
-		h, derr := ad.Dispatch(ctx, as.TaskID, title, message, parent)
+		h, derr := ad.Dispatch(ctx, remote.DispatchRequest{TaskID: as.TaskID, Title: title, Body: message, Parent: parent,
+			Attempt: attemptKey(as)})
 		if h != "" {
 			as.Remote.Handle = h
+			as.Remote.Parent = parent
 			as.Remote.Workspace = r.WorkspaceRoot + "/" + as.TaskID
 			if derr != nil {
 				as.Remote.LastState = state.StateIdle
@@ -107,6 +116,9 @@ func sendRemote(w io.Writer, stateDir string, r *remote.Remote, message string, 
 		return json.NewEncoder(w).Encode(map[string]any{"session": r.Name, "remote": r.Kind, "handle": as.Remote.Handle,
 			"state": cur, "sent": true, "action": action})
 	}
-	fmt.Fprintf(w, "전송 완료 → %s (%s %s) [%s] %s\n", r.Name, r.Kind, as.Remote.Handle, cur, action)
+	fmt.Fprintf(w, "전송 완료 → %s (%s %s) [%s] %s%s\n", r.Name, r.Kind, as.Remote.Handle, cur, action, note)
 	return nil
 }
+
+// attemptKey — 등록 시도 구분자. task assign(--replace 포함)마다 AssignedAt이 바뀌므로 죽은 옛 카드와 멱등 키가 겹치지 않는다.
+func attemptKey(as *task.Assignment) string { return fmt.Sprintf("%d", as.AssignedAt.Unix()) }

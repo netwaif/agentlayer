@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -124,6 +125,17 @@ func remoteAdd(ctx context.Context, w io.Writer, st *state.Store, stateDir strin
 		r.Commands = def.Commands
 		if r.Poll == "" {
 			r.Poll = def.Poll
+		}
+		// 상대경로 명령은 정의 파일 위치 기준으로 절대화 — task watch는 회사 루트에서 돌기 때문.
+		base := filepath.Dir(file)
+		if abs, err := filepath.Abs(base); err == nil {
+			base = abs
+		}
+		for name, argv := range r.Commands {
+			if len(argv) > 0 && strings.Contains(argv[0], "/") && !filepath.IsAbs(argv[0]) {
+				argv[0] = filepath.Join(base, argv[0])
+				r.Commands[name] = argv
+			}
 		}
 	}
 	if err := r.Validate(); err != nil {

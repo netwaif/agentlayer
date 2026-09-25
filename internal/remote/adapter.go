@@ -39,9 +39,20 @@ type Info struct {
 	Detail    string
 }
 
+// DispatchRequest는 지시 한 건. Attempt는 등록 시도 구분자(같은 업무를 --replace로 다시 배정하면 바뀐다) —
+// 실행기의 멱등 키에 들어가 죽은 옛 카드가 돌아오지 않게 한다. Parent는 DONE 뒤 후속 지시의 직전 handle.
+type DispatchRequest struct {
+	TaskID  string
+	Title   string
+	Body    string
+	Parent  Handle
+	Attempt string
+}
+
 // Adapter는 send·task watch·task done이 실행기에 대해 아는 전부다.
 type Adapter interface {
-	Dispatch(ctx context.Context, taskID, title, body string, parent Handle) (Handle, error)
+	Dispatch(ctx context.Context, req DispatchRequest) (Handle, error)
+	Resume(ctx context.Context, h Handle) error // 이미 만든 실행(카드)을 다시 기동만 — 기동 실패 재시도용
 	Poll(ctx context.Context, h Handle) (Status, error)
 	Reply(ctx context.Context, h Handle, text string) error
 	Pull(ctx context.Context, h Handle, destDir string) error

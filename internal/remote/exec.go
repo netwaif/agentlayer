@@ -67,13 +67,14 @@ func tempText(text string) (string, func(), error) {
 	return f.Name(), func() { os.Remove(f.Name()) }, nil
 }
 
-func (e *Exec) Dispatch(ctx context.Context, taskID, title, body string, parent Handle) (Handle, error) {
-	p, cleanup, err := tempText(body)
+func (e *Exec) Dispatch(ctx context.Context, req DispatchRequest) (Handle, error) {
+	p, cleanup, err := tempText(req.Body)
 	if err != nil {
 		return "", err
 	}
 	defer cleanup()
-	out, ok, err := e.run(ctx, TimeoutDispatch, "dispatch", map[string]string{"task_id": taskID, "title": title, "body_file": p, "parent": parent})
+	out, ok, err := e.run(ctx, TimeoutDispatch, "dispatch", map[string]string{"task_id": req.TaskID, "title": req.Title, "body_file": p,
+		"parent": req.Parent, "attempt": req.Attempt})
 	if !ok {
 		return "", errors.New("commands.dispatch가 없습니다")
 	}
@@ -131,7 +132,19 @@ func (e *Exec) Reply(ctx context.Context, h Handle, text string) error {
 		return err
 	}
 	defer cleanup()
-	_, _, err = e.run(ctx, TimeoutDispatch, "reply", map[string]string{"handle": h, "text_file": p})
+	_, ok, err := e.run(ctx, TimeoutDispatch, "reply", map[string]string{"handle": h, "text_file": p})
+	if !ok {
+		return errors.New("commands.reply가 없습니다 — 답변을 전달할 길이 없음")
+	}
+	return err
+}
+
+// Resume — commands.resume(재기동). 없으면 에러: 조용히 성공하면 총괄이 기다리기만 한다.
+func (e *Exec) Resume(ctx context.Context, h Handle) error {
+	_, ok, err := e.run(ctx, TimeoutDispatch, "resume", map[string]string{"handle": h})
+	if !ok {
+		return errors.New("commands.resume가 없습니다 — 'task assign --replace' 뒤 다시 보내세요")
+	}
 	return err
 }
 

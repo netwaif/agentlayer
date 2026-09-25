@@ -190,7 +190,8 @@ func (h *Hermes) dispatch(ctx context.Context, want Handle) error {
 	return fmt.Errorf("카드 %s 기동 실패: %s (다음 send로 재시도)", want, reason)
 }
 
-func (h *Hermes) Dispatch(ctx context.Context, taskID, title, body string, parent Handle) (Handle, error) {
+func (h *Hermes) Dispatch(ctx context.Context, req DispatchRequest) (Handle, error) {
+	taskID, title, body, parent := req.TaskID, req.Title, req.Body, req.Parent
 	ws := h.WorkspaceRoot + "/" + taskID
 	if _, err := h.run(ctx, TimeoutQuery, "mkdir", "-p", ws); err != nil {
 		return "", err
@@ -202,6 +203,9 @@ func (h *Hermes) Dispatch(ctx context.Context, taskID, title, body string, paren
 		full = title
 	}
 	key := "agentlayer:" + taskID
+	if req.Attempt != "" {
+		key += ":" + req.Attempt
+	}
 	if parent != "" {
 		key += ":" + parent
 	}
@@ -210,7 +214,8 @@ func (h *Hermes) Dispatch(ctx context.Context, taskID, title, body string, paren
 	if parent != "" {
 		args = append(args, "--parent", parent)
 	}
-	args = append(args, "--body", body, "--json")
+	// --body=… 형태: 본문이 '-'로 시작해도 옵션으로 오해받지 않는다.
+	args = append(args, "--body="+body, "--json")
 	out, err := h.run(ctx, TimeoutDispatch, h.kanban(args...)...)
 	if err != nil {
 		return "", err
@@ -248,11 +253,14 @@ func (h *Hermes) Poll(ctx context.Context, id Handle) (Status, error) {
 }
 
 func (h *Hermes) Reply(ctx context.Context, id Handle, text string) error {
-	if _, err := h.run(ctx, TimeoutDispatch, h.kanban("unblock", id, "--reason", text)...); err != nil {
+	if _, err := h.run(ctx, TimeoutDispatch, h.kanban("unblock", id, "--reason="+text)...); err != nil {
 		return err
 	}
 	return h.dispatch(ctx, id)
 }
+
+// Resume은 create 없이 dispatch만 — 카드는 있는데 기동이 안 된 경우(프로필 상한 등)의 재시도.
+func (h *Hermes) Resume(ctx context.Context, id Handle) error { return h.dispatch(ctx, id) }
 
 func (h *Hermes) Pull(ctx context.Context, id Handle, destDir string) error {
 	c, err := h.show(ctx, id)
@@ -265,9 +273,14 @@ func (h *Hermes) Pull(ctx context.Context, id Handle, destDir string) error {
 	if c.Task.WorkspacePath != "" {
 		ctx2, cancel := context.WithTimeout(ctx, TimeoutPull)
 		defer cancel()
-		out, err := h.R.Run(ctx2, nil, "tar", "-C", c.Task.WorkspacePath, "-cf", "-", ".")
+		// 원격에서 상한+1바이트까지만 잘라 보낸다 — 거대한 작업 폴더가 로컬 메모리·대역폭을 먹지 않게.
+		pipeline := fmt.Sprintf("tar -C %s -cf - . | head -c %d", ShellQuote(c.Task.WorkspacePath), MaxPullBytes+1)
+		out, err := h.R.Run(ctx2, nil, "sh", "-c", pipeline)
 		if err != nil {
 			return fmt.Errorf("산출물 tar: %w", err)
+		}
+		if len(out) > MaxPullBytes {
+			return fmt.Errorf("산출물 %dMiB 초과 — 원격 %s를 정리하거나 필요한 파일만 남기세요", MaxPullBytes>>20, c.Task.WorkspacePath)
 		}
 		if err := Untar(destDir, bytes.NewReader(out), MaxPullBytes); err != nil {
 			return err

@@ -22,12 +22,20 @@ type scriptedAdapter struct {
 	dispatched  []string // "taskID|title|body|parent"
 	replied     []string
 	dispatchErr error
+	resumeErr   error
+	resumed     []string
+	attempts    []string
 	handle      string
 }
 
-func (s *scriptedAdapter) Dispatch(_ context.Context, id, title, body string, parent remote.Handle) (remote.Handle, error) {
-	s.dispatched = append(s.dispatched, id+"|"+title+"|"+body+"|"+parent)
+func (s *scriptedAdapter) Dispatch(_ context.Context, r remote.DispatchRequest) (remote.Handle, error) {
+	s.dispatched = append(s.dispatched, r.TaskID+"|"+r.Title+"|"+r.Body+"|"+r.Parent)
+	s.attempts = append(s.attempts, r.Attempt)
 	return s.handle, s.dispatchErr
+}
+func (s *scriptedAdapter) Resume(_ context.Context, h remote.Handle) error {
+	s.resumed = append(s.resumed, h)
+	return s.resumeErr
 }
 func (s *scriptedAdapter) Poll(context.Context, remote.Handle) (remote.Status, error) {
 	return s.status, nil
@@ -92,12 +100,36 @@ func TestSendRemoteRetryAfterDispatchFailure(t *testing.T) {
 	if as.Remote.Handle != "t_new" {
 		t.Errorf("카드는 남긴다(handle 저장): %+v", as.Remote)
 	}
-	ad.dispatchErr = nil
+	// 두 번째 send: 카드가 이미 있으면 create를 다시 부르지 않고 그 카드를 재기동만 한다(멱등 키가 옛 카드를 돌려주는 사고 방지)
 	if err := RunSend(&bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시"}); err != nil {
 		t.Fatal(err)
 	}
-	if len(ad.dispatched) != 2 {
-		t.Errorf("재시도 Dispatch: %v", ad.dispatched)
+	if len(ad.dispatched) != 1 || len(ad.resumed) != 1 || ad.resumed[0] != "t_new" {
+		t.Errorf("재시도는 Resume: dispatched=%v resumed=%v", ad.dispatched, ad.resumed)
+	}
+	as, _, _ = task.Load(stateDir, task.RemoteAgentID("hermes-qa"))
+	if as.Remote.LastState != state.StateWorking {
+		t.Errorf("재기동 뒤 WORKING: %+v", as.Remote)
+	}
+}
+
+func TestSendRemoteAttemptChangesWithReplace(t *testing.T) {
+	// ERROR 뒤 task assign --replace → send는 새 시도 키로 새 카드를 만들어야 한다(같은 키면 죽은 카드가 돌아온다)
+	ad := &scriptedAdapter{handle: "t_1", status: remote.Status{State: state.StateIdle}}
+	st, stateDir, _ := remoteSendFixture(t, ad)
+	if err := RunSend(&bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시"}); err != nil {
+		t.Fatal(err)
+	}
+	as, _, _ := task.Load(stateDir, task.RemoteAgentID("hermes-qa"))
+	as.Remote = &task.RemoteRef{Name: "hermes-qa"} // --replace와 같은 효과: 새 등록
+	as.AssignedAt = as.AssignedAt.Add(time.Second)
+	task.Save(stateDir, *as)
+	ad.handle = "t_2"
+	if err := RunSend(&bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시2"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(ad.attempts) != 2 || ad.attempts[0] == ad.attempts[1] || ad.attempts[1] == "" {
+		t.Errorf("시도 키가 달라야 함: %v", ad.attempts)
 	}
 }
 

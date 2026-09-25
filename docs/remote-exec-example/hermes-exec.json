@@ -1,9 +1,10 @@
 {
   "poll": "5s",
   "commands": {
-    "dispatch": ["docs/remote-exec-example/hermes-exec.sh", "dispatch", "{task_id}", "{title}", "{body_file}", "{parent}"],
+    "dispatch": ["docs/remote-exec-example/hermes-exec.sh", "dispatch", "{task_id}", "{title}", "{body_file}", "{parent}", "{attempt}"],
     "poll":     ["docs/remote-exec-example/hermes-exec.sh", "poll", "{handle}"],
     "reply":    ["docs/remote-exec-example/hermes-exec.sh", "reply", "{handle}", "{text_file}"],
+    "resume":   ["docs/remote-exec-example/hermes-exec.sh", "resume", "{handle}"],
     "finish":   ["docs/remote-exec-example/hermes-exec.sh", "finish", "{handle}"]
   }
 }

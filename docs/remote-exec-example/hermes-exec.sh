@@ -13,11 +13,11 @@ remote() { ssh -o BatchMode=yes "$SSH_HOST" "$EXEC $*"; }
 
 case "$1" in
   dispatch)
-    task=$2; title=$3; body=$(cat "$4"); parent=$5
+    task=$2; title=$3; body=$(cat "$4"); parent=$5; attempt=$6
     remote mkdir -p "$(q "$WS/$task")" >/dev/null
     extra=""; [ -n "$parent" ] && extra="--parent $(q "$parent")"
-    id=$(remote hermes kanban create "$(q "$task $title")" --assignee "$(q "$PROFILE")" --idempotency-key "$(q "agentlayer:$task:$parent")" \
-         --created-by agentlayer --workspace "$(q "dir:$WS/$task")" --max-runtime 2h $extra --body "$(q "$body")" --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+    id=$(remote hermes kanban create "$(q "$task $title")" --assignee "$(q "$PROFILE")" --idempotency-key "$(q "agentlayer:$task:$attempt:$parent")" \
+         --created-by agentlayer --workspace "$(q "dir:$WS/$task")" --max-runtime 2h $extra "--body=$body" --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
     remote hermes kanban dispatch --max 3 --json | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if any(s['task_id']=='$id' for s in d['spawned']) else 1)"
     printf '{"handle":"%s"}\n' "$id" ;;
   poll)
@@ -31,9 +31,11 @@ if st=="blocked":
     out["ask"]=(ev[-1]["payload"] or {}).get("reason","") if ev else "입력 대기"
 print(json.dumps(out, ensure_ascii=False))' ;;
   reply)
-    remote hermes kanban unblock "$(q "$2")" --reason "$(q "$(cat "$3")")" >/dev/null
+    remote hermes kanban unblock "$(q "$2")" "$(q "--reason=$(cat "$3")")" >/dev/null
     remote hermes kanban dispatch --max 3 --json >/dev/null ;;
+  resume)
+    remote hermes kanban dispatch --max 3 --json | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if any(s['task_id']=='$2' for s in d['spawned']) else 1)" ;;
   finish)
     remote hermes kanban archive "$(q "$2")" >/dev/null ;;
-  *) echo "usage: $0 dispatch|poll|reply|finish …" >&2; exit 2 ;;
+  *) echo "usage: $0 dispatch|poll|reply|resume|finish …" >&2; exit 2 ;;
 esac
