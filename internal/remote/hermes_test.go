@@ -228,3 +228,16 @@ func TestHermesCheck(t *testing.T) {
 		t.Errorf("info=%+v err=%v", info, err)
 	}
 }
+
+func TestHermesDispatchTitleAlreadyHasID(t *testing.T) {
+	f := &FakeRunner{Reply: replyTable(t, map[string]string{
+		"hermes kanban create":   `{"id":"t_x"}`,
+		"hermes kanban dispatch": `{"spawned":[{"task_id":"t_x"}]}`,
+	})}
+	if _, err := newHermes(f).Dispatch(context.Background(), "PING-2", "PING-2 원격 연결 시험", "b", ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.Calls[1][3]; got != "PING-2 원격 연결 시험" {
+		t.Errorf("제목이 업무ID로 시작하면 ID를 다시 붙이지 않는다: %q", got)
+	}
+}

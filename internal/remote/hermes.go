@@ -196,8 +196,10 @@ func (h *Hermes) Dispatch(ctx context.Context, taskID, title, body string, paren
 		return "", err
 	}
 	full := taskID
-	if title != "" {
+	if title != "" && !strings.HasPrefix(title, taskID) {
 		full = taskID + " " + title
+	} else if title != "" {
+		full = title
 	}
 	key := "agentlayer:" + taskID
 	if parent != "" {
