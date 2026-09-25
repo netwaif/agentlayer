@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/board"
+	"github.com/netwaif/agentlayer/internal/state"
 )
 
 // Assignment는 세션(pane) 하나 ↔ 업무 하나. 파일은 <state>/tasks/<agent-id>.json.
@@ -27,6 +28,34 @@ type Assignment struct {
 	// TaskDir은 회사 루트의 tasks/<업무ID>/ — 있으면 훅이 task.md status·log.md를 자동 갱신한다.
 	TaskDir    string    `json:"task_dir,omitempty"`
 	AssignedAt time.Time `json:"assigned_at"`
+	// Remote는 원격 직원 등록일 때만. 훅이 아니라 task watch의 폴링이 상태를 채운다.
+	Remote *RemoteRef `json:"remote,omitempty"`
+}
+
+// RemoteRef는 원격 직원(어댑터) 쪽 실행 식별자와 마지막 관측 상태.
+type RemoteRef struct {
+	Name      string           `json:"name"`
+	Handle    string           `json:"handle,omitempty"`
+	LastState state.AgentState `json:"last_state,omitempty"`
+	Seen      int64            `json:"seen,omitempty"`
+	Workspace string           `json:"workspace,omitempty"`
+}
+
+// RemoteAgentID는 원격 직원의 에이전트 ID(agents/에는 저장하지 않는다 — tasks/<id>.json 파일명으로만 쓴다).
+func RemoteAgentID(name string) string { return "remote-" + name }
+
+// IsRemote — 원격 직원 등록인가.
+func (as Assignment) IsRemote() bool { return as.Remote != nil }
+
+// Save는 등록 파일을 덮어쓴다(원격 handle·last_state 갱신용).
+func Save(stateDir string, as Assignment) error {
+	if !validAgentID(as.AgentID) {
+		return fmt.Errorf("에이전트 ID 형식 오류: %q", as.AgentID)
+	}
+	if err := os.MkdirAll(Dir(stateDir), 0o700); err != nil {
+		return err
+	}
+	return writeAtomic(path(stateDir, as.AgentID), as)
 }
 
 // BoardRootID는 TaskDir(<root>/tasks/<id>)를 회사 루트와 업무ID로 되돌린다. TaskDir가 비면 ("", "").
