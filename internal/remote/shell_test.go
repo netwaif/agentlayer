@@ -45,3 +45,17 @@ func TestFakeRunnerRecords(t *testing.T) {
 		t.Errorf("FakeRunner: out=%s err=%v calls=%v stdins=%v", out, err, f.Calls, f.Stdins)
 	}
 }
+
+// macOS의 Unix 소켓 경로 상한(104바이트): ControlPath = <dir>/ssh-<40hex> + ssh의 임시 접미(~17자)가 넘으면
+// "unix_listener: path too long"으로 ssh 자체가 실패한다(실측 2026-09-25, state dir 아래 remotes/에 두었을 때).
+func TestOpenHermesControlPathFitsUnixSocket(t *testing.T) {
+	ad, err := Open(hermesRemote(), "/Users/soonho/.local/state/agentlayer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := ad.(*Hermes)
+	dir := h.R.(SSHRunner).ControlDir
+	if n := len(dir) + len("/ssh-") + 40 + 20; n > 104 {
+		t.Errorf("ControlDir %q가 너무 길다(%d바이트 예상 > 104)", dir, n)
+	}
+}

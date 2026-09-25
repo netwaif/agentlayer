@@ -3,6 +3,7 @@ package remote
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/state"
@@ -56,11 +57,15 @@ const (
 	MaxPullBytes    = 50 << 20
 )
 
+// ControlDir은 ssh ControlMaster 소켓 폴더. state dir 아래는 macOS Unix 소켓 경로 상한(104바이트)을 넘겨
+// ssh가 "path too long"으로 죽으므로 /tmp 아래 짧은 경로를 쓴다(사용자별, 0700).
+func ControlDir() string { return fmt.Sprintf("/tmp/agentlayer-ssh-%d", os.Getuid()) }
+
 // Open은 등록에 맞는 어댑터를 만든다.
 func Open(r Remote, stateDir string) (Adapter, error) {
 	switch r.Kind {
 	case "hermes":
-		return &Hermes{R: SSHRunner{Host: r.SSH, Exec: r.Exec, ControlDir: Dir(stateDir)}, Profile: r.Profile, Board: r.Board,
+		return &Hermes{R: SSHRunner{Host: r.SSH, Exec: r.Exec, ControlDir: ControlDir()}, Profile: r.Profile, Board: r.Board,
 			WorkspaceRoot: r.WorkspaceRoot, MailboxAssignee: r.Mailbox, MaxRuntime: r.MaxRuntime, Now: time.Now}, nil
 	case "exec":
 		return &Exec{Commands: r.Commands}, nil
