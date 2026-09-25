@@ -18,6 +18,7 @@ import (
 type finishAdapter struct {
 	remote.Adapter
 	finished []string
+	answered []string
 	status   remote.Status
 }
 
@@ -31,6 +32,10 @@ func (f *finishAdapter) Poll(context.Context, remote.Handle) (remote.Status, err
 func (f *finishAdapter) Mailbox(context.Context) ([]remote.Letter, error) { return nil, nil }
 func (f *finishAdapter) Pull(_ context.Context, _ remote.Handle, d string) error {
 	return os.MkdirAll(d, 0o755)
+}
+func (f *finishAdapter) Answer(_ context.Context, id, text string) error {
+	f.answered = append(f.answered, id+"|"+text)
+	return nil
 }
 
 func remoteCompanyRoot(t *testing.T, id string) string {
@@ -138,5 +143,27 @@ func TestTaskWatchPollsRemote(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "결과물", "PING-2", "remote")); err != nil {
 		t.Error("done이면 결과물/PING-2/remote/ 회수")
+	}
+}
+
+func TestTaskReplyAnswersLetter(t *testing.T) {
+	st, stateDir := newStore(t)
+	root := remoteCompanyRoot(t, "X-1")
+	inbox := filepath.Join(root, "runtime", "inbox")
+	board.RememberRoot(stateDir, root)
+	remote.Save(stateDir, remote.Remote{Name: "hermes-qa", Kind: "hermes", SSH: "h", Profile: "p", WorkspaceRoot: "/w"})
+	rep := task.LetterReport(inbox, "hermes-qa", remote.Letter{ID: "t_m1", From: "default", Text: "편지"}, time.Now())
+	task.WriteReport(rep)
+	task.Poll(inbox)
+	fa := &finishAdapter{}
+	prev := OpenRemote
+	OpenRemote = func(remote.Remote, string) (remote.Adapter, error) { return fa, nil }
+	t.Cleanup(func() { OpenRemote = prev })
+	var out bytes.Buffer
+	if err := RunTask(context.Background(), &out, st, stateDir, []string{"reply", "t_m1", "답장", "본문"}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if len(fa.answered) != 1 || fa.answered[0] != "t_m1|답장 본문" || !strings.Contains(out.String(), "hermes-qa") {
+		t.Errorf("answered=%v out=%s", fa.answered, out.String())
 	}
 }

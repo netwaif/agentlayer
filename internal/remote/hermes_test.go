@@ -172,11 +172,22 @@ func TestHermesMailbox(t *testing.T) {
 	if l.ID != "t_m1" || l.From != "default" || l.Text != "정리 내용" || l.TaskID != "VIDEO-07" || l.At.Unix() != 1790320000 {
 		t.Errorf("letter=%+v", l)
 	}
-	if got := strings.Join(f.Calls[1], " "); got != "hermes kanban claim t_m1" {
+	// 수신 확인 = claim만(24시간). 닫지 않아야 총괄이 나중에 답(Answer)으로 닫을 수 있다.
+	if got := strings.Join(f.Calls[1], " "); got != "hermes kanban claim t_m1 --ttl 86400" {
 		t.Errorf("claim argv=%q", got)
 	}
-	if got := strings.Join(f.Calls[2], " "); got != "hermes kanban complete t_m1 --result received by agentlayer 2026-09-25T10:00:00Z" {
-		t.Errorf("complete argv=%q", got)
+	if len(f.Calls) != 2 {
+		t.Errorf("편지를 받을 때 complete를 부르면 안 됨: %v", f.Calls)
+	}
+}
+
+func TestHermesAnswerCompletesLetter(t *testing.T) {
+	f := &FakeRunner{Reply: replyTable(t, map[string]string{"hermes kanban complete": ""})}
+	if err := newHermes(f).Answer(context.Background(), "t_m1", "-답장입니다"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(f.Calls[0], " "); got != "hermes kanban complete t_m1 --result=-답장입니다" {
+		t.Errorf("answer argv=%q", got)
 	}
 }
 

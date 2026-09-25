@@ -5,7 +5,9 @@ package task
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 	"unicode/utf8"
@@ -100,14 +102,64 @@ func MessageReport(inbox, from, taskID, text string, now time.Time) *Report {
 		Task: truncBytes(text, MaxMessageBytes), At: now, Inbox: inbox}
 }
 
-// LetterReport — 원격 편지함에서 온 편지를 MESSAGE 보고로.
-func LetterReport(inbox string, l remote.Letter, now time.Time) *Report {
+// LetterReport — 원격 편지함에서 온 편지를 MESSAGE 보고로. Session은 원격 이름(답장 경로), From은 보낸 쪽, Letter는 편지ID.
+func LetterReport(inbox, remoteName string, l remote.Letter, now time.Time) *Report {
 	r := MessageReport(inbox, l.From, l.TaskID, l.Text, now)
 	r.Kind = "letter"
+	r.Session = remoteName
+	r.Letter = l.ID
 	if !l.At.IsZero() {
 		r.At = l.At
 	}
 	return r
+}
+
+// letterAlreadyDelivered — 같은 편지ID의 보고가 pending/·received/에 이미 있으면 true(재전달 억제).
+func letterAlreadyDelivered(inbox, letterID string) bool {
+	if letterID == "" {
+		return false
+	}
+	if _, ok := findLetter(inbox, letterID); ok {
+		return true
+	}
+	return false
+}
+
+// findLetter는 수신함(pending/·received/)에서 편지ID의 보고를 찾는다.
+func findLetter(inbox, letterID string) (*Report, bool) {
+	for _, sub := range []string{"received", "pending"} {
+		files, _ := filepath.Glob(filepath.Join(inbox, sub, "*.json"))
+		for _, f := range files {
+			b, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			var r Report
+			if json.Unmarshal(b, &r) == nil && r.Letter == letterID {
+				return &r, true
+			}
+		}
+	}
+	return nil, false
+}
+
+// ReplyLetter — 총괄의 답장. 수신함에서 편지ID의 보고를 찾아 그 원격 어댑터의 Answer를 부른다. 돌려주는 값은 원격 이름.
+func ReplyLetter(ctx context.Context, stateDir, inbox, letterID, text string, open AdapterOpener) (string, error) {
+	rep, ok := findLetter(inbox, letterID)
+	if !ok {
+		return "", fmt.Errorf("수신함에 편지 %q이 없습니다(%s)", letterID, inbox)
+	}
+	if rep.Session == "" {
+		return "", fmt.Errorf("편지 %q에 원격 이름이 없습니다(로컬 직원의 편지는 send로 답합니다)", letterID)
+	}
+	ad, _, err := open(rep.Session)
+	if err != nil {
+		return rep.Session, err
+	}
+	if err := ad.Answer(ctx, letterID, text); err != nil {
+		return rep.Session, fmt.Errorf("%s 답장 실패: %w", rep.Session, err)
+	}
+	return rep.Session, nil
 }
 
 // AdapterOpener는 이름으로 어댑터를 연다(cli가 remote.Load+remote.Open으로 구현).
@@ -223,7 +275,10 @@ func PollRemotesOnce(ctx context.Context, stateDir, inbox string, open AdapterOp
 			if l.From == "" {
 				l.From = r.Name
 			}
-			if _, err := WriteReport(LetterReport(inbox, l, now)); err != nil {
+			if letterAlreadyDelivered(inbox, l.ID) {
+				continue
+			}
+			if _, err := WriteReport(LetterReport(inbox, r.Name, l, now)); err != nil {
 				warn("편지 보고 쓰기: " + err.Error())
 			}
 		}

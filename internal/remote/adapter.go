@@ -57,6 +57,7 @@ type Adapter interface {
 	Reply(ctx context.Context, h Handle, text string) error
 	Pull(ctx context.Context, h Handle, destDir string) error
 	Mailbox(ctx context.Context) ([]Letter, error)
+	Answer(ctx context.Context, letterID, text string) error // 편지에 답장 — 편지 카드를 답으로 닫아 보낸 쪽이 깨어나게
 	Finish(ctx context.Context, h Handle) error
 	Check(ctx context.Context) (Info, error)
 }

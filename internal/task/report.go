@@ -26,6 +26,7 @@ type Report struct {
 	Ask     string    `json:"ask,omitempty"`
 	CWD     string    `json:"cwd,omitempty"`
 	TaskDir string    `json:"task_dir,omitempty"`
+	Letter  string    `json:"letter,omitempty"` // 편지(MESSAGE)의 원격 편지ID — task reply가 답장할 때 쓴다
 	At      time.Time `json:"at"`
 	Inbox   string    `json:"-"`
 }

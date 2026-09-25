@@ -202,7 +202,10 @@ agentlayer task done PING-2                        # 서버 카드 archive까지
 agentlayer task message "정리본을 결과물/VIDEO-07/에 두었습니다"      # 로컬 직원 pane에서 (Claude·Codex·Gemini 공통)
 agentlayer task message --task VIDEO-07 - < 정리본.md                 # 업무ID를 붙이면 log.md에 [MESSAGE]
 hermes kanban create "[VIDEO-07] 정리본" --assignee imac-manager --body "…"   # 원격 Hermes 쪽(예약 담당자 = 편지함)
+agentlayer task reply t_da1d7ac4 "답장 본문"                          # 총괄: 원격 편지(이벤트의 letter)에 답장 → 편지 카드를 답으로 닫는다
 ```
+
+원격 편지는 받을 때 닫지 않고 claim(24시간)만 한다. 총괄이 `task reply`로 닫으면, 보낸 Hermes가 그 카드를 `kanban notify-subscribe --platform discord --chat-id <채널ID> --chat-type channel`로 구독해 두었을 때 게이트웨이가 그 대화를 깨워 답을 보여 준다.
 
 **다른 실행기 붙이기(exec 어댑터).** Hermes가 아니라도 명령 몇 개와 JSON 응답 규격만 맞추면 직원이 된다. `docs/remote-exec-example/`에 Hermes CLI를 이 규격으로 감싼 예시가 있다.
 

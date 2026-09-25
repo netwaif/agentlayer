@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/board"
@@ -23,7 +24,8 @@ const taskUsage = `사용법:
   agentlayer task list [--json]
   agentlayer task done <업무ID> [--root <회사루트>]
   agentlayer task watch <inbox> [--once] [--interval 200ms]
-  agentlayer task message [--task <업무ID>] <본문|->   # 직원 pane에서: 총괄에게 편지(MESSAGE)`
+  agentlayer task message [--task <업무ID>] <본문|->   # 직원 pane에서: 총괄에게 편지(MESSAGE)
+  agentlayer task reply <편지ID> <답|->                 # 총괄: 원격 편지(MESSAGE의 letter)에 답장`
 
 // RunTask — 업무 ↔ 세션 등록과 수신함 감시. 보고 자체는 hook이 쓴다(main.go).
 func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string, args []string, now time.Time) error {
@@ -41,6 +43,8 @@ func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string,
 		return taskWatch(ctx, w, st, stateDir, args[1:])
 	case "message":
 		return taskMessage(w, os.Stdin, st, stateDir, config.Load().CompanyRoot, os.Getenv, args[1:], now)
+	case "reply":
+		return taskReply(ctx, w, os.Stdin, stateDir, config.Load().CompanyRoot, args[1:])
 	default:
 		return fmt.Errorf("알 수 없는 task 명령: %s\n%s", args[0], taskUsage)
 	}
@@ -451,5 +455,58 @@ func taskAssignRemote(w io.Writer, st *state.Store, stateDir string, r *remote.R
 	fmt.Fprintf(w, "업무 %s → 원격 %s (%s) 등록. 첫 'agentlayer send %s …'가 실행기에 카드를 만들고, 보고는 %s/pending/ 에 떨어집니다(task watch가 켜져 있을 때).%s\n",
 		taskID, r.Name, r.Kind, r.Name, ShortenHome(inbox), warn)
 	refreshBoard(w, st, stateDir, now)
+	return nil
+}
+
+// taskReply — 총괄이 원격 편지(MESSAGE 보고의 letter)에 답한다. 수신함은 등록 inbox → 설정 → 기억된 루트 순으로 찾는다.
+func taskReply(ctx context.Context, w io.Writer, stdin io.Reader, stateDir, companyRoot string, args []string) error {
+	if len(args) < 2 {
+		return errors.New("사용법: agentlayer task reply <편지ID> <답|->")
+	}
+	letterID := args[0]
+	text := strings.Join(args[1:], " ")
+	if text == "-" {
+		if stdin == nil {
+			return errors.New("stdin이 없습니다")
+		}
+		b, err := io.ReadAll(stdin)
+		if err != nil {
+			return err
+		}
+		text = strings.TrimRight(string(b), "\n")
+	}
+	text = SanitizeMessage(text)
+	if strings.TrimSpace(text) == "" {
+		return errors.New("답이 비었습니다")
+	}
+	list, err := task.List(stateDir)
+	if err != nil {
+		return err
+	}
+	var inboxes []string
+	for _, as := range list {
+		inboxes = append(inboxes, as.Inbox)
+	}
+	root := board.Root(companyRoot, inboxes, board.RememberedRoot(stateDir))
+	if root == "" {
+		return errors.New("회사 루트를 찾지 못했습니다 — 설정 company_root 또는 task assign이 먼저 필요합니다")
+	}
+	inbox := filepath.Join(root, "runtime", "inbox")
+	opener := func(name string) (remote.Adapter, *remote.Remote, error) {
+		r, ok, err := remote.Load(stateDir, name)
+		if err != nil {
+			return nil, nil, err
+		}
+		if !ok {
+			return nil, nil, fmt.Errorf("원격 %q 등록 없음", name)
+		}
+		ad, err := OpenRemote(*r, stateDir)
+		return ad, r, err
+	}
+	name, err := task.ReplyLetter(ctx, stateDir, inbox, letterID, text, opener)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "답장 완료 → %s 편지 %s (보낸 쪽이 구독해 두었으면 지금 깨어납니다)\n", name, letterID)
 	return nil
 }

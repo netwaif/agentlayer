@@ -108,9 +108,9 @@ func TestMessageAndLetterReports(t *testing.T) {
 	if got, ok, err := Poll(inbox); err != nil || !ok || got.Task != r.Task {
 		t.Fatalf("한글 장문 편지가 Poll로 그대로 돌아와야 함: ok=%v err=%v", ok, err)
 	}
-	l := LetterReport(inbox, remote.Letter{ID: "t_m1", From: "default", Text: "정리본", TaskID: "VIDEO-07", At: time.Unix(1790320000, 0)}, time.Now())
-	if l.TaskID != "VIDEO-07" || l.From != "default" || l.Task != "정리본" || l.To != "MESSAGE" {
-		t.Errorf("%+v", l)
+	l := LetterReport(inbox, "hermes-qa", remote.Letter{ID: "t_m1", From: "default", Text: "정리본", TaskID: "VIDEO-07", At: time.Unix(1790320000, 0)}, time.Now())
+	if l.TaskID != "VIDEO-07" || l.From != "default" || l.Task != "정리본" || l.To != "MESSAGE" || l.Letter != "t_m1" || l.Session != "hermes-qa" {
+		t.Errorf("답장에 필요한 편지ID·원격 이름이 보고에 있어야 함: %+v", l)
 	}
 	if _, err := WriteReport(l); err != nil {
 		t.Fatal(err)
@@ -146,16 +146,21 @@ func TestApplyRemoteStatusDoesNotResurrectOrOverwrite(t *testing.T) {
 }
 
 type fakeAdapter struct {
-	status  remote.Status
-	letters []remote.Letter
-	pulled  []string
-	pollErr error
+	status   remote.Status
+	letters  []remote.Letter
+	pulled   []string
+	pollErr  error
+	answered []string
 }
 
 func (f *fakeAdapter) Dispatch(context.Context, remote.DispatchRequest) (remote.Handle, error) {
 	return "h", nil
 }
 func (f *fakeAdapter) Resume(context.Context, remote.Handle) error { return nil }
+func (f *fakeAdapter) Answer(_ context.Context, id, text string) error {
+	f.answered = append(f.answered, id+"|"+text)
+	return nil
+}
 func (f *fakeAdapter) Poll(context.Context, remote.Handle) (remote.Status, error) {
 	return f.status, f.pollErr
 }
@@ -178,7 +183,7 @@ func TestPollRemotesOncePullsOnDoneAndDeliversLetters(t *testing.T) {
 		t.Fatal(err)
 	}
 	fa := &fakeAdapter{status: remote.Status{State: state.StateDoneUnread, Summary: "PONG-2", Seen: 5},
-		letters: []remote.Letter{{ID: "m1", From: "default", Text: "편지", At: time.Now()}}}
+		letters: []remote.Letter{{ID: "m1", From: "default", Text: "편지", At: time.Now()}, {ID: "m1", From: "default", Text: "편지(중복)", At: time.Now()}}}
 	open := func(name string) (remote.Adapter, *remote.Remote, error) {
 		r, _, _ := remote.Load(stateDir, name)
 		return fa, r, nil
@@ -195,7 +200,7 @@ func TestPollRemotesOncePullsOnDoneAndDeliversLetters(t *testing.T) {
 		tos = append(tos, r.To)
 	}
 	if len(reps) != 2 || !strings.Contains(strings.Join(tos, ","), "DONE_UNREAD") || !strings.Contains(strings.Join(tos, ","), "MESSAGE") {
-		t.Fatalf("reports=%v warns=%v", tos, warns)
+		t.Fatalf("같은 편지ID는 한 번만 전달: reports=%v warns=%v", tos, warns)
 	}
 	PollRemotesOnce(context.Background(), stateDir, inbox, open, func(s string) { warns = append(warns, s) }, time.Now(), true)
 	if len(pendingReports(t, inbox)) != 2 {
@@ -258,5 +263,30 @@ func TestPollRemotesOnceKindFollowsRemote(t *testing.T) {
 	reps := pendingReports(t, inbox)
 	if len(reps) != 1 || reps[0].Kind != "exec" {
 		t.Fatalf("보고 kind는 등록의 kind: %+v", reps)
+	}
+}
+
+func TestReplyLetterFindsRemoteFromInbox(t *testing.T) {
+	stateDir, _, inbox := remoteFixture(t)
+	remote.Save(stateDir, remote.Remote{Name: "hermes-qa", Kind: "hermes", SSH: "h", Profile: "p", WorkspaceRoot: "/w"})
+	remote.Save(stateDir, remote.Remote{Name: "other", Kind: "hermes", SSH: "h", Profile: "p", WorkspaceRoot: "/w"})
+	// 편지가 received/에 있다(총괄이 이미 읽음)
+	rep := LetterReport(inbox, "hermes-qa", remote.Letter{ID: "t_m1", From: "default", Text: "편지"}, time.Now())
+	WriteReport(rep)
+	Poll(inbox)
+	fa := &fakeAdapter{}
+	open := func(name string) (remote.Adapter, *remote.Remote, error) {
+		if name != "hermes-qa" {
+			t.Errorf("편지의 원격 이름으로 열어야 함: %s", name)
+		}
+		r, _, _ := remote.Load(stateDir, name)
+		return fa, r, nil
+	}
+	name, err := ReplyLetter(context.Background(), stateDir, inbox, "t_m1", "답장", open)
+	if err != nil || name != "hermes-qa" || len(fa.answered) != 1 || fa.answered[0] != "t_m1|답장" {
+		t.Fatalf("name=%s err=%v answered=%v", name, err, fa.answered)
+	}
+	if _, err := ReplyLetter(context.Background(), stateDir, inbox, "t_none", "답", open); err == nil {
+		t.Error("수신함에 없는 편지ID는 에러")
 	}
 }

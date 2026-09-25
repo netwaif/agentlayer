@@ -323,11 +323,9 @@ func (h *Hermes) Mailbox(ctx context.Context) ([]Letter, error) {
 		if it.Assignee != h.MailboxAssignee || (it.Status != "todo" && it.Status != "ready") {
 			continue
 		}
-		if _, err := h.run(ctx, TimeoutQuery, h.kanban("claim", it.ID)...); err != nil {
-			continue
-		}
-		ack := "received by agentlayer " + h.Now().UTC().Format(time.RFC3339)
-		if _, err := h.run(ctx, TimeoutQuery, h.kanban("complete", it.ID, "--result", ack)...); err != nil {
+		// 수신 확인 = claim(24시간)만. 닫지 않는다 — 총괄의 답장(Answer)이 카드를 닫으며, 보낸 쪽이 구독해 두었으면
+		// 그때 completed 이벤트로 깨어난다. 답장이 없으면 24시간 뒤 ready로 돌아오지만 로컬 중복 억제가 다시 전달을 막는다.
+		if _, err := h.run(ctx, TimeoutQuery, h.kanban("claim", it.ID, "--ttl", "86400")...); err != nil {
 			continue
 		}
 		l := Letter{ID: it.ID, From: it.CreatedBy, Text: it.Body, At: time.Unix(it.CreatedAt, 0)}
@@ -342,6 +340,13 @@ func (h *Hermes) Mailbox(ctx context.Context) ([]Letter, error) {
 		letters = append(letters, l)
 	}
 	return letters, nil
+}
+
+// Answer는 편지 카드를 답으로 닫는다. 보낸 Hermes가 `kanban notify-subscribe`로 자기 채널을 구독해 두었으면 게이트웨이가
+// completed 이벤트로 그 대화를 깨운다(9/14 wake 실증 경로).
+func (h *Hermes) Answer(ctx context.Context, id, text string) error {
+	_, err := h.run(ctx, TimeoutQuery, h.kanban("complete", id, "--result="+text)...)
+	return err
 }
 
 func (h *Hermes) Finish(ctx context.Context, id Handle) error {
