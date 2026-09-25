@@ -26,3 +26,6 @@ func hookPane(env func(string) string) string {
 	}
 	return pane
 }
+
+// PaneFromEnv는 hookPane의 공개 이름 — task message 등 "이 pane이 누구인가"를 훅과 같은 규칙으로 판정한다.
+func PaneFromEnv(env func(string) string) string { return hookPane(env) }

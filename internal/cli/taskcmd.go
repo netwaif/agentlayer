@@ -39,6 +39,8 @@ func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string,
 		return taskDone(w, st, stateDir, args[1:], now)
 	case "watch":
 		return taskWatch(ctx, w, st, stateDir, args[1:])
+	case "message":
+		return taskMessage(w, os.Stdin, st, stateDir, config.Load().CompanyRoot, os.Getenv, args[1:], now)
 	default:
 		return fmt.Errorf("알 수 없는 task 명령: %s\n%s", args[0], taskUsage)
 	}
