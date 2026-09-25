@@ -3282,7 +3282,7 @@ git commit -m "feat(task): assign·list·done·watch 원격 분기 — watch 안
 
 **Interfaces:**
 - Consumes: Task 7 `task.MessageReport`·`task.WriteReport`, 기존 `board.Root`·`board.RememberedRoot`·`config.Load().CompanyRoot`·`board.AppendLog`.
-- Produces: `func PaneFromEnv(env func(string) string) string` (hookcmd), `func taskMessage(w io.Writer, stdin io.Reader, st *state.Store, stateDir string, env func(string) string, args []string, now time.Time) error`. `RunTask`는 `os.Getenv`를 넘긴다.
+- Produces: `func PaneFromEnv(env func(string) string) string` (hookcmd), `func taskMessage(w io.Writer, stdin io.Reader, st *state.Store, stateDir, companyRoot string, env func(string) string, args []string, now time.Time) error`. `RunTask`는 `config.Load().CompanyRoot`와 `os.Getenv`를 넘긴다(테스트가 실제 설정에 영향받지 않게).
 
 - [ ] **Step 1: `guard.go`에 추가**
 
@@ -3338,7 +3338,7 @@ func readPending(t *testing.T, inbox string) []task.Report {
 
 func TestTaskMessageOutsideTmux(t *testing.T) {
 	st, stateDir := newStore(t)
-	err := taskMessage(&bytes.Buffer{}, nil, st, stateDir, func(string) string { return "" }, []string{"안녕"}, time.Now())
+	err := taskMessage(&bytes.Buffer{}, nil, st, stateDir, "", func(string) string { return "" }, []string{"안녕"}, time.Now())
 	if err == nil || !strings.Contains(err.Error(), "tmux") {
 		t.Errorf("tmux 밖은 거부: %v", err)
 	}
@@ -3352,7 +3352,7 @@ func TestTaskMessageWithAssignedTaskLogs(t *testing.T) {
 	task.Assign(stateDir, task.Assignment{TaskID: "VIDEO-07", AgentID: "codex-3", Session: "codex-live", Pane: "%3", Inbox: inbox,
 		TaskDir: board.TaskDir(root, "VIDEO-07"), AssignedAt: time.Now()}, false)
 	var out bytes.Buffer
-	if err := taskMessage(&out, strings.NewReader("정리본입니다\n둘째 줄"), st, stateDir, tmuxEnv("%3"), []string{"--task", "VIDEO-07", "-"}, time.Now()); err != nil {
+	if err := taskMessage(&out, strings.NewReader("정리본입니다\n둘째 줄"), st, stateDir, "", tmuxEnv("%3"), []string{"--task", "VIDEO-07", "-"}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	reps := readPending(t, inbox)
@@ -3370,7 +3370,7 @@ func TestTaskMessageUnassignedTaskNoLog(t *testing.T) {
 	inbox := filepath.Join(root, "runtime", "inbox")
 	board.RememberRoot(stateDir, root)
 	st.Save(&state.Agent{ID: "gemini-5", Kind: "gemini", State: state.StateIdle, Tmux: state.TmuxRef{Session: "community-agy", PaneID: "%5"}})
-	if err := taskMessage(&bytes.Buffer{}, nil, st, stateDir, tmuxEnv("%5"), []string{"--task", "VIDEO-07", "의견 있음"}, time.Now()); err != nil {
+	if err := taskMessage(&bytes.Buffer{}, nil, st, stateDir, "", tmuxEnv("%5"), []string{"--task", "VIDEO-07", "의견 있음"}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	reps := readPending(t, inbox)
@@ -3385,7 +3385,7 @@ func TestTaskMessageUnassignedTaskNoLog(t *testing.T) {
 func TestTaskMessageNoRootIsError(t *testing.T) {
 	st, stateDir := newStore(t)
 	st.Save(&state.Agent{ID: "codex-3", Kind: "codex", Tmux: state.TmuxRef{Session: "codex-live", PaneID: "%3"}})
-	err := taskMessage(&bytes.Buffer{}, nil, st, stateDir, tmuxEnv("%3"), []string{"안녕"}, time.Now())
+	err := taskMessage(&bytes.Buffer{}, nil, st, stateDir, "", tmuxEnv("%3"), []string{"안녕"}, time.Now())
 	if err == nil || !strings.Contains(err.Error(), "회사 루트") {
 		t.Errorf("루트를 못 찾으면 에러: %v", err)
 	}
@@ -3412,7 +3412,6 @@ import (
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/board"
-	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/hookcmd"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
@@ -3420,7 +3419,7 @@ import (
 
 // taskMessage — 직원 pane에서 실행: 총괄 수신함에 MESSAGE 이벤트를 쓴다(배정과 무관하게 먼저 말 걸기).
 // 보낸 세션은 훅과 같은 규칙(TMUX_PANE + 기본 tmux 서버)으로 판정한다.
-func taskMessage(w io.Writer, stdin io.Reader, st *state.Store, stateDir string, env func(string) string, args []string, now time.Time) error {
+func taskMessage(w io.Writer, stdin io.Reader, st *state.Store, stateDir, companyRoot string, env func(string) string, args []string, now time.Time) error {
 	taskID := ""
 	var pos []string
 	for i := 0; i < len(args); i++ {
@@ -3488,7 +3487,7 @@ func taskMessage(w io.Writer, stdin io.Reader, st *state.Store, stateDir string,
 		}
 	}
 	if inbox == "" {
-		root := board.Root(config.Load().CompanyRoot, inboxes, board.RememberedRoot(stateDir))
+		root := board.Root(companyRoot, inboxes, board.RememberedRoot(stateDir))
 		if root == "" {
 			return errors.New("회사 루트를 찾지 못했습니다 — 설정 company_root 또는 총괄의 task assign이 먼저 필요합니다")
 		}
@@ -3510,7 +3509,7 @@ func taskMessage(w io.Writer, stdin io.Reader, st *state.Store, stateDir string,
 }
 ```
 
-`RunTask`의 switch에 `case "message": return taskMessage(w, os.Stdin, st, stateDir, os.Getenv, args[1:], now)`를, `taskUsage`에 `  agentlayer task message [--task <업무ID>] <본문|->   # 직원 pane에서: 총괄에게 편지(MESSAGE)`를 추가한다.
+`RunTask`의 switch에 `case "message": return taskMessage(w, os.Stdin, st, stateDir, config.Load().CompanyRoot, os.Getenv, args[1:], now)`를, `taskUsage`에 `  agentlayer task message [--task <업무ID>] <본문|->   # 직원 pane에서: 총괄에게 편지(MESSAGE)`를 추가한다.
 
 - [ ] **Step 5: 통과 확인**
 
