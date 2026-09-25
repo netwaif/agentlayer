@@ -11,6 +11,7 @@ import (
 
 	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/config"
+	"github.com/netwaif/agentlayer/internal/remote"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
 )
@@ -160,6 +161,10 @@ func RunSend(w io.Writer, stdin io.Reader, st *state.Store, stateDir string, tm 
 	message = SanitizeMessage(message)
 	if strings.TrimSpace(message) == "" {
 		return errors.New("메시지가 비었습니다")
+	}
+	// 원격 직원(remotes/<이름>.json)이면 어댑터 경로 — 이름 규칙(':' 없음)에 안 맞는 "<세션>:<창>"은 그대로 기존 경로.
+	if r, ok, err := remote.Load(stateDir, rest[0]); err == nil && ok {
+		return sendRemote(w, stateDir, r, message, o, time.Now())
 	}
 	agents, err := st.List()
 	if err != nil {
