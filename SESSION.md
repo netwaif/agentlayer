@@ -15,11 +15,12 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-09-25 저녁 마감** — **원격 직원(호스팅어 Hermes) + 편지함 완성, v1.9.0~v1.9.3 릴리즈 4건**. 스펙 `docs/superpowers/specs/2026-09-25-remote-employee-hermes-design.md`, 계획+실측 기록 `docs/superpowers/plans/2026-09-25-remote-employee-hermes.md`. 새 패키지 `internal/remote`(Adapter 계약·hermes·exec·registry·untar), `internal/task/remote.go`(폴링→기존 전이/보고, MESSAGE·답장), CLI `remote add|list|check|rm`, `task message`, `task reply [--attach]`, `send`/`task` 원격 분기. ai-company 플러그인 v0.2.6~v0.2.8(`employee add --remote`, MESSAGE·답장·첨부 지침, 감시 상시). 실회사 `~/ai-folder/company`에 원격 `hermes-qa`(서버 프로필 tech-qa) 등록·직원 "원격 QA(Hermes)" 추가, 총괄 봇 재시작 완료(v0.2.8 블록은 재시작 필요 여부 확인). 서버에 `imac-letter` 스크립트(`/opt/data/.local/bin`)·Hermes 스킬(`/opt/data/skills/autonomous-ai-agents/imac-letter`)·`/opt/data/ai-company/AGENTS.md` 편지 절 추가. 사용자 실측: 지시→완료, 질문→답, 편지→답장(디스코드 알림)까지 성공.
+**2026-09-27 마감** — 코드 변경 없음. 디스코드 멤버 질문(맥미니 새 구성: 도입 순서·저장소 다이어그램·토큰 절약)에 답변 초안 작성해 사용자에게 전달(게시는 사용자). 직전 상태(2026-09-25: 원격 직원 Hermes+편지함 v1.9.0~1.9.3, ai-company 0.2.6~0.2.8, 실회사 `hermes-qa` 실측 성공)는 그대로 유효.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
+0. **멤버 답변 후속**: 답변 초안에 "저장소 관계 그림 버전은 매뉴얼에 추가하겠습니다" 약속이 들어 있음 — 사용자가 그 문장을 살려 게시했으면 agentlayer 매뉴얼(`~/ai-folder/youtube/AgentLoops/agentlayer/tasks/agentlayer-video-prep/artifacts/manual`, deploy-manual 스킬 표 기준)에 레포 관계 다이어그램 절 추가 → `/deploy-manual agentlayer`. 뺐으면 이 항목 삭제.
 1. **시청자 배포 준비(원격 직원)**: (a) Hermes 쪽 준비물(`imac-letter` 스크립트+스킬)을 agentlayer가 깔아 주게 — `remote add --local` 때 `$HERMES_HOME/skills/…`·`~/.local/bin`에 복사(원본을 레포 `docs/hermes-side/`에 두기). (b) 이름 일반화: `imac-letter`→`company-letter`, "아이맥 총괄"→"회사 총괄", 편지함 담당자 `imac-manager`→`company-manager`(서버 등록·스킬·README·플러그인 문안 동시 변경). (c) viewer-release `setup.py`(전담 프로필 생성)와 `remote add --local` 등록을 매뉴얼 한 흐름으로.
 2. **총괄 봇 재시작 확인**: v0.2.8 블록(답장 첨부 문안) 설치 뒤 `bot-restart company-bot` 했는지. 안 했으면 사용자에게 한 줄.
 3. **v1.8.x·1.9.x 공지(미게시)**: 디스코드 멤버 채널(1522490241859059784) + 유튜브 커뮤니티 통합본. 원격 직원·편지함이 큰 건이라 별도 영상 소재 후보(SESSION `~/ai-folder/youtube/Hermes-AI-Company` 타워와 연결).
@@ -268,6 +269,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-25 리뷰 반영 룰링: `dispatch --max 3` 유지(스펙 1), WORKING+`--force`는 거부(스펙 comment), ControlPath는 `/tmp/agentlayer-ssh-<uid>`(macOS 소켓 104B), ready 카드의 마지막 run 실패면 ERROR 보고.
 - 2026-09-25 Hermes 디스코드 봇은 회사 AGENTS.md를 안 읽고 스킬을 읽음 → 편지 절차는 Hermes 스킬(`imac-letter`)로 설치. 서버 AGENTS.md 편지 절은 보조.
 - 2026-09-25 시청자(한 PC) 구성: `remote add --local`(LocalRunner, ssh 없음) — 나머지 동일. 이름 일반화·스킬 자동 설치는 다음 단계.
+- 2026-09-27 멤버 Q&A 답변 정본(사용자 확정): ① 도입 순서는 하네스→agentlayer 무관·어느 쪽 먼저든 됨(`init`이 기존 hook 보존), 실제 저자 순서도 하네스 먼저. 쓰임 기준은 2026-08-28 결정 그대로(일상=단일 세션 / 승인·검수·재진입=하네스 / 병렬·A/B·worktree=orchestration). ② 저장소 관계: 하네스 설치기가 discord-multiagent·codex-discord·usage-coach 설치 + 의존 플러그인 multi-agent-starter·folder-bot / agentlayer는 tmux만 필수, init이 orchestration·agent-browser 스킬 설치, usage-coach·ai-company는 선택 / loadout은 단독. ③ 토큰 팁은 사용자 경험으로 교체: 멀티는 꼭 필요할 때만(한 에이전트로 안 되는 일, 예: 클로드는 이미지 못 만듦) / 하네스 필요 없는 간단한 일은 단발 호출 / 작업별 모델·effort 조정. usage-coach 5시간·7일 한도 문구는 뺌(사용자 지시).
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -457,3 +459,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 서버(호스팅어 컨테이너 hermes-agent-iqxn-hermes-agent-1): `/opt/data/.local/bin/imac-letter`, `/opt/data/skills/autonomous-ai-agents/imac-letter/SKILL.md`, `/opt/data/ai-company/AGENTS.md`(백업 `.bak-20260925`), 편지 카드는 archive 처리. 원본 사본 `/tmp/imac-letter`·`/tmp/imac-letter-skill/SKILL.md`(재부팅 시 소실 — 레포에 옮길 것, 다음 단계 1a)
 - ai-company 레포 `~/VSCodeWorkspace/ai-company`: `companyctl.py`(`--remote`, `agentlayer_remotes()`, `agentlayer_remote_check()`, doctor 원격 행), `assets/company-block.md`(원격 배정·MESSAGE·답장·첨부·감시 상시), `assets/employee-block.md`(task message), `SKILL.md`, v0.2.6~0.2.8
 - 실회사 `~/ai-folder/company/직원명부.json`에 "원격 QA(Hermes)"(mode remote, session hermes-qa); `CLAUDE.md` 블록 갱신
+- 2026-09-27: 코드 변경 없음. 답변 초안은 대화에만 있음(디스코드 게시 여부·메시지 id 미확인). 참고한 파일: `README.md`(설치·Worktree 병렬 모드·사용량 절), `~/VSCodeWorkspace/discord-harness-installer/README.md`(검증 조합 핀), `~/VSCodeWorkspace/usage-coach/README.md`.
