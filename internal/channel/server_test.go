@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -148,5 +149,34 @@ func TestRunStopsOnContextCancel(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("취소 뒤 2초 안에 끝나야 함")
+	}
+}
+
+// 쓰기 실패(세션 stdout 닫힘)는 로그만 남기고 삼키면 안 된다 — Watch가 pending→received 이동을 계속해 편지를 조용히 소모한다.
+type failingWriter struct{ n int }
+
+func (f *failingWriter) Write(p []byte) (int, error) {
+	f.n++
+	if f.n > 1 { // initialize 응답 한 번은 통과, 그다음 쓰기부터 실패
+		return 0, errors.New("write: broken pipe")
+	}
+	return len(p), nil
+}
+
+func TestRunStopsWhenStdoutWriteFails(t *testing.T) {
+	inr, inw := io.Pipe()
+	s := New(inr, &failingWriter{}, "", "")
+	done := make(chan error, 1)
+	go func() { done <- s.Run(context.Background()) }()
+	go inw.Write([]byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` + "\n"))
+	time.Sleep(50 * time.Millisecond)
+	go s.Notify(Notification{Content: "x", Meta: map[string]string{}})
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "broken pipe") {
+			t.Errorf("쓰기 실패 오류로 종료해야 함: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("stdout 쓰기 실패 뒤 2초 안에 Run이 끝나야 함")
 	}
 }

@@ -33,3 +33,15 @@ func HasHelpFlag(args []string) bool {
 	}
 	return false
 }
+
+// HelpIntercept는 main이 하위 명령으로 분기하기 전에 부른다. 사용법이 있고 인자에 --help/-h가 있으면 (usage, true).
+// 본문(편지·답장)을 위치 인자로 받는 task message·task reply는 "-h"가 본문일 수 있어 가로채지 않는다.
+func HelpIntercept(args []string) (string, bool) {
+	if len(args) < 2 || !HasHelpFlag(args[1:]) {
+		return "", false
+	}
+	if args[0] == "task" && (args[1] == "message" || args[1] == "reply") {
+		return "", false
+	}
+	return SubUsage(args[0])
+}

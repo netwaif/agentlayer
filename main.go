@@ -57,11 +57,9 @@ func run(args []string) error {
 		return runTUI()
 	}
 	// 하위 명령 --help: task watch --help가 "--help"를 inbox 경로로 삼아 디렉터리를 만들던 버그의 일반 처리.
-	if len(args) >= 2 && cli.HasHelpFlag(args[1:]) {
-		if u, ok := cli.SubUsage(args[0]); ok {
-			fmt.Println(u)
-			return nil
-		}
+	if u, ok := cli.HelpIntercept(args); ok {
+		fmt.Println(u)
+		return nil
 	}
 	switch args[0] {
 	case "hook":

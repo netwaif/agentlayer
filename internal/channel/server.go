@@ -38,6 +38,7 @@ type Server struct {
 	wmu          sync.Mutex // out 쓰기 직렬화(mu 안에서 잡을 수 있다 — 역순 금지)
 	ready        bool
 	queue        []Notification
+	fail         chan error // 첫 stdout 쓰기 실패 — Run이 이 오류로 즉시 끝난다(편지 소모 방지)
 	Log          func(string)
 }
 
@@ -45,7 +46,7 @@ func New(in io.Reader, out io.Writer, version, instructions string) *Server {
 	if version == "" {
 		version = "dev"
 	}
-	return &Server{in: in, out: out, version: version, instructions: instructions, Log: func(string) {}}
+	return &Server{in: in, out: out, version: version, instructions: instructions, fail: make(chan error, 1), Log: func(string) {}}
 }
 
 type request struct {
@@ -82,10 +83,13 @@ func (s *Server) Run(ctx context.Context) error {
 			}
 		}
 	}()
+	// 리더 고루틴은 ctx 취소 뒤에도 ReadBytes에 막혀 남을 수 있다 — 프로세스 종료와 함께 사라지므로 의도된 누수.
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err := <-s.fail:
+			return err
 		case l := <-ch:
 			if l.err != nil {
 				if errors.Is(l.err, io.EOF) {
@@ -194,5 +198,9 @@ func (s *Server) write(v any) {
 	defer s.wmu.Unlock()
 	if _, err := s.out.Write(append(b, '\n')); err != nil {
 		s.Log(fmt.Sprintf("stdout 쓰기 실패(세션 종료?): %v", err))
+		select {
+		case s.fail <- err:
+		default:
+		}
 	}
 }
