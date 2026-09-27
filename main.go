@@ -95,6 +95,14 @@ func run(args []string) error {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		return cli.RunTask(ctx, os.Stdout, st, state.DefaultDir(), args[1:], time.Now())
+	case "channel":
+		st, err := storeWithSync()
+		if err != nil {
+			return err
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return cli.RunChannel(ctx, os.Stdin, os.Stdout, os.Stderr, st, state.DefaultDir(), buildVersion().Version, args[1:])
 	case "wake-all", "close-all", "broadcast":
 		return runAll(args[0], args[1:])
 	case "version", "--version", "-v":
