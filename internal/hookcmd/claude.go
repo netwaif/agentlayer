@@ -31,6 +31,9 @@ func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) 
 	if pane == "" {
 		return nil // tmux 밖(또는 비기본 서버) 세션은 관제 대상이 아니다
 	}
+	if nestedCheck() {
+		return nil // 직원이 띄운 자식 claude 세션 — 부모 pane의 기록·전이·보고를 오염시키지 않는다
+	}
 
 	var p claudePayload
 	if b, err := io.ReadAll(stdin); err == nil && len(b) > 0 {

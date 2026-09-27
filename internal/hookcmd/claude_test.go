@@ -309,3 +309,25 @@ func TestSummarizeMessage(t *testing.T) {
 		}
 	}
 }
+
+func TestNestedSessionHookIsIgnored(t *testing.T) {
+	st := newStore(t)
+	// 부모 세션이 WORK 상태
+	if err := RunClaude(st, "post-tool-use", strings.NewReader(payload), env("%3"), t0); err != nil {
+		t.Fatal(err)
+	}
+	old := nestedCheck
+	nestedCheck = func() bool { return true }
+	defer func() { nestedCheck = old }()
+	calls := 0
+	SetTransitionHook(func(a *state.Agent, prev, to state.AgentState) { calls++ })
+	defer SetTransitionHook(nil)
+	child := `{"session_id":"child-1","cwd":"/tmp/scratch","hook_event_name":"Stop"}`
+	if err := RunClaude(st, "stop", strings.NewReader(child), env("%3"), t0.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := st.Load(scan.IDForPane("claude", "%3"))
+	if a.State != state.StateWorking || a.SessionID != "10ec8033-ca55" || calls != 0 {
+		t.Errorf("자식 세션 훅은 레코드·전이·보고를 건드리지 않는다: state=%s sid=%s calls=%d", a.State, a.SessionID, calls)
+	}
+}
