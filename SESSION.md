@@ -15,11 +15,15 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-09-27 마감** — 코드 변경 없음. 디스코드 멤버 질문(맥미니 새 구성: 도입 순서·저장소 다이어그램·토큰 절약)에 답변 초안 작성해 사용자에게 전달(게시는 사용자). 직전 상태(2026-09-25: 원격 직원 Hermes+편지함 v1.9.0~1.9.3, ai-company 0.2.6~0.2.8, 실회사 `hermes-qa` 실측 성공)는 그대로 유효.
+**2026-09-28 새벽 마감** — **총괄 수신함 채널화 완료·실회사 적용됨**. agentlayer v1.10.0→**v1.10.1**(`channel serve`, 하위 명령 `--help`, 자식 claude 세션 훅 무시, stdout 쓰기 실패 종료), folder-bot **0.1.22**(`--dev-channel`, bot-up 확인창 Enter 통과), ai-company **0.2.9→0.2.10**(install이 채널 등록·봇 플래그·블록 교체·재시작, doctor 점검, remote_control 보존). 실회사 `~/ai-folder/company`: 채널 등록·총괄 재기동·편지 채널 도착 실측 완료, Monitor 재무장 절차 삭제. 스펙 `docs/superpowers/specs/2026-09-27-inbox-channel-design.md`, 계획 `docs/superpowers/plans/2026-09-27-inbox-channel.md`. 멤버 Q&A 답변 초안 3건(도입 순서·레포 관계·folder-bot 제보)은 사용자에게 전달됨(게시 여부 미확인).
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
+0-a. **채널 전환 비용 확인(계획 Task 12 단계 6)**: 총괄 transcript(`~/.claude/projects/-Users-soonho-ai-folder-company/` 최신 jsonl)에서 Monitor 호출·재무장 턴 0회, 편지 0건 구간 턴 없음 확인 → 결정 기록에 한 줄. 총괄의 채널 서버 프로세스는 v1.10.0 빌드로 떠 있음 — 다음 `bot-restart company-bot` 때 1.10.1 반영(억지로 재시작하지 말 것).
+0-b. **리뷰 이월 Minor 7건**(선택): register_channel remove→add 반복(스펙은 get 비교) / doctor의 claude 미발견 오진 메시지 / `channel serve` 오타 경로가 조용히 디렉터리 생성 / botctl doctor 리눅스 유닛 미검사 / ai-company plugin.json 설명 "≥1.6.0" / bot-up `--flag=value` 미매칭 / 훅마다 ps 1회.
+0-c. **멤버 답변 후속(folder-bot 제보)**: 답변에 약속한 것 — `--no-autostart` 봇도 재시작되게 기동 명령 사이드카 남기기 + bot-start 스킬(`~/.claude/skills/bot-start`, 사적) 일반화해 folder-bot에 동봉 + 봇 자기 멘션 예외. folder-bot 레포 백로그.
+0-d. **2단계(별도 스펙)**: 총괄→Claude 직원 send를 채널로(직원 세션에도 channel serve 등록·플래그·확인창), 총괄→codex는 `codex queue`, agy는 tmux 유지. 디스코드 스레드 라우팅 병목은 "스레드 세션마다 discord 플러그인 인스턴스" 스파이크로 확인. 3단계(데스크톱 앱 중계: Claude 앱=소켓, Codex=queue) 설계 참고: 스펙 후속 절.
 0. **멤버 답변 후속**: 답변 초안에 "저장소 관계 그림 버전은 매뉴얼에 추가하겠습니다" 약속이 들어 있음 — 사용자가 그 문장을 살려 게시했으면 agentlayer 매뉴얼(`~/ai-folder/youtube/AgentLoops/agentlayer/tasks/agentlayer-video-prep/artifacts/manual`, deploy-manual 스킬 표 기준)에 레포 관계 다이어그램 절 추가 → `/deploy-manual agentlayer`. 뺐으면 이 항목 삭제.
 1. **시청자 배포 준비(원격 직원)**: (a) Hermes 쪽 준비물(`imac-letter` 스크립트+스킬)을 agentlayer가 깔아 주게 — `remote add --local` 때 `$HERMES_HOME/skills/…`·`~/.local/bin`에 복사(원본을 레포 `docs/hermes-side/`에 두기). (b) 이름 일반화: `imac-letter`→`company-letter`, "아이맥 총괄"→"회사 총괄", 편지함 담당자 `imac-manager`→`company-manager`(서버 등록·스킬·README·플러그인 문안 동시 변경). (c) viewer-release `setup.py`(전담 프로필 생성)와 `remote add --local` 등록을 매뉴얼 한 흐름으로.
 2. **총괄 봇 재시작 확인**: v0.2.8 블록(답장 첨부 문안) 설치 뒤 `bot-restart company-bot` 했는지. 안 했으면 사용자에게 한 줄.
@@ -270,6 +274,12 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-25 Hermes 디스코드 봇은 회사 AGENTS.md를 안 읽고 스킬을 읽음 → 편지 절차는 Hermes 스킬(`imac-letter`)로 설치. 서버 AGENTS.md 편지 절은 보조.
 - 2026-09-25 시청자(한 PC) 구성: `remote add --local`(LocalRunner, ssh 없음) — 나머지 동일. 이름 일반화·스킬 자동 설치는 다음 단계.
 - 2026-09-27 멤버 Q&A 답변 정본(사용자 확정): ① 도입 순서는 하네스→agentlayer 무관·어느 쪽 먼저든 됨(`init`이 기존 hook 보존), 실제 저자 순서도 하네스 먼저. 쓰임 기준은 2026-08-28 결정 그대로(일상=단일 세션 / 승인·검수·재진입=하네스 / 병렬·A/B·worktree=orchestration). ② 저장소 관계: 하네스 설치기가 discord-multiagent·codex-discord·usage-coach 설치 + 의존 플러그인 multi-agent-starter·folder-bot / agentlayer는 tmux만 필수, init이 orchestration·agent-browser 스킬 설치, usage-coach·ai-company는 선택 / loadout은 단독. ③ 토큰 팁은 사용자 경험으로 교체: 멀티는 꼭 필요할 때만(한 에이전트로 안 되는 일, 예: 클로드는 이미지 못 만듦) / 하네스 필요 없는 간단한 일은 단발 호출 / 작업별 모델·effort 조정. usage-coach 5시간·7일 한도 문구는 뺌(사용자 지시).
+- 2026-09-28 **총괄 수신함 채널화(사용자 결정 4건)**: 범위=1단계+부수 버그 한 묶음(2·3단계 별도) / 수신 경로=**채널 + 기동 시 Enter 1회**(스파이크: 개발 채널 확인창은 매 기동마다 뜸 2/2, 수락 미저장 단순 확인창, `server:` 종류는 예외 없이 플래그 필요; 소켓 경로도 실측 성공했으나 출처 표시 없음·비공식 형식·키 파일 읽기·보류 위험으로 3단계용으로 보류) / 등록=**local 스코프**(`claude mcp add -s local`, `.mcp.json`은 미신뢰 폴더에서 매 기동 승인창) / 대상=총괄만(직원 확장 가능 형태).
+- 2026-09-28 자식 세션 오보고 판정은 cwd 비교가 아니라 **프로세스 조상 사슬**(훅 위에 claude 2개면 자식)로 — 스캐너가 매 동기화마다 pane 경로로 CWD를 덮어써 cwd 비교가 흔들림. 실측 사슬: hook←sh←claude←zsh←tmux / 자식: hook←sh←claude(자식)←zsh -c(Bash 도구)←claude(부모).
+- 2026-09-28 실행 방식=Native(내가 구현, 끝에 fable 리뷰어 1회). 리뷰 Important 3건 수정 후 v1.10.1·0.2.10 재릴리즈: stdout 쓰기 실패 시 채널 서버 종료(편지 소모 방지), `task message/reply` 본문 `-h` 가로채기 제외, companyctl 재등록 시 remote_control 전달. 실회사 install은 자동 모드 분류기가 "프로덕션 배포"로 막아 사용자 /permissions 승인 후 실행.
+- 2026-09-28 실측: 총괄 재기동 배너 `Channels (experimental) … plugin:discord…, server:agentlayer`, bot-up.log `dev-channel: 확인창 통과 (pane %6)`, bot-restart ✅ 561ms, `claude mcp get agentlayer` Connected, 재정박 뒤 Monitor 0회, 직원(search-youtube-bot %8) `task message` → 편지 52182eb3 채널 도착·정상 해석. bots.json의 thread_hooks·perm_allow 보존 확인.
+- 2026-09-28 데스크톱 앱 간 통신(사용자 질문): 오늘 구조(수신원/전달기 2층)는 재사용, 전달기만 벤더별 — Claude 데스크톱 Code 탭=소켓(채널 불가), Codex 앱·CLI=`codex queue`(experimental), agy=tmux 유지, Claude 앱 일반 채팅·Cowork=입구 없음.
+- 2026-09-28 멤버 Q&A(folder-bot 제보) 답변 정본: 자기 멘션 무시=설계(멘션 있으면 남에게 하는 말 규칙, 개선 후보) / `--no-autostart` 재시작 실패=구조적 제한 맞음(bot-restart가 plist에서 기동 명령을 읽음, 우회는 add 재실행), 사이드카+bot-start 동봉으로 개선 약속 / 다른 폴더 신뢰 미등록=의도(읽기 전용, 안내·doctor WARN), 재현 안 됨. bot-start는 사적 스킬(9/19)이고 같은 plist 의존이라 이번 답에 직접 도움 안 됨.
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -460,3 +470,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - ai-company 레포 `~/VSCodeWorkspace/ai-company`: `companyctl.py`(`--remote`, `agentlayer_remotes()`, `agentlayer_remote_check()`, doctor 원격 행), `assets/company-block.md`(원격 배정·MESSAGE·답장·첨부·감시 상시), `assets/employee-block.md`(task message), `SKILL.md`, v0.2.6~0.2.8
 - 실회사 `~/ai-folder/company/직원명부.json`에 "원격 QA(Hermes)"(mode remote, session hermes-qa); `CLAUDE.md` 블록 갱신
 - 2026-09-27: 코드 변경 없음. 답변 초안은 대화에만 있음(디스코드 게시 여부·메시지 id 미확인). 참고한 파일: `README.md`(설치·Worktree 병렬 모드·사용량 절), `~/VSCodeWorkspace/discord-harness-installer/README.md`(검증 조합 핀), `~/VSCodeWorkspace/usage-coach/README.md`.
+- 2026-09-28: (agentlayer, main, v1.10.0 42514e5·v1.10.1 4c670a8) `internal/channel/{server,server_test}.go`(신규), `internal/cli/{channelcmd,channelcmd_test,usage,usage_test}.go`(신규), `internal/hookcmd/{nested,nested_test}.go`(신규)·`claude.go`(nestedCheck)·`claude_test.go`(+1), `main.go`(`case "channel"`, `cli.HelpIntercept`), `main_test.go`(신규), `internal/cli/helpcmd.go`, `README.md`(채널 수신 소절), `docs/superpowers/specs/2026-09-27-inbox-channel-design.md`, `docs/superpowers/plans/2026-09-27-inbox-channel.md`. 원장 `.superpowers/sdd/2026-09-27-inbox-channel/`은 삭제(기록은 git·이 파일). `~/.local/bin/agentlayer`=v1.10.1.
+- 2026-09-28: (folder-bot 6399069·23e89ae, v0.1.22) `plugins/folder-bot/skills/configure-bot/generator/botctl.py`(dev_channels·--dev-channel·doctor), `assets/bot-up.sh`(확인창 감시자, 로그 `~/.claude/logs/bot-up.log`), `SKILL.md`, `README.md`, `tests/test_botctl.py`(+1), `tests/test_bot_up_devchannel.sh`(신규). `threads/999/log.md`는 이전부터 미커밋 상태 그대로.
+- 2026-09-28: (ai-company 27c49fd·cfc0950·211f728·v0.2.10) `plugins/ai-company/skills/configure-company/generator/companyctl.py`(MIN 1.10.0, find_botctl·register_channel·set_manager_dev_channel, doctor 채널 점검), `assets/company-block.md`(감시 절→편지 수신(채널)), `SKILL.md`, `README.md`, `tests/conftest.py`(가짜 claude, agentlayer v1.10.0), `tests/test_companyctl.py`(+5, 1.6.0→1.10.0). 이 맥 플러그인 0.2.10(local 스코프 company-demo 표시).
+- 2026-09-28: 실회사 `~/ai-folder/company`: `CLAUDE.md` 블록 갱신, `~/.claude.json` projects[…/company].mcpServers.agentlayer(local), `~/.config/folder-bot/bots.json` company.dev_channels, `~/Library/LaunchAgents/com.folder-bot.company.plist`(플래그), `~/.local/bin/{bot-up,bot-restart}` 0.1.22판. 스파이크 잔재 없음(`/tmp/al-channel-check`·scratchpad spike 폴더 정리, `spike-channel`의 `~/.claude.json` 항목은 무해하게 남음).
