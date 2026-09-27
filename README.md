@@ -160,7 +160,8 @@ agentlayer send collab-bot "협업 제안 3건 요약해줘"          # idle·DO
 agentlayer send search-youtube-bot:t170966 - < 업무요청.md   # 스레드 창(t+6자리)에 여러 줄 본문
 agentlayer task assign VIDEO-07 search-youtube-bot:t170966 --inbox ~/ai-folder/company/runtime/inbox
 agentlayer task list
-agentlayer task watch ~/ai-folder/company/runtime/inbox     # 총괄이 Monitor로 띄워 두는 상주 수신
+agentlayer channel serve ~/ai-folder/company/runtime/inbox  # 총괄 세션의 MCP 채널 서버(claude mcp add -s local로 등록) — 편지가 세션에 직접 온다
+agentlayer task watch ~/ai-folder/company/runtime/inbox     # 같은 수신을 한 줄 JSON으로(디버그·전환기용)
 agentlayer task done VIDEO-07
 ```
 
@@ -168,6 +169,11 @@ agentlayer task done VIDEO-07
 - 등록된 세션의 `DONE`·`WAIT`·`ERR` 전이를 hook이 `<inbox>/pending/<id>.json`으로 쓴다
   (`task_id`·세션·창·이전/현재 상태·요약·승인 문구·cwd·시각). heartbeat·승인됨·읽음은 무음.
 - `task watch`는 정상 건을 한 줄 JSON으로 출력하고 `received/`로 옮긴다. 깨진 파일·심볼릭 링크·16KiB 초과는 `quarantine/`.
+- **채널 수신(1.10.0+)**: 총괄은 `claude mcp add -s local agentlayer -- agentlayer channel serve <inbox>`로 서버를 등록하고
+  `--dangerously-load-development-channels server:agentlayer`로 기동한다(research preview 플래그 — 기동마다 확인창이 한 번 뜨며
+  folder-bot 0.1.22+의 bot-up이 넘긴다). 편지는 `<channel source="agentlayer" event="DONE_UNREAD" task="…" letter_id="…" origin="local|remote">`로
+  세션에 직접 들어오고 Monitor·재무장이 필요 없다. 채널이 없으면 `task watch`가 그대로 대체 경로다.
+- 훅은 직원이 Bash로 띄운 자식 claude 세션(조상 사슬에 claude 2개)의 이벤트를 무시한다(1.10.0+).
 - 세션 소실(dead)은 hook이 아니라 `status`·TUI 실행 때 판정되므로 보고되지 않는다 — `agentlayer status`로 본다.
 - 회사 폴더·총괄 절차·직원 등록은 별도 플러그인 `ai-company`가 만든다(이 바이너리는 배관만).
 - 보고 JSON의 상태 값은 원문 그대로다: `WORKING`·`WAITING`·`DONE_UNREAD`·`IDLE`·`ERROR`·`DEAD` (`from`/`to`).
