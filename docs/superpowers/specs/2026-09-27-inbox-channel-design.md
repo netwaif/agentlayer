@@ -108,11 +108,13 @@ stdio MCP 서버. 외부 의존 없이 줄 단위 JSON-RPC 2.0을 직접 구현�
   중 첫 위치 인자 또는 어느 위치든 `--help`/`-h`가 있으면 그 명령의 사용법을 출력하고 종료. 각 `Run*`의 usage 문자열을 export
   해서 재사용(`taskUsage` 등). 테스트: `task watch --help`가 디렉터리를 만들지 않고 usage를 낸다.
 - **자식 세션 오보고**: 직원이 Bash로 띄운 자식 Claude 세션(cwd=scratchpad)의 훅이 같은 `TMUX_PANE`으로 들어와 부모 업무ID로
-  DONE_UNREAD를 쓴다(WAKE-PATH-RESEARCH-3에서 4회). 고침: Claude 훅 처리에서 payload `cwd`가 있고 pane 에이전트 레코드의
-  `CWD`와 다르면(둘 다 비어 있지 않을 때, 경로 정규화 후 비교) **남의 세션으로 판정해 상태 전이·보고를 모두 건너뛰고** stderr에
-  한 줄 남긴다. 근거: Claude 세션의 cwd는 세션 수명 동안 고정이고 Agent 도구 서브에이전트는 같은 cwd를 쓴다. pid 계보 추적보다
-  싸고 재시작(session_id 변경)에도 안전하다. 같은 폴더에서 띄운 자식은 못 걸러내지만 드물고, 이 경우 편지 `cwd`로 총괄이 구분
-  가능하다. 테스트: cwd 불일치 Stop 이벤트가 레코드도 pending도 바꾸지 않는다.
+  DONE_UNREAD를 쓴다(WAKE-PATH-RESEARCH-3에서 4회). 고침(2026-09-27 계획 단계에서 정정): Claude 훅 처리 첫머리에서 훅 프로세스의
+  **조상 사슬**을 `ps -axo pid=,ppid=,args=`(기존 `scan.LoadProcTable`) 한 번으로 올라가며 세어 claude 프로세스가 **둘 이상**이면
+  자식 세션으로 판정해 기록·상태 전이·보고를 모두 건너뛴다. 실측 사슬: 부모 훅 = hook ← sh ← claude ← zsh ← tmux(claude 1개),
+  자식 훅 = hook ← sh ← claude(자식) ← zsh -c(Bash 도구) ← claude(부모)(claude 2개). 표에 없는 pid·사슬 끊김은 자식 아님(훅을 막지
+  않는다). 처음 설계한 cwd 비교를 버린 이유: 스캐너가 매 동기화마다 pane 경로로 `CWD`를 덮어써 비교 기준이 흔들리고, 심볼릭 링크
+  경로 차이로 정상 세션이 통째로 무시될 위험이 있었다. 조상 사슬은 재시작(session_id 변경)·같은 폴더의 자식 모두에 정확하다.
+  비용은 훅당 ps 한 번(수십 ms). 테스트: 고정 프로세스 표로 부모/자식/미지 pid 판정, 자식 훅이 레코드·전이 콜백을 건드리지 않음.
 
 ## 데이터 흐름
 
