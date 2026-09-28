@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,7 +31,16 @@ const (
 	// hangPingFast — 연결 시도가 이 안에 실패하면 "죽은 기록"(즉시 거부)으로 보고, 이보다
 	// 오래 걸려 실패하면 "진짜 행"(소켓을 붙든 채 타임아웃)으로 본다.
 	hangPingFast = 500 * time.Millisecond
+	// hangWakeGrace — 디스플레이가 꺼진 것을 마지막으로 본 뒤 이 시간 동안은 프레임 실패를
+	// 세지 않는다. 화면이 켜진 직후 첫 프레임이 늦게 돌아오는 구간(실측 25초·100초 뒤에도
+	// 실패)까지 덮는다.
+	hangWakeGrace = 2 * time.Minute
 )
+
+// ErrNoFrame — 프레임 프로브 실패. UI 스레드 무응답과 구분한다: 디스플레이가 꺼져 있으면
+// 프레임은 원래 안 나온다(2026-09-28 실측 — 9/25·9/26·9/28의 강제 재시작 47건이 전부
+// 디스플레이 꺼짐 구간이거나 켜진 직후였다. v1.8.1에서 CADisplayLink로 바꾼 뒤의 부작용).
+var ErrNoFrame = errors.New("프레임 없음(화면 굳음)")
 
 type HangOps struct {
 	Ping     func() error // UI 스레드를 타는 CDP 호출(타임아웃 포함)
@@ -37,6 +48,9 @@ type HangOps struct {
 	Kill     func(pid int) error
 	Relaunch func() error
 	Notify   func(msg string)
+	// DisplayAsleep — 디스플레이가 꺼져 있는지. nil이거나 알 수 없으면 켜진 것으로 본다.
+	// 프레임 실패(ErrNoFrame)일 때만 부른다.
+	DisplayAsleep func() bool
 }
 
 type hangState struct {
@@ -46,6 +60,8 @@ type hangState struct {
 	// 떴다는 뜻이라 예전 실패 횟수를 이어서 세면 안 된다(멀쩡한 새 브라우저를 2회 만에
 	// 죽일 수 있다). 다르면 0부터 다시 센다.
 	Pid int `json:"pid,omitempty"`
+	// AsleepAt — 프레임 실패 때 디스플레이가 꺼져 있던 마지막 시각(hangWakeGrace 기준).
+	AsleepAt time.Time `json:"asleep_at,omitempty"`
 }
 
 func hangStatePath(dir string) string { return filepath.Join(dir, "hangwatch.json") }
@@ -73,11 +89,25 @@ func HangWatch(dir string, pid int, ops HangOps, now time.Time) (bool, string) {
 		return false, ""
 	}
 	s := loadHangState(dir)
-	if ops.Ping() == nil {
+	err := ops.Ping()
+	if err == nil {
 		if s.Fails != 0 {
-			saveHangState(dir, hangState{})
+			saveHangState(dir, hangState{AsleepAt: s.AsleepAt})
 		}
 		return false, ""
+	}
+	if errors.Is(err, ErrNoFrame) {
+		// 화면이 꺼져 있으면 프레임이 없는 게 정상이다 — 세지도 죽이지도 않는다.
+		if ops.DisplayAsleep != nil && ops.DisplayAsleep() {
+			saveHangState(dir, hangState{AsleepAt: now})
+			return false, ""
+		}
+		if !s.AsleepAt.IsZero() && now.Sub(s.AsleepAt) < hangWakeGrace {
+			if s.Fails != 0 {
+				saveHangState(dir, hangState{AsleepAt: s.AsleepAt})
+			}
+			return false, ""
+		}
 	}
 	if s.Pid != 0 && s.Pid != pid {
 		s = hangState{} // 그 사이 브라우저가 바뀌었다 — 예전 실패는 이 프로세스의 것이 아니다
@@ -210,7 +240,7 @@ func frameProbePages(pages rod.Pages, timeout time.Duration) error {
 		Clip:   &proto.PageViewport{X: 0, Y: 0, Width: 8, Height: 8, Scale: 1},
 	}.Call(pages[i].Timeout(timeout))
 	if err != nil {
-		return fmt.Errorf("프레임 없음(화면 굳음): %w", err)
+		return fmt.Errorf("%w: %w", ErrNoFrame, err)
 	}
 	return nil
 }
@@ -333,5 +363,35 @@ func DefaultHangOps(stateDir string, port int, goos string, notify func(string))
 			return err
 		},
 		Notify: notify,
+		DisplayAsleep: func() bool {
+			if goos != "darwin" {
+				return false
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			out, err := exec.CommandContext(ctx, "pmset", "-g", "powerstate", "IODisplayWrangler").Output()
+			if err != nil {
+				return false
+			}
+			asleep, _ := parseDisplayAsleep(string(out))
+			return asleep
+		},
 	}
+}
+
+// parseDisplayAsleep — `pmset -g powerstate IODisplayWrangler` 출력에서 현재 전원 상태를
+// 읽는다. 4(USEABLE) 미만이면 꺼짐·어두워짐. 줄이 없으면(드라이버 없음) ok=false.
+func parseDisplayAsleep(out string) (asleep, ok bool) {
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 3 && f[0] == "IODisplayWrangler" {
+			cur, err1 := strconv.Atoi(f[1])
+			max, err2 := strconv.Atoi(f[2])
+			if err1 != nil || err2 != nil {
+				return false, false
+			}
+			return cur < max, true
+		}
+	}
+	return false, false
 }

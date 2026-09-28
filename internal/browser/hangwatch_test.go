@@ -2,6 +2,7 @@ package browser
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -323,5 +324,75 @@ func TestPingUIIncludesFrameProbeIntegration(t *testing.T) {
 	}
 	if err := FrameProbe(b, 3*time.Second); err != nil {
 		t.Fatalf("건강한 브라우저의 프레임 프로브: %v", err)
+	}
+}
+
+// 2026-09-28 실측: 디스플레이가 꺼진 동안에는 프레임이 원래 안 나온다(CADisplayLink는
+// 화면이 꺼지면 안 뛴다). 그 동안의 프레임 프로브 실패로 멀쩡한 브라우저를 죽이면 안 된다.
+func TestHangWatchIgnoresNoFrameWhileDisplayAsleep(t *testing.T) {
+	dir := t.TempDir()
+	var l hangLog
+	now := time.Now()
+	ops := fakeHangOps(&l, fmt.Errorf("%w: timeout", ErrNoFrame))
+	ops.DisplayAsleep = func() bool { return true }
+	for i := 0; i < 5; i++ {
+		if r, _ := HangWatch(dir, 100, ops, now.Add(time.Duration(i)*11*time.Second)); r {
+			t.Fatal("디스플레이가 꺼진 동안 재시작하면 안 됨")
+		}
+	}
+	if l.killed != 0 || l.sampled != 0 || loadHangState(dir).Fails != 0 {
+		t.Fatalf("죽이지도 세지도 않아야 함: %+v fails=%d", l, loadHangState(dir).Fails)
+	}
+}
+
+// 화면이 켜진 직후에는 프레임이 곧바로 안 돌아올 수 있다 — 꺼짐을 본 뒤 hangWakeGrace 동안은
+// 프레임 실패를 세지 않고, 그 뒤에도 계속 실패하면 그때부터 센다.
+func TestHangWatchWakeGraceThenCounts(t *testing.T) {
+	dir := t.TempDir()
+	var l hangLog
+	now := time.Now()
+	asleep := true
+	ops := fakeHangOps(&l, fmt.Errorf("%w: timeout", ErrNoFrame))
+	ops.DisplayAsleep = func() bool { return asleep }
+	HangWatch(dir, 100, ops, now)
+	asleep = false
+	for _, d := range []time.Duration{20, 40, 60, 80, 100} {
+		if r, _ := HangWatch(dir, 100, ops, now.Add(d*time.Second)); r || l.killed != 0 {
+			t.Fatalf("켜진 뒤 유예(%v) 안에는 재시작 금지", d*time.Second)
+		}
+	}
+	base := now.Add(hangWakeGrace + time.Second)
+	HangWatch(dir, 100, ops, base)
+	HangWatch(dir, 100, ops, base.Add(11*time.Second))
+	if r, _ := HangWatch(dir, 100, ops, base.Add(22*time.Second)); !r || l.killed != 1 {
+		t.Fatalf("유예가 지난 뒤 3회 연속 실패면 재시작: r=%v %+v", r, l)
+	}
+}
+
+// UI 스레드 무응답(프레임 실패가 아닌 오류)은 디스플레이가 꺼져 있어도 진짜 행이다.
+func TestHangWatchUIHangCountsEvenWhenDisplayAsleep(t *testing.T) {
+	dir := t.TempDir()
+	var l hangLog
+	now := time.Now()
+	ops := fakeHangOps(&l, errors.New("timeout"))
+	ops.DisplayAsleep = func() bool { return true }
+	HangWatch(dir, 100, ops, now)
+	HangWatch(dir, 100, ops, now.Add(11*time.Second))
+	if r, _ := HangWatch(dir, 100, ops, now.Add(22*time.Second)); !r || l.killed != 1 {
+		t.Fatalf("UI 행은 그대로 재시작: r=%v %+v", r, l)
+	}
+}
+
+func TestParseDisplayAsleep(t *testing.T) {
+	on := "\n      Driver ID  Current State  Max State  Current State Description\nIODisplayWrangler           4          4  USEABLE\n"
+	off := "\n      Driver ID  Current State  Max State  Current State Description\nIODisplayWrangler           1          4  SLEEP\n"
+	if a, ok := parseDisplayAsleep(on); a || !ok {
+		t.Fatalf("켜짐: asleep=%v ok=%v", a, ok)
+	}
+	if a, ok := parseDisplayAsleep(off); !a || !ok {
+		t.Fatalf("꺼짐: asleep=%v ok=%v", a, ok)
+	}
+	if a, ok := parseDisplayAsleep("No such driver\n"); a || ok {
+		t.Fatalf("모르면 꺼짐으로 보지 않음: asleep=%v ok=%v", a, ok)
 	}
 }
