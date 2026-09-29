@@ -15,7 +15,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-09-29 오후(체크포인트, 마감 아님)** — **v1.10.3·v1.10.4·v1.10.5 릴리즈 완료**(최신 v1.10.5 463ead6 — GitHub 릴리즈·tap cask·로컬 `~/.local/bin/agentlayer` 모두 1.10.5). folder-bot `v0.1.23`·ai-company `v0.2.11` 푸시 완료. 굳음 트리거는 디스플레이 꺼짐으로 확정, 재시작+탭 복원으로 대응. 원격 편지 준비물은 agentlayer가 깔고, **실서버(hostinger)도 새 이름(`company-letter`·`company-manager`)으로 전환·왕복 시험 통과**.
+**2026-09-29 오후(체크포인트, 마감 아님)** — **v1.10.3·v1.10.4·v1.10.5 릴리즈 완료**(최신 v1.10.6 54d3dc0 — GitHub 릴리즈·tap cask·로컬 `~/.local/bin/agentlayer` 모두 1.10.6). folder-bot `v0.1.23`·ai-company `v0.2.11` 푸시 완료. 굳음 트리거는 디스플레이 꺼짐으로 확정, 재시작+탭 복원으로 대응. 원격 편지 준비물은 agentlayer가 깔고, **실서버(hostinger)도 새 이름(`company-letter`·`company-manager`)으로 전환·왕복 시험 통과**.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
@@ -302,6 +302,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 
 - 2026-09-29 **v1.10.5 코덱스 큐 전송**(사용자가 예전에 지시했으나 "2단계"로 미뤄 두고 안 만든 것 — 지적받고 구현). 실측(codex 0.157.1): `codex queue --thread <sid> --message <본문>`은 평범한 TUI 세션에도 들어가고(0.09초), 작업 중이면 턴 뒤 처리, 여러 줄 유지, 없는 세션은 "Error: … no rollout found". 세션 ID는 훅 값(`Agent.SessionID`)이 정본, 없으면 같은 폴더에 산 코덱스가 하나뿐이고 가장 최근 rollout이 프로세스 기동 뒤에 만들어졌을 때만. 실패 시 tmux 되돌아가기(단 tmux 관문에 걸린 상태면 오류). 실직원 검증: `send --json textreview-bot …` → `"via":"queue"`, 화면에 도착·"수신 확인" 응답·상태 DONE. 주의: tmux 세션을 죽여도 코덱스 스레드는 데몬에 남아 새 TUI가 "Reconnected"로 옛 스레드에 붙을 수 있다(cwd 불일치) — 이때는 식별 실패로 tmux 경로.
 
+- 2026-09-29 **v1.10.6**: 승인 대기(WAIT) 코덱스는 큐 대상에서 제외 — 큐 메시지는 턴이 끝나야 처리되는데 승인창이 턴을 붙들어 조용히 쌓임. 총괄 지침("거부되면 기다렸다 다시 보낸다, --force 금지")과 맞춤. 총괄→코덱스 직원 경로는 지침 변경 없이 `agentlayer send <session> - < 업무요청/<업무ID>.md`가 그대로 큐로 간다.
+
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
@@ -508,3 +510,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-29(매뉴얼 그림 크기): `이미지/3-5.png`는 편집본의 빈 오른쪽을 잘라 폭 1290px로(자르기 전 편집본 `이미지/_3-5-edited-full.png`), `이미지/1-2.png`는 폭 920px 기준으로 다시 렌더링해 글씨를 키움. 같은 Drive ID에 재배포.
 - 2026-09-29(공지 수정): 멤버 채널 공지(메시지 id 1554374913668947968)를 사용자 확정 문안으로 수정 — 기술 내용 제거, 매뉴얼 v1.3.2 안내 포함. 처음 게시는 문안 확정 없이 올려 지적받음(메모리 `feedback-announce-two-channels.md`에 규칙 추가).
 - 2026-09-29(v1.10.5 463ead6): 신규 `internal/cli/codexqueue.go`(codexQueueFn·execCodexQueue·codexQueueResult·canCodexQueue·ResolveCodexThread·deliver·procStartFn)·`codexqueue_test.go`(5), `internal/cli/sendcmd.go`(deliver 경유·`via`), `internal/cli/allcmd.go`(일괄 전송도 deliver), `internal/usage/ctx.go`(CodexSessionSince)·`ctx_test.go`(+1), `internal/config/config.go`(`codex_queue`·CodexQueueEnabled), `README.md`. `.claude/release-notes-1.10.5.md`. 시험 세션 레코드 codex-22·23·24 삭제, textreview-bot에 시험 메시지 1건 남음.
+- 2026-09-29(v1.10.6 54d3dc0): `internal/cli/codexqueue.go`(canCodexQueue에서 WAITING 제외)·`codexqueue_test.go`·`sendcmd.go`·`README.md`, `.claude/release-notes-1.10.6.md`.
