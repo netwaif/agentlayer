@@ -20,9 +20,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **공지 게시**: 초안 `.claude/announce-draft-2026-09-29.md`(버전은 v1.10.4로 읽을 것). 사용자 문안 확정 뒤 디스코드 멤버 채널 1522490241859059784 + 유튜브 커뮤니티.
-2. **재시작한 봇 9개 재정박**: 15:00 전후 `bot-restart`로 재시작해 idle 상태 — 디스코드에서 "이어서하자"를 보내야 각자 재정박한다. 설치기 `pins.json` folder-bot 0.1.21→0.1.23 검토.
-3. **멤버 답변 후속(매뉴얼 저장소 관계 그림)**: 멤버 채널 최근 30건에 그 답변 없음 — 게시 위치·약속 문장 유지 여부 사용자 확인 필요.
+1. **유튜브 커뮤니티 공지(막힘)**: 에이전트 브라우저의 유튜브 로그인이 채널 「AI 치트키」가 아니라 「Learning English - netwaif」 계정이라 작성창에 넣지 않음. 사용자가 에이전트 브라우저에서 계정을 AI 치트키로 전환한 뒤 재시도. 문안은 `.claude/announce-draft-2026-09-29.md` 2절.
+2. **재시작한 봇 9개**: 15:05경 "이어서하자" 전달 완료. 설치기 `pins.json` folder-bot 0.1.21→0.1.23 검토.
 4. **텔레그램 확장(사용자 판단 대기)**: `.claude/telegram-cost-2026-09-29.md`. 최소 2~3일, 전체 10~15일.
 5. **v1.10.3 관찰**: 밤새 모니터 꺼짐 뒤 `~/.local/state/agentlayer/hang/hangwatch.log`에 재시작이 켜진 직후 1회만 찍히는지·탭 복원 여부. Apple Silicon `pmset -g powerstate IODisplayWrangler` 미확인.
 6. **매뉴얼 한 흐름(원격 직원)**: viewer-release `setup.py`(전담 프로필 생성) → `remote add --local` → `company-letter` 순서를 agentlayer 매뉴얼에. viewer-release 위치는 이 기록에 없음(Hermes-AI-Company 타워 쪽 확인).
@@ -297,6 +296,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 
 - 2026-09-29 **폴더 봇 0.1.23 실기 적용**: 플러그인 folder-bot 0.1.23·ai-company 0.2.11 업데이트, 봇 10개 `botctl add` 재실행(설정값 변화 없음, 백업 `~/.config/folder-bot/bots.json.bak-20260929`), 각 폴더 `.discord-state/bot-id` 생성·CLAUDE.md 지침 블록 갱신, claude 봇 9개 `bot-restart`(전부 연결 성공). 총괄 채널 서버가 v1.10.4로 다시 떠 `runtime/inbox/.channel.lock` 보유. doctor WARN "워크스페이스 미신뢰" 7건은 기존부터 있던 것.
 
+- 2026-09-29 **공지·매뉴얼**: 디스코드 멤버 채널 공지 게시(메시지 id 1554374913668947968, v1.8~v1.10.4·folder-bot 0.1.23·매뉴얼 v1.3.2). agentlayer 매뉴얼 v1.3.2 배포(Drive 같은 ID `1c6ud4ALnvfJaOFVtFq4VmFKwJAzQO6eZ`, 48쪽) — 1장에 「다른 저장소들과의 관계」 절과 그림 `이미지/1-2.png` 추가(2026-09-27 멤버 답변 ②의 내용). 매뉴얼 본문은 여전히 도구 v1.4 기준(v1.5~1.10 기능 미반영).
+
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
@@ -498,3 +499,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-29 시스템 상태: `~/.local/bin/agentlayer` = ff92472 빌드, `~/.local/state/agentlayer/hang/`에 오늘 덤프 9건(실험 재시작)·`hangwatch.log`·`hangwatch.lock`, `~/.config/agentlayer/config.json`은 실험 중 `browser_hangwatch:false`로 바꿨다가 원복, 디스플레이를 실험으로 8회 껐다 켬(12:41~13:32).
 - 2026-09-29(v1.10.4 a73483d): 신규 `internal/remote/setup.go`(Installer·Hermes.Setup·LetterCommand·renderSide)·`setup_test.go`(3)·`internal/remote/hermesside/{company-letter.sh,SKILL.md}`, `internal/remote/registry.go`(DefaultMailbox company-manager·AttachDirName)·`adapter.go`·`hermes.go`, `internal/cli/remotecmd.go`(`case "setup"`·remoteSetup·`--no-setup`)·`remotecmd_test.go`(+1), `README.md`. `docs/hermes-side/`(서버 원본 사본)는 삭제. `.claude/release-notes-1.10.4.md`.
 - 2026-09-29 시스템 상태(전환): `~/.local/state/agentlayer/remotes/hermes-qa.json` mailbox company-manager, 옛 등록 백업 `~/.local/state/agentlayer/hermes-qa.json.bak-20260929`.
+- 2026-09-29(매뉴얼 v1.3.2): `~/ai-folder/youtube/AgentLoops/agentlayer/tasks/agentlayer-video-prep/artifacts/manual/`의 `agentlayer-manual.txt`(백업 `.bak-repos-0929`)·`VERSION`·`이미지/1-2.png`·`index.html`·`agentlayer-manual.pdf`. 그림 원본 `이미지/_1-2-source.html`.
