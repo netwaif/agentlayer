@@ -15,20 +15,23 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-09-29 오후(체크포인트, 마감 아님)** — **v1.10.3·v1.10.4·v1.10.5 릴리즈 완료**(최신 v1.10.6 54d3dc0 — GitHub 릴리즈·tap cask·로컬 `~/.local/bin/agentlayer` 모두 1.10.6). folder-bot `v0.1.23`·ai-company `v0.2.11` 푸시 완료. 굳음 트리거는 디스플레이 꺼짐으로 확정, 재시작+탭 복원으로 대응. 원격 편지 준비물은 agentlayer가 깔고, **실서버(hostinger)도 새 이름(`company-letter`·`company-manager`)으로 전환·왕복 시험 통과**.
+**2026-09-30 00:05(체크포인트, 마감 아님)** — **총괄→직원 지시에서 tmux 키 입력 제거 완료(2단계)**: 코덱스는 `codex queue`(v1.10.5~6), Claude는 채널(v1.11.0~1). 최신 agentlayer **v1.11.1** f786b92·folder-bot **0.1.24**·ai-company **0.2.12** 모두 릴리즈·이 맥 적용. 실회사에서 총괄→코덱스(QUEUE-TEST-1)·총괄→Claude 스레드 세션(CHANNEL-TEST-1) 전체 흐름 통과. 같은 날 앞서: 굳음 트리거 확정·탭 복원(v1.10.3), 원격 편지 준비물·실서버 이름 전환(v1.10.4), 매뉴얼 v1.3.2, 멤버 공지.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-1. **매뉴얼 v1.3.2 사용자 검토 대기**: 4쪽 「다른 저장소들과의 관계」 절과 그림. 유튜브 커뮤니티 공지는 올리지 않기로 함(2026-09-29 사용자 결정).
-2. **재시작한 봇 9개**: 15:05경 "이어서하자" 전달 완료. 설치기 `pins.json` folder-bot 0.1.21→0.1.23 검토.
-4. **텔레그램 확장(사용자 판단 대기)**: `.claude/telegram-cost-2026-09-29.md`. 최소 2~3일, 전체 10~15일.
-5. **v1.10.3 관찰**: 밤새 모니터 꺼짐 뒤 `~/.local/state/agentlayer/hang/hangwatch.log`에 재시작이 켜진 직후 1회만 찍히는지·탭 복원 여부. Apple Silicon `pmset -g powerstate IODisplayWrangler` 미확인.
-6. **매뉴얼 한 흐름(원격 직원)**: viewer-release `setup.py`(전담 프로필 생성) → `remote add --local` → `company-letter` 순서를 agentlayer 매뉴얼에. viewer-release 위치는 이 기록에 없음(Hermes-AI-Company 타워 쪽 확인).
-7. **남은 사소**: `TestRunChannelDeliversPendingLetter` TempDir 정리 경합(드묾) / folder-bot 테스트를 레포 루트에서 돌리면 `threads/999/log.md` 변경 / `~/.claude.json`의 scratchpad `mcpprobe` 빈 항목 / 훅마다 ps 1회(76ms, 유지).
-8. **2단계 남은 몫(미구현)**: 총괄→**Claude 직원** `send`를 채널로(직원 세션마다 `channel serve` 등록·플래그·확인창 통과). 코덱스 몫은 v1.10.5에서 끝남, agy는 tmux 유지. 사용자가 시키면 바로 착수.
-9. **코덱스 큐 후속**: 훅이 세션 ID를 못 남긴 세션은 tmux로 되돌아감(시험 세션 2개에서 관찰 — 원인 미조사, 실직원 textreview-bot·codex-live는 기록됨) / `browser pick` 라우팅(`internal/cli/browsercmd.go` 212·424행)과 `wt review`(`internal/wt/review.go` 123행)는 아직 tmux 입력만 씀 / codex-discord 브리지가 디스코드 메시지를 넣는 경로는 별개 레포라 손대지 않음.
-10. **Hermes 답장 자동 wake·이월 파킹 항목**: 이전 목록 그대로.
+**아래 "미착수"는 2026-09-29에 사용자가 "하나씩 모두 해"라고 지시했는데 하지 않았고 보고에서도 빠뜨렸던 항목이다. 끝난 것으로 읽지 말 것.**
+
+1. **미착수 — 에이전트 브라우저 사소 9건**: 다른 탭 배너 제목이 이동 전 제목으로 남음 / new_page 직후 그 탭에 미러 없음 / 버튼 클릭 즉각 피드백 없음 / 휠 스크롤은 방패가 못 막음 / hangwatch Ping 최악 ~7.5s·Relaunch Connect 무제한 / 늦게 성사된 연결 고루틴 누수(mcp-serve) / 프록시 여럿 ack 경쟁 / 클라이언트 줄 JSON 4회 파싱 / trim이 마커 뒤 전부 자름. 상세는 결정 기록 2026-09-22(3차).
+2. **미착수 — ai-company 매뉴얼 PDF 재빌드·배포**: `ai-company-manual.txt` 647·657·1080행이 0.2.4 기준. 지금은 0.2.12라 원격 직원·편지함·채널 수신·직원 채널까지 밀려 있다.
+3. **미착수 — agentlayer 매뉴얼 본문**: v1.3.2는 그림 한 절만 추가. 본문은 도구 v1.4 기준이라 v1.5~v1.11 기능(업무 보드·AI 회사·원격 직원·채널·코덱스 큐)이 없다.
+4. **미착수 — 파킹 13건**: 총괄이 task.md 완료 기준 체크박스를 안 채움 / `cli.LoadBoard` agents 2회 읽기 / CRLF task.md / 카드 webhook `allowed_mentions` / MarkDone 자식 루프 첫 WriteReport 실패 중단 / `ReadTaskFile` 제목이 yaml 안 `# ` 줄도 잡음 / `send --json` 외 경고 stdout / 설치기 기본 제미나이 헤드리스 / agents의 dead 항목 / 루트 e2e 고아 `agentlayer.test wt accept-prompts %1` / codex 부팅 직후 `[DONE]` / doctor WARN이 직원 0명 부서에 붙음 / `.agentlayer/`가 .gitignore에 없음.
+5. **미착수 — 2단계 곁가지**: 디스코드 스레드 라우팅 병목 스파이크("스레드 세션마다 discord 플러그인 인스턴스") / 3단계(데스크톱 앱 중계) / `browser pick` 라우팅(`internal/cli/browsercmd.go` 212·424행)과 `wt review`(`internal/wt/review.go` 123행)는 아직 tmux 입력 / 총괄(company-bot)에게 보내는 `send`는 tmux 입력(총괄 서버는 회사 수신함만 본다) / agy는 tmux 유지(예전 결정) / claude-discord(비서실장)는 bots.json 밖 봇이라 채널 등록만 되고 플래그가 없어 tmux 입력.
+6. **사용자 결정 대기**: Hermes 답장 자동 wake(서버 kanban 툴셋 활성화 필요) / usage-coach Antigravity 빈 결과 표시 / 텔레그램 확장 범위(`.claude/telegram-cost-2026-09-29.md`) / 이월: 강의용 `orchestration-lite` 스킬·README 제목 "iTerm2+tmux"→"tmux"·usage-coach 릴리즈 latest·디스크 정리·설치기 remove daemon-reload·agy 권한 프롬프트 표시·매뉴얼 "윈도우에서 시작하기" 장.
+7. **기기가 없어 못 함**: Win10 WSL2 재검증(오늘 바뀐 채널·큐·행 감시 전부 리눅스 미검증) / Apple Silicon에서 `pmset -g powerstate IODisplayWrangler` 확인.
+8. **관찰**: 밤새 모니터 꺼짐 뒤 `~/.local/state/agentlayer/hang/hangwatch.log`에 재시작이 켜진 직후 1회만 찍히는지·탭 복원. 코덱스 훅이 세션 ID를 못 남기는 세션(시험 세션 2개) 원인.
+9. **사용자 몫**: 디스코드 포탈 앱 `democompany`·카테고리 `데모 회사`·채널 `#데모-총괄` 삭제. 설치기 `pins.json` folder-bot 0.1.21→0.1.24 검토. 회사 폴더의 시험 흔적 `tasks/QUEUE-TEST-1`·`tasks/CHANNEL-TEST-1`과 crosscheck 채널의 시험 스레드(1554508338329427999) 정리 여부.
+10. **남은 사소**: `TestRunChannelDeliversPendingLetter` TempDir 정리 경합(드묾) / folder-bot 테스트를 레포 루트에서 돌리면 `threads/999/log.md` 변경 / `~/.claude.json`에 scratchpad 시험 폴더 항목(mcpprobe·chantest·probe2) / 훅마다 ps 1회(76ms, 유지).
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -306,6 +309,11 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 
 - 2026-09-29 **총괄→코덱스 직원 전체 흐름 실검증 통과**: 총괄(company-bot)에 시험 업무 QUEUE-TEST-1 지시 → 업무요청 파일 작성 → `task assign` → `send`(총괄 기록에 "출력: codex queue") → textreview-bot이 여러 줄 본문을 받아 `QUEUE-OK` 응답 → 훅이 DONE 보고 → 총괄이 `task done`. 23:31:21 배정~23:31:33 완료, 12초. 기록 `~/ai-folder/company/tasks/QUEUE-TEST-1/log.md`.
 
+- 2026-09-30 **보고 누락 인정**: 9/29 "하나씩 모두 해" 지시에서 0-d(2단계: 코덱스 큐·Claude 직원 채널)와 이월 목록 다수를 하지 않았고, 첫 보고의 "못 한 것"에도 적지 않은 채 "이전 목록 그대로"로 묻었다. 사용자가 끝난 줄 알고 확인하다 발견. 이후 0-d 본체는 구현했고, 나머지는 위 다음 단계에 "미착수"로 명시. 메모리 `feedback-no-deferring.md`에 규칙 추가.
+- 2026-09-30 **v1.11.0 Claude 직원 채널 전송 설계**: 세션마다 전용 수신함 `~/.local/state/agentlayer/inboxes/p<pane 번호>/`, 직원 폴더 local 스코프에 `agentlayer channel serve --self` 등록, `send`는 그 수신함의 `.channel.lock`이 잡혀 있으면(서버 생존) 지시 편지(`to: SEND`)를 넣고 3초 안에 안 집어 가면 회수 후 tmux 되돌아가기. 기동 전 pending은 quarantine(pane ID 재사용 대비). 본문 상한 12,000바이트, 승인 대기는 거부. 같은 폴더의 메인 봇·스레드 세션이 pane별로 갈린다.
+- 2026-09-30 **v1.11.1 채널 플래그 판정**: MCP initialize 요청은 채널 플래그 유무와 무관하게 동일(가짜 서버 실측) → 서버가 조상 프로세스 인자에서 `--dangerously-load-development-channels server:agentlayer`를 찾아 없으면 수신함을 쥐지 않는다. 실측: 플래그 없는 세션 `"via":"tmux"`, 있는 세션 `"via":"channel"`.
+- 2026-09-30 **실회사 적용·검증**: `companyctl install`이 Claude 직원 8개 폴더에 채널 등록·직원 봇 7개에 플래그(claude-discord는 bots.json 밖이라 등록만). 봇 8개 재시작 뒤 직원 7개 pane 수신함 생성 확인, "이어서하자"도 채널로 전달. CHANNEL-TEST-1: 총괄 → 스레드 열기 → ensure(확인창 자동 통과) → `send` 출력 "(채널)" → crosscheck 스레드 세션이 `CHANNEL-OK` → DONE 보고 → `task done`.
+
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
@@ -513,3 +521,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-29(공지 수정): 멤버 채널 공지(메시지 id 1554374913668947968)를 사용자 확정 문안으로 수정 — 기술 내용 제거, 매뉴얼 v1.3.2 안내 포함. 처음 게시는 문안 확정 없이 올려 지적받음(메모리 `feedback-announce-two-channels.md`에 규칙 추가).
 - 2026-09-29(v1.10.5 463ead6): 신규 `internal/cli/codexqueue.go`(codexQueueFn·execCodexQueue·codexQueueResult·canCodexQueue·ResolveCodexThread·deliver·procStartFn)·`codexqueue_test.go`(5), `internal/cli/sendcmd.go`(deliver 경유·`via`), `internal/cli/allcmd.go`(일괄 전송도 deliver), `internal/usage/ctx.go`(CodexSessionSince)·`ctx_test.go`(+1), `internal/config/config.go`(`codex_queue`·CodexQueueEnabled), `README.md`. `.claude/release-notes-1.10.5.md`. 시험 세션 레코드 codex-22·23·24 삭제, textreview-bot에 시험 메시지 1건 남음.
 - 2026-09-29(v1.10.6 54d3dc0): `internal/cli/codexqueue.go`(canCodexQueue에서 WAITING 제외)·`codexqueue_test.go`·`sendcmd.go`·`README.md`, `.claude/release-notes-1.10.6.md`.
+- 2026-09-30(v1.11.0 600f2c5·v1.11.1 f786b92): `internal/cli/channelcmd.go`(`serve --self`·selfInstructions·PaneInbox·DirectiveReport·DirectiveNotification·ChannelLive·SendViaChannel·purgeStale·HasChannelFlag·channelEnabledFn·servePassive), `internal/cli/codexqueue.go`(Delivery·canClaudeChannel·CanBypassGate·deliver에 채널 경로), `internal/cli/sendcmd.go`(senderName·via channel), `internal/cli/allcmd.go`, `internal/config/config.go`(`claude_channel`), 신규 `internal/cli/claudechannel_test.go`(5)·`channelcmd_test.go`(+2), `README.md`. `.claude/release-notes-1.11.{0,1}.md`.
+- 2026-09-30(folder-bot v0.1.24 9498a82): `plugins/folder-bot/skills/configure-bot/assets/bot-thread.sh`(DEV_CHANNELS·dev_flag·확인창 통과 뒤 준비 판정), 신규 `tests/test_bot_thread_devchannel.sh`, `README.md`.
+- 2026-09-30(ai-company v0.2.12 967ab01+문서 커밋): `companyctl.py`(SELF_CHANNEL·register_employee_channel·employee_bot_of·set_bot_dev_channel·doctor 직원 채널 점검·MIN 1.11.0), `tests/conftest.py`(가짜 claude 폴더별 등록), `tests/test_companyctl.py`(+3, 68 통과), `README.md`·`SKILL.md`·`plugin.json`.
+- 2026-09-30 시스템 상태: `~/.claude.json`에 직원 8개 폴더 local MCP `agentlayer`(channel serve --self), `~/.config/folder-bot/bots.json` 직원 봇 7개 dev_channels 추가(백업 `bots.json.bak-20260929b`), LaunchAgent plist 재생성, `~/.local/bin/bot-thread` 0.1.24판, 봇 8개 23:54~23:59 재시작, `~/.local/state/agentlayer/inboxes/p*` 생성.
