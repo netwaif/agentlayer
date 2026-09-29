@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -328,8 +330,7 @@ func TestPingUIIncludesFrameProbeIntegration(t *testing.T) {
 	}
 }
 
-// 2026-09-28 실측: 디스플레이가 꺼진 동안에는 프레임이 원래 안 나온다(CADisplayLink는
-// 화면이 꺼지면 안 뛴다). 그 동안의 프레임 프로브 실패로 멀쩡한 브라우저를 죽이면 안 된다.
+// 2026-09-28 실측: 디스플레이가 꺼진 동안에는 프레임이 원래 안 나온다(vsync 시계가 멎는다). 그 동안의 프레임 프로브 실패로 멀쩡한 브라우저를 죽이면 안 된다.
 func TestHangWatchIgnoresNoFrameWhileDisplayAsleep(t *testing.T) {
 	dir := t.TempDir()
 	var l hangLog
@@ -357,7 +358,7 @@ func TestHangWatchWakeGraceThenCounts(t *testing.T) {
 	ops.DisplayAsleep = func() bool { return asleep }
 	HangWatch(dir, 100, ops, now)
 	asleep = false
-	for _, d := range []time.Duration{20, 40, 60, 80, 100} {
+	for _, d := range []time.Duration{5, 10, 15} {
 		if r, _ := HangWatch(dir, 100, ops, now.Add(d*time.Second)); r || l.killed != 0 {
 			t.Fatalf("켜진 뒤 유예(%v) 안에는 재시작 금지", d*time.Second)
 		}
@@ -434,5 +435,119 @@ func TestHangWatchLogsFailureReason(t *testing.T) {
 	}
 	if n := strings.Count(got, "\n"); n != 4 {
 		t.Fatalf("기록 줄 수 = %d, 4여야 함:\n%s", n, got)
+	}
+}
+
+// 재시작은 탭을 날린다 — 죽이기 전에 읽어 둔 주소를 재기동 뒤에 다시 연다.
+func TestHangWatchRestoresTabs(t *testing.T) {
+	dir := t.TempDir()
+	var l hangLog
+	var order []string
+	ops := fakeHangOps(&l, errors.New("timeout"))
+	ops.Tabs = func() []string {
+		order = append(order, "tabs")
+		return []string{"https://a.example/", "https://b.example/"}
+	}
+	kill, relaunch := ops.Kill, ops.Relaunch
+	ops.Kill = func(pid int) error { order = append(order, "kill"); return kill(pid) }
+	ops.Relaunch = func() error { order = append(order, "relaunch"); return relaunch() }
+	var reopened []string
+	ops.Reopen = func(u []string) int { order = append(order, "reopen"); reopened = u; return len(u) }
+	now := time.Now()
+	HangWatch(dir, 100, ops, now)
+	HangWatch(dir, 100, ops, now.Add(11*time.Second))
+	if r, _ := HangWatch(dir, 100, ops, now.Add(22*time.Second)); !r {
+		t.Fatal("3회 실패면 재시작")
+	}
+	if strings.Join(order, ",") != "tabs,kill,relaunch,reopen" {
+		t.Fatalf("순서: %v", order)
+	}
+	if len(reopened) != 2 || len(l.notes) != 1 || !strings.Contains(l.notes[0], "탭 2/2개 복원") {
+		t.Fatalf("복원 %v, 알림 %v", reopened, l.notes)
+	}
+}
+
+// 재기동이 실패하면 탭을 열 곳이 없다 — Reopen을 부르지 않는다.
+func TestHangWatchNoReopenWhenRelaunchFails(t *testing.T) {
+	dir := t.TempDir()
+	var l hangLog
+	ops := fakeHangOps(&l, errors.New("timeout"))
+	ops.Tabs = func() []string { return []string{"https://a.example/"} }
+	ops.Relaunch = func() error { return errors.New("포트 사용 중") }
+	called := false
+	ops.Reopen = func(u []string) int { called = true; return 0 }
+	now := time.Now()
+	for i := 0; i < 3; i++ {
+		HangWatch(dir, 100, ops, now.Add(time.Duration(i)*11*time.Second))
+	}
+	if called {
+		t.Fatal("재기동 실패인데 탭을 열려 함")
+	}
+}
+
+// 판정은 한 번에 하나 — 다른 판정이 도는 중이면 ping도 하지 않고 물러난다.
+func TestHangWatchSingleFlight(t *testing.T) {
+	dir := t.TempDir()
+	lf, err := os.OpenFile(filepath.Join(dir, "hangwatch.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lf.Close()
+	if err := syscall.Flock(int(lf.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	pinged := false
+	ops := HangOps{Ping: func() error { pinged = true; return errors.New("timeout") }}
+	HangWatch(dir, 100, ops, time.Now())
+	if pinged || loadHangState(dir).Fails != 0 {
+		t.Fatal("다른 판정이 도는 중에는 ping도 세기도 하지 않는다")
+	}
+}
+
+func TestRestorableTabs(t *testing.T) {
+	got := restorableTabs([]string{"chrome://newtab/", "https://a.example/", "about:blank", "https://a.example/", "http://localhost:3000/"})
+	if strings.Join(got, " ") != "https://a.example/ http://localhost:3000/" {
+		t.Fatalf("웹 주소만·중복 제거: %v", got)
+	}
+	var many []string
+	for i := 0; i < maxRestoreTabs+5; i++ {
+		many = append(many, fmt.Sprintf("https://x.example/%d", i))
+	}
+	if n := len(restorableTabs(many)); n != maxRestoreTabs {
+		t.Fatalf("상한 %d, 실제 %d", maxRestoreTabs, n)
+	}
+}
+
+// 재시작 직후의 실패는 세지 않는다 — 복원한 탭을 읽느라 느린 브라우저를 또 죽이면 연쇄 재시작이 된다.
+func TestHangWatchRestartGrace(t *testing.T) {
+	dir := t.TempDir()
+	var l hangLog
+	ops := fakeHangOps(&l, errors.New("timeout"))
+	now := time.Now()
+	for i := 0; i < 3; i++ {
+		HangWatch(dir, 100, ops, now.Add(time.Duration(i)*11*time.Second))
+	}
+	if l.killed != 1 {
+		t.Fatalf("첫 재시작: %+v", l)
+	}
+	at := now.Add(22 * time.Second)
+	for i := 1; i <= 6; i++ {
+		if r, _ := HangWatch(dir, 200, ops, at.Add(time.Duration(i)*11*time.Second)); r || l.killed != 1 {
+			t.Fatalf("재시작 뒤 유예 안에 또 재시작(%d번째)", i)
+		}
+	}
+	base := at.Add(hangRestartGrace + time.Second)
+	for i := 0; i < 3; i++ {
+		HangWatch(dir, 200, ops, base.Add(time.Duration(i)*11*time.Second))
+	}
+	if l.killed != 2 {
+		t.Fatalf("유예가 지난 뒤 계속 실패면 재시작: %+v", l)
+	}
+}
+
+func TestMissingTabs(t *testing.T) {
+	got := missingTabs([]string{"https://a/", "https://b/", "https://c/"}, []string{"chrome://newtab/", "https://b/"})
+	if strings.Join(got, " ") != "https://a/ https://c/" {
+		t.Fatalf("빠진 주소만: %v", got)
 	}
 }

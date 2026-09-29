@@ -32,14 +32,29 @@ const (
 	// 오래 걸려 실패하면 "진짜 행"(소켓을 붙든 채 타임아웃)으로 본다.
 	hangPingFast = 500 * time.Millisecond
 	// hangWakeGrace — 디스플레이가 꺼진 것을 마지막으로 본 뒤 이 시간 동안은 프레임 실패를
-	// 세지 않는다. 화면이 켜진 직후 첫 프레임이 늦게 돌아오는 구간(실측 25초·100초 뒤에도
-	// 실패)까지 덮는다.
-	hangWakeGrace = 2 * time.Minute
+	// 세지 않는다(꺼짐 판정과 ping 사이의 경합만 덮는다). 2026-09-29 실측으로 2분에서 줄였다:
+	// 디스플레이가 1분 넘게 꺼졌다 켜지면 프레임은 스스로 돌아오지 않는다(아래 ErrNoFrame 주석) —
+	// 오래 기다려 봐야 굳은 브라우저를 그만큼 더 방치할 뿐이다.
+	hangWakeGrace = 20 * time.Second
+	// hangRestartGrace — 행 감시가 재시작한 직후에는 어떤 실패도 세지 않는다. 막 뜬 브라우저는
+	// 복원한 탭을 한꺼번에 읽느라 ping 예산(3초)을 넘길 수 있고, 그걸 세면 재시작이 재시작을 부른다
+	// (2026-09-29 실측: 탭 46개 복원 뒤 1분 간격 연쇄 재시작).
+	hangRestartGrace = 90 * time.Second
 )
 
 // ErrNoFrame — 프레임 프로브 실패. UI 스레드 무응답과 구분한다: 디스플레이가 꺼져 있으면
 // 프레임은 원래 안 나온다(2026-09-28 실측 — 9/25·9/26·9/28의 강제 재시작 47건이 전부
-// 디스플레이 꺼짐 구간이거나 켜진 직후였다. v1.8.1에서 CADisplayLink로 바꾼 뒤의 부작용).
+// 디스플레이 꺼짐 구간이거나 켜진 직후였다).
+//
+// 굳음의 트리거는 디스플레이 꺼짐이다(2026-09-29 실측, Intel iMac·macOS 14.8.5·Chrome for Testing).
+//   - 디스플레이가 꺼지면 vsync 시계가 멎는다: CADisplayLink는 20초 안에, 기본(CVDisplayLink)은
+//     20초까지는 버티고 100초에는 멎어 있다.
+//   - 켜져도 돌아오지 않는다: 켜진 뒤 90초까지 프레임 0. 기동 플래그(시계 종류·disable-gpu-vsync·
+//     disable-gpu·occluded/renderer 백그라운딩·rod 기본 플래그 전부 제거) 어느 조합도 같았다.
+//   - 되살리기도 안 된다: bringToFront·창 이동/크기 ±1·최소화 복원·activate·새 창 전부 실패.
+//     9/22·9/23의 첫 굳음 두 번도 디스플레이가 꺼진 구간(17:22~22:56, 18:19~23:00)이었다.
+//
+// 그래서 방침은 "꺼진 동안은 세지 않고, 켜진 뒤에도 프레임이 없으면 재시작하되 탭을 되살린다".
 var ErrNoFrame = errors.New("프레임 없음(화면 굳음)")
 
 type HangOps struct {
@@ -51,6 +66,10 @@ type HangOps struct {
 	// DisplayAsleep — 화면이 안 보이는 상태인지(디스플레이 꺼짐 또는 화면 잠금). nil이거나
 	// 알 수 없으면 보이는 것으로 본다. 프레임 실패(ErrNoFrame)일 때만 부른다.
 	DisplayAsleep func() bool
+	// Tabs — 죽이기 직전에 열려 있던 웹 탭 주소(굳은 브라우저도 CDP 목록은 즉답한다).
+	// Reopen — 재기동 뒤 그 주소들을 다시 열고 연 개수를 돌려준다. 둘 다 nil이면 복원 없음.
+	Tabs   func() []string
+	Reopen func(urls []string) int
 }
 
 type hangState struct {
@@ -62,6 +81,8 @@ type hangState struct {
 	Pid int `json:"pid,omitempty"`
 	// AsleepAt — 프레임 실패 때 디스플레이가 꺼져 있던 마지막 시각(hangWakeGrace 기준).
 	AsleepAt time.Time `json:"asleep_at,omitempty"`
+	// RestartedAt — 행 감시가 마지막으로 재시작한 시각(hangRestartGrace 기준).
+	RestartedAt time.Time `json:"restarted_at,omitempty"`
 }
 
 func hangStatePath(dir string) string { return filepath.Join(dir, "hangwatch.json") }
@@ -117,25 +138,39 @@ func HangWatch(dir string, pid int, ops HangOps, now time.Time) (bool, string) {
 	if pid <= 0 || ops.Ping == nil {
 		return false, ""
 	}
+	// 판정은 한 번에 하나만 — 훅 둘이 겹치면 같은 굳음을 두 번 확정해 재시작·탭 복원이 두 번 돈다
+	// (2026-09-29 실측: 2초 간격으로 덤프 2건).
+	_ = os.MkdirAll(dir, 0o755)
+	if lf, err := os.OpenFile(filepath.Join(dir, "hangwatch.lock"), os.O_CREATE|os.O_RDWR, 0o600); err == nil {
+		defer lf.Close()
+		if syscall.Flock(int(lf.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+			return false, ""
+		}
+		defer syscall.Flock(int(lf.Fd()), syscall.LOCK_UN)
+	}
 	s := loadHangState(dir)
 	err := ops.Ping()
 	if err == nil {
 		if s.Fails != 0 {
-			saveHangState(dir, hangState{AsleepAt: s.AsleepAt})
+			saveHangState(dir, hangState{AsleepAt: s.AsleepAt, RestartedAt: s.RestartedAt})
 		}
+		return false, ""
+	}
+	if !s.RestartedAt.IsZero() && now.Sub(s.RestartedAt) < hangRestartGrace {
+		writeHangLog(dir, now, pid, fmt.Sprintf("건너뜀(재시작 뒤 유예 %s)", now.Sub(s.RestartedAt).Round(time.Second)), err)
 		return false, ""
 	}
 	if errors.Is(err, ErrNoFrame) {
 		// 화면이 꺼져 있으면 프레임이 없는 게 정상이다 — 세지도 죽이지도 않는다.
 		if ops.DisplayAsleep != nil && ops.DisplayAsleep() {
-			saveHangState(dir, hangState{AsleepAt: now})
+			saveHangState(dir, hangState{AsleepAt: now, RestartedAt: s.RestartedAt})
 			writeHangLog(dir, now, pid, "건너뜀(화면 꺼짐·잠금)", err)
 			return false, ""
 		}
 		if !s.AsleepAt.IsZero() && now.Sub(s.AsleepAt) < hangWakeGrace {
 			writeHangLog(dir, now, pid, fmt.Sprintf("건너뜀(켜진 뒤 유예 %s)", now.Sub(s.AsleepAt).Round(time.Second)), err)
 			if s.Fails != 0 {
-				saveHangState(dir, hangState{AsleepAt: s.AsleepAt})
+				saveHangState(dir, hangState{AsleepAt: s.AsleepAt, RestartedAt: s.RestartedAt})
 			}
 			return false, ""
 		}
@@ -163,6 +198,10 @@ func HangWatch(dir string, pid int, ops HangOps, now time.Time) (bool, string) {
 	} else if err := ops.Sample(pid, diag); err != nil {
 		diag = ""
 	}
+	var tabs []string
+	if ops.Tabs != nil {
+		tabs = ops.Tabs()
+	}
 	if ops.Kill != nil {
 		_ = ops.Kill(pid)
 	}
@@ -172,11 +211,14 @@ func HangWatch(dir string, pid int, ops HangOps, now time.Time) (bool, string) {
 	} else {
 		relaunchErr = ops.Relaunch()
 	}
-	saveHangState(dir, hangState{})
+	saveHangState(dir, hangState{RestartedAt: now})
 	restarted := relaunchErr == nil
 	var msg string
 	if restarted {
 		msg = "에이전트 브라우저가 멈춰 재시작했습니다"
+		if ops.Reopen != nil && len(tabs) > 0 {
+			msg += fmt.Sprintf(" · 탭 %d/%d개 복원", ops.Reopen(tabs), len(tabs))
+		}
 	} else {
 		msg = fmt.Sprintf("에이전트 브라우저가 멈춰 강제 종료했습니다 · 재기동 실패: %v", relaunchErr)
 	}
@@ -263,6 +305,9 @@ func frameProbePages(pages rod.Pages, timeout time.Duration) error {
 			continue
 		}
 		tabs[i] = frameTab{Web: IsWebURL(info.URL), Visible: res.Result.Value.Str() == "visible"}
+		if tabs[i].Web && tabs[i].Visible {
+			break // 보이는 웹 탭을 찾았다 — 나머지 탭까지 물으면 탭이 많을 때 예산을 다 쓴다
+		}
 	}
 	i := pickFrameTab(tabs)
 	if i < 0 {
@@ -396,6 +441,8 @@ func DefaultHangOps(stateDir string, port int, goos string, notify func(string))
 			return err
 		},
 		Notify: notify,
+		Tabs:   func() []string { return OpenTabs(stateDir, port, hangPing) },
+		Reopen: func(urls []string) int { return ReopenTabs(stateDir, port, urls) },
 		DisplayAsleep: func() bool {
 			if goos != "darwin" {
 				return false
@@ -450,4 +497,100 @@ func parseConsoleLocked(out string) bool {
 		return i >= 0 && strings.TrimSpace(line[i+1:]) == "Yes"
 	}
 	return false
+}
+
+// maxRestoreTabs — 재시작 때 되살리는 탭 수 상한(폭주 방지).
+const maxRestoreTabs = 30
+
+// OpenTabs — 떠 있는 브라우저의 웹 탭 주소 목록(중복 제거, 열린 순서). 굳은 브라우저도 탭 목록은
+// 즉답하지만, 연결 자체가 멎을 수 있어 budget으로 묶는다. 못 읽으면 nil.
+func OpenTabs(stateDir string, port int, budget time.Duration) []string {
+	urls, _ := CallWithin(budget, func() ([]string, error) {
+		ws := ""
+		if in, err := LoadInstance(stateDir); err == nil {
+			ws = in.WSURL
+		}
+		if ws == "" {
+			pws, alive, err := probePort(port)
+			if err != nil || !alive {
+				return nil, fmt.Errorf("브라우저 없음")
+			}
+			ws = pws
+		}
+		b := newBrowser(ws).Timeout(budget)
+		if err := b.Connect(); err != nil {
+			return nil, err
+		}
+		pages, err := b.Pages()
+		if err != nil {
+			return nil, err
+		}
+		var raw []string
+		for _, p := range pages {
+			if info, err := p.Info(); err == nil {
+				raw = append(raw, info.URL)
+			}
+		}
+		return restorableTabs(raw), nil
+	})
+	return urls
+}
+
+// restorableTabs — 되살릴 주소만 고른다: 웹 주소만, 중복 제거, 상한까지.
+func restorableTabs(raw []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, u := range raw {
+		if !IsWebURL(u) || seen[u] || len(out) >= maxRestoreTabs {
+			continue
+		}
+		seen[u] = true
+		out = append(out, u)
+	}
+	return out
+}
+
+// missingTabs — want 중 지금 열려 있지 않은(open에 없는) 주소만.
+func missingTabs(want, open []string) []string {
+	have := map[string]bool{}
+	for _, u := range open {
+		have[u] = true
+	}
+	var out []string
+	for _, u := range want {
+		if !have[u] {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// ReopenTabs — 재기동한 브라우저에 주소들이 열려 있게 한다. 돌려주는 값은 열려 있게 된 개수.
+// Chrome이 스스로 세션을 되살리는 경우가 있어(2026-09-29 실측: 강제 종료 뒤 기동하면 직전 탭이 돌아옴)
+// 잠깐 기다린 뒤 빠진 주소만 배경 탭으로 연다 — 그냥 다 열면 탭이 재시작마다 두 배가 된다.
+func ReopenTabs(stateDir string, port int, urls []string) int {
+	n, _ := CallWithin(25*time.Second, func() (int, error) {
+		b, err := Connect(stateDir, port)
+		if err != nil {
+			return 0, err
+		}
+		time.Sleep(3 * time.Second)
+		var open []string
+		if pages, err := b.Timeout(5 * time.Second).Pages(); err == nil {
+			for _, p := range pages {
+				if info, err := p.Info(); err == nil {
+					open = append(open, info.URL)
+				}
+			}
+		}
+		missing := missingTabs(urls, open)
+		n := len(urls) - len(missing)
+		for _, u := range missing {
+			if _, err := (proto.TargetCreateTarget{URL: u, Background: true}).Call(b.Timeout(5 * time.Second)); err == nil {
+				n++
+			}
+		}
+		return n, nil
+	})
+	return n
 }

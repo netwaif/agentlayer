@@ -223,13 +223,10 @@ func newLauncher(bin, profile string, port int, fxDir string) *launcher.Launcher
 		// 남게 — 프로필 폴더의 chrome_debug.log. v=0이라 평소엔 경고·에러만 쌓인다.
 		Set("enable-logging").
 		Set("v", "0").
-		Set("vmodule", "display_link_mac=2,external_begin_frame_source_mac=2").
-		// 화면 굳음의 기전은 GPU 프로세스의 CVDisplayLink(vsync 시계) 스레드가 죽고 Chrome이
-		// 재생성하지 못하는 것(2026-09-23 두 번 실측, 트리거 미상). CVDisplayLink는 macOS 14에서
-		// 폐기됐고 Chrome은 macOS 14+용 CADisplayLink 구현을 feature 뒤에 두고 있다
-		// (Chrome 152 바이너리 문자열 kCADisplayLinkInGpu·kCADisplayLinkInBrowser). 죽는 시계를
-		// 아예 안 쓰게 켠다. 모르는 feature 이름은 Chrome이 조용히 무시한다.
-		Set("enable-features", "CADisplayLinkInGpu,CADisplayLinkInBrowser")
+		// 시계는 Chrome 기본(CVDisplayLink)을 쓴다. v1.8.1~1.10.2는 CADisplayLink feature를 켰지만
+		// 2026-09-29 실측에서 그쪽이 디스플레이 꺼짐에 더 약했다(20초 꺼짐에 멎음, 기본은 버팀).
+		// 오래 꺼지면 어느 쪽이든 멎고 돌아오지 않는다 — 복구는 행 감시의 재시작·탭 복원이 맡는다.
+		Set("vmodule", "display_link_mac=2,external_begin_frame_source_mac=2")
 	if fxDir != "" {
 		l = l.Set("load-extension", fxDir)
 	}

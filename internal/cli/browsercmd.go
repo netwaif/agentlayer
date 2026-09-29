@@ -82,6 +82,11 @@ func browserRestart(out io.Writer) error {
 }
 
 func browserRestartWith(out io.Writer, pid int, ops browser.HangOps) error {
+	// 죽이기 전에 열린 탭을 읽어 둔다 — 재시작 뒤 다시 연다(공유 창이라 남의 탭도 같이 죽는다).
+	var tabs []string
+	if pid > 0 && ops.Tabs != nil {
+		tabs = ops.Tabs()
+	}
 	if pid > 0 && ops.Kill != nil {
 		if err := ops.Kill(pid); err != nil {
 			fmt.Fprintf(out, "강제 종료 실패(pid %d): %v — 재기동만 시도\n", pid, err)
@@ -92,6 +97,9 @@ func browserRestartWith(out io.Writer, pid int, ops browser.HangOps) error {
 	}
 	if err := ops.Relaunch(); err != nil {
 		return fmt.Errorf("에이전트 브라우저 재기동 실패: %w", err)
+	}
+	if ops.Reopen != nil && len(tabs) > 0 {
+		fmt.Fprintf(out, "열려 있던 탭 %d/%d개 복원\n", ops.Reopen(tabs), len(tabs))
 	}
 	if pid > 0 {
 		fmt.Fprintln(out, "에이전트 브라우저 재시작 완료 — 세션의 MCP는 new_page부터 다시 시작하세요")
