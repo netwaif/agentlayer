@@ -144,7 +144,7 @@ func RunAll(w io.Writer, st *state.Store, tm tmuxx.Tmux, message string, o *AllO
 			c.SessionID = ResolveCodexThread(a, agents)
 			a = &c
 		}
-		if _, _, err := deliver(context.Background(), a, cfg, tm, message, true); err != nil {
+		if _, _, err := deliver(context.Background(), a, cfg, tm, message, true, Delivery{StateDir: st.Dir, From: senderName(agents)}); err != nil {
 			fmt.Fprintf(w, "  ✖ %s 전송 실패: %v\n", a.Tmux.Session, err)
 			continue
 		}
@@ -182,7 +182,7 @@ func SendAll(st *state.Store, tm tmuxx.Tmux, message string, handoffOnly bool) (
 			c.SessionID = ResolveCodexThread(a, agents)
 			a = &c
 		}
-		if _, _, err := deliver(context.Background(), a, cfg, tm, message, true); err == nil {
+		if _, _, err := deliver(context.Background(), a, cfg, tm, message, true, Delivery{StateDir: st.Dir, From: senderName(agents)}); err == nil {
 			sent++
 		}
 	}

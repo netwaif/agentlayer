@@ -136,6 +136,19 @@ func LogExcerpt(msg string) string {
 	return fmt.Sprintf("%s (%d자)", flat, n)
 }
 
+// senderName은 이 명령을 부른 세션의 이름(자기 pane의 에이전트 레코드). 못 찾으면 "user".
+func senderName(agents []*state.Agent) string {
+	pane := os.Getenv("TMUX_PANE")
+	if pane != "" {
+		for _, a := range agents {
+			if a != nil && a.Tmux.PaneID == pane && a.State != state.StateDead {
+				return a.Tmux.Session
+			}
+		}
+	}
+	return "user"
+}
+
 // RunSend: agentlayer send [--force] [--json] <세션[:창]> <메시지…|->
 // ctx는 원격 직원 경로(ssh)까지 내려간다 — Ctrl-C가 진행 중인 ssh를 바로 끊는다.
 func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store, stateDir string, tm TextSender, args []string) error {
@@ -184,15 +197,19 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 		a = &c
 	}
 	ok, reason := SendGate(a.State, o.Force)
-	// 코덱스 큐는 작업 중에도 안전하다(현재 턴 뒤에 처리) — tmux 관문에 걸려도 큐로는 보낸다. 승인 대기는 제외.
-	if !ok && !canCodexQueue(a, cfg) {
+	d := Delivery{StateDir: stateDir, From: senderName(agents)}
+	if as, found, _ := task.Load(stateDir, a.ID); found && as.Session == a.Tmux.Session && as.Pane == a.Tmux.PaneID {
+		d.TaskID = as.TaskID
+	}
+	// 코덱스 큐·Claude 채널은 작업 중에도 안전하다(현재 턴 뒤에 처리) — tmux 관문에 걸려도 보낸다. 승인 대기는 제외.
+	if !ok && !CanBypassGate(a, cfg, d, message) {
 		return fmt.Errorf("%s(%s): %s", a.Tmux.Session, a.State, reason)
 	}
-	via, qwarn, err := deliver(ctx, a, cfg, tm, message, ok)
+	via, qwarn, err := deliver(ctx, a, cfg, tm, message, ok, d)
 	if err != nil {
 		return fmt.Errorf("%s 전송 실패: %w", a.Tmux.Session, err)
 	}
-	if via == "queue" {
+	if via == "queue" || via == "channel" {
 		reason = ""
 		if a.State == state.StateWorking {
 			reason = "작업 중 — 현재 턴 뒤에 처리됩니다"
@@ -232,8 +249,11 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 	if reason != "" {
 		note = "  ⚠ " + reason
 	}
-	if via == "queue" {
+	switch via {
+	case "queue":
 		note = " (codex queue)" + note
+	case "channel":
+		note = " (채널)" + note
 	}
 	fmt.Fprintf(w, "전송 완료 → %s %s [%s]%s\n", a.Tmux.Session, a.Tmux.PaneID, a.State, note)
 	return nil

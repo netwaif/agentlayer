@@ -54,6 +54,8 @@ type Config struct {
 	// CodexQueue — 코덱스 세션에 tmux 키 입력 대신 `codex queue`로 보낼지. 기본 true.
 	// false면 예전처럼 tmux 입력만 쓴다(codex queue는 실험 기능이라 끌 수 있게 둔다).
 	CodexQueue *bool `json:"codex_queue,omitempty"`
+	// ClaudeChannel — 채널 서버(channel serve --self)가 떠 있는 Claude 세션에 tmux 키 입력 대신 채널로 보낼지. 기본 true.
+	ClaudeChannel *bool `json:"claude_channel,omitempty"`
 }
 
 const (
@@ -161,6 +163,14 @@ func (c *Config) CodexQueueEnabled() bool {
 		return true
 	}
 	return *c.CodexQueue
+}
+
+// ClaudeChannelEnabled는 기본값(true)을 반영한 접근자.
+func (c *Config) ClaudeChannelEnabled() bool {
+	if c == nil || c.ClaudeChannel == nil {
+		return true
+	}
+	return *c.ClaudeChannel
 }
 
 // BrowserPortOrDefault는 browser_port를 반영한 디버깅 포트. 범위 밖(0 이하·65535 초과)은 기본값.

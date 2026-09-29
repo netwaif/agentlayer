@@ -192,6 +192,13 @@ agentlayer task done VIDEO-07
   출력 끝의 `(codex queue)`, `--json`의 `"via"`가 실제 경로다. 끄려면 설정에 `"codex_queue": false`.
   Claude·Gemini는 예전대로 tmux 입력이다.
 
+- **채널 서버가 뜬 Claude 세션에는 채널로 보낸다(1.11.0+)**: 직원 폴더에 `claude mcp add -s local agentlayer -- agentlayer channel serve --self`를
+  등록하고 세션을 `--dangerously-load-development-channels server:agentlayer`로 띄우면, `send`가 tmux 키 입력 대신 그 세션 전용
+  수신함(`~/.local/state/agentlayer/inboxes/p<pane 번호>/`)에 지시를 넣는다. 세션에는 `<channel source="agentlayer" event="SEND" from="…">`로
+  들어오고 본문은 친 것과 똑같이 처리된다. 작업 중이면 현재 턴 뒤에 처리되므로 `--force`가 필요 없고, 승인 대기는 거부한다.
+  서버가 3초 안에 집어 가지 않으면 지시를 회수하고 tmux 입력으로 되돌아간다(두 번 전달되지 않는다). 본문이 12,000바이트를
+  넘거나 채널 서버가 없는 세션은 예전대로 tmux 입력이다. 끄려면 설정에 `"claude_channel": false`.
+
 ### 원격 직원 (호스팅어 Hermes 등)
 
 다른 머신의 실행기를 직원으로 붙인다. 등록 뒤에는 총괄 절차가 로컬 직원과 같다 — `task assign` → `send` → Monitor 이벤트 → `task done`.

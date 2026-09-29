@@ -130,10 +130,45 @@ func canCodexQueue(a *state.Agent, cfg *config.Config) bool {
 	return false
 }
 
-// deliver는 에이전트 하나에 메시지를 넣는다. 코덱스는 큐를 먼저 쓰고, 실패하면 tmux 키 입력으로 되돌아간다.
-// via는 "queue" 또는 "tmux". warn은 큐가 실패해 되돌아갔을 때의 사유(없으면 "").
-// tmuxOK가 false면(작업 중·승인 대기인데 --force 없음) 큐 실패 시 tmux로 되돌아가지 않고 오류를 낸다.
-func deliver(ctx context.Context, a *state.Agent, cfg *config.Config, tm TextSender, message string, tmuxOK bool) (via, warn string, err error) {
+// Delivery는 전송 한 건의 부가 정보 — 채널 경로가 쓴다.
+type Delivery struct {
+	StateDir string // 직원 수신함(inboxes/)의 뿌리. 비면 채널 경로를 쓰지 않는다
+	From     string // 보낸 세션 이름
+	TaskID   string // 업무ID(없으면 "")
+}
+
+// canClaudeChannel — 채널로 보낼 수 있는 대상인가: Claude이고, 그 pane의 채널 서버가 살아 있고, 본문이 상한 안.
+// 승인 대기(WAIT)는 코덱스 큐와 같은 이유로 뺀다.
+func canClaudeChannel(a *state.Agent, cfg *config.Config, d Delivery, message string) bool {
+	if a == nil || a.Kind != "claude" || d.StateDir == "" || !cfg.ClaudeChannelEnabled() || len(message) > maxChannelDirective {
+		return false
+	}
+	switch a.State {
+	case state.StateIdle, state.StateDoneUnread, state.StateWorking:
+		return ChannelLive(PaneInbox(d.StateDir, a.Tmux.PaneID))
+	}
+	return false
+}
+
+// CanBypassGate — tmux 관문(작업 중 거부)에 걸려도 보낼 수 있는 경로가 있는가.
+func CanBypassGate(a *state.Agent, cfg *config.Config, d Delivery, message string) bool {
+	return canCodexQueue(a, cfg) || canClaudeChannel(a, cfg, d, message)
+}
+
+// deliver는 에이전트 하나에 메시지를 넣는다. 코덱스는 큐, 채널 서버가 뜬 Claude는 채널을 먼저 쓰고,
+// 실패하면 tmux 키 입력으로 되돌아간다. via는 "queue"·"channel"·"tmux". warn은 되돌아갔을 때의 사유(없으면 "").
+// tmuxOK가 false면(작업 중인데 --force 없음) 실패 시 tmux로 되돌아가지 않고 오류를 낸다.
+func deliver(ctx context.Context, a *state.Agent, cfg *config.Config, tm TextSender, message string, tmuxOK bool, d Delivery) (via, warn string, err error) {
+	if canClaudeChannel(a, cfg, d, message) {
+		cerr := SendViaChannel(PaneInbox(d.StateDir, a.Tmux.PaneID), d.From, d.TaskID, message, time.Now())
+		if cerr == nil {
+			return "channel", "", nil
+		}
+		warn = "채널 전송 실패(" + cerr.Error() + ") — tmux 입력으로 보냄"
+		if !tmuxOK {
+			return "", "", fmt.Errorf("채널 전송 실패: %v", cerr)
+		}
+	}
 	if canCodexQueue(a, cfg) {
 		qerr := codexQueueFn(ctx, a.SessionID, a.CWD, message)
 		if qerr == nil {
