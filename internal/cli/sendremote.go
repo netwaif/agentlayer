@@ -48,6 +48,7 @@ func sendRemote(ctx context.Context, w io.Writer, st *state.Store, stateDir stri
 		if err != nil {
 			return fmt.Errorf("%s 상태 조회 실패: %w", r.Name, err)
 		}
+		as.Remote.UnreachableSince = 0 // 방금 닿았다 — 아래 Save가 낡은 끊김 표시를 지운다
 		cur = s.State
 	}
 	if ok, reason := RemoteSendGate(cur); !ok {

@@ -40,6 +40,9 @@ type RemoteRef struct {
 	Seen      int64            `json:"seen,omitempty"`
 	Workspace string           `json:"workspace,omitempty"`
 	Parent    string           `json:"parent,omitempty"` // DONE 뒤 후속 카드의 직전 handle(재시도 때 같은 값 전달)
+	// UnreachableSince는 조회가 연속으로 실패하기 시작한 시각(초). 0이면 닿는 중. 이 값이 있는 동안 LastState는
+	// 마지막으로 본 상태일 뿐이다 — task list가 다른 프로세스(task watch)의 연결 실패를 보려고 파일에 둔다.
+	UnreachableSince int64 `json:"unreachable_since,omitempty"`
 }
 
 // RemoteAgentID는 원격 직원의 에이전트 ID(agents/에는 저장하지 않는다 — tasks/<id>.json 파일명으로만 쓴다).

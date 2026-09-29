@@ -175,6 +175,27 @@ type outage struct {
 
 var outages = map[string]*outage{} // 원격 이름 → 연속 실패 기록(프로세스 수명)
 
+// setUnreachable은 등록 파일의 연결 끊김 시각만 바꾼다(0 = 다시 닿음). applyRemoteStatus와 같은 CAS —
+// 그 사이 마감·교체된 등록은 건드리지 않는다.
+func setUnreachable(stateDir string, as *Assignment, since int64) error {
+	if as.Remote == nil {
+		return nil
+	}
+	cur, ok, err := Load(stateDir, as.AgentID)
+	if err != nil {
+		return err
+	}
+	if !ok || cur.Remote == nil || cur.Remote.Handle != as.Remote.Handle || cur.TaskID != as.TaskID {
+		return nil
+	}
+	as.Remote.UnreachableSince = since
+	if cur.Remote.UnreachableSince == since {
+		return nil
+	}
+	cur.Remote.UnreachableSince = since
+	return Save(stateDir, *cur)
+}
+
 // MailboxInterval — 편지함(보드 전체 목록 조회)은 카드 상태 폴링보다 드물게 본다.
 const MailboxInterval = 30 * time.Second
 
@@ -225,6 +246,12 @@ func PollRemotesOnce(ctx context.Context, stateDir, inbox string, open AdapterOp
 				outages[as.Remote.Name] = og
 			}
 			warn(fmt.Sprintf("%s 조회 실패: %v", as.Remote.Name, err))
+			// 감시를 끄는 중(Ctrl-C)의 실패는 연결 문제가 아니다 — 표시를 남기면 다음 감시까지 낡은 채로 보인다.
+			if as.Remote.UnreachableSince == 0 && ctx.Err() == nil {
+				if err := setUnreachable(stateDir, as, og.since.Unix()); err != nil {
+					warn(fmt.Sprintf("%s 연결 끊김 기록 실패: %v", as.TaskID, err))
+				}
+			}
 			if !og.reported && now.Sub(og.since) >= unreachableAfter {
 				og.reported = true
 				a := RemoteAgent(as, remote.Status{State: state.StateError}, "", o.kind)
@@ -238,6 +265,11 @@ func PollRemotesOnce(ctx context.Context, stateDir, inbox string, open AdapterOp
 			continue
 		}
 		delete(outages, as.Remote.Name)
+		if as.Remote.UnreachableSince != 0 {
+			if err := setUnreachable(stateDir, as, 0); err != nil {
+				warn(fmt.Sprintf("%s 연결 끊김 기록 실패: %v", as.TaskID, err))
+			}
+		}
 		cwd := ""
 		if s.State == state.StateDoneUnread && as.Remote.LastState != state.StateDoneUnread && as.TaskDir != "" {
 			root, id := as.BoardRootID()

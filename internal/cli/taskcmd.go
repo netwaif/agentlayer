@@ -288,6 +288,8 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	type row struct {
 		task.Assignment
 		State string `json:"state"`
+		// Unreachable — 원격에 닿지 못하는 중(State는 마지막으로 본 값). 시작 시각은 remote.unreachable_since.
+		Unreachable bool `json:"unreachable,omitempty"`
 	}
 	var rows []row
 	for _, as := range list {
@@ -297,7 +299,7 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 			if as.Remote.LastState != "" {
 				s = string(as.Remote.LastState)
 			}
-			rows = append(rows, row{as, s})
+			rows = append(rows, row{as, s, as.Remote.UnreachableSince != 0})
 			continue
 		}
 		if a, ok := byID[as.AgentID]; ok {
@@ -307,7 +309,7 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 				s = string(a.State)
 			}
 		}
-		rows = append(rows, row{as, s})
+		rows = append(rows, row{as, s, false})
 	}
 	if len(args) > 0 && args[0] == "--json" {
 		if rows == nil {
@@ -322,6 +324,7 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	fmt.Fprintln(w, PadRight("업무ID", 24)+PadRight("세션", 30)+PadRight("상태", 8)+"경과")
 	for _, r := range rows {
 		label := targetLabel(r.Session, r.Window)
+		note := ""
 		if r.Remote != nil {
 			kind := "remote"
 			if rr, ok, _ := remote.Load(stateDir, r.Remote.Name); ok {
@@ -329,7 +332,11 @@ func taskList(w io.Writer, st *state.Store, stateDir string, args []string, now 
 			}
 			label = r.Session + " (" + kind + ")"
 		}
-		fmt.Fprintln(w, PadRight(r.TaskID, 24)+PadRight(label, 30)+PadRight(StateWord(state.AgentState(r.State)), 8)+Since(r.AssignedAt, now))
+		if r.Unreachable {
+			// 상태 칸은 마지막 관측이라 그대로 두고, 지금 닿지 않는다는 사실을 행 끝에 붙인다.
+			note = "  ⚠ 연결 끊김 " + Since(time.Unix(r.Remote.UnreachableSince, 0), now)
+		}
+		fmt.Fprintln(w, PadRight(r.TaskID, 24)+PadRight(label, 30)+PadRight(StateWord(state.AgentState(r.State)), 8)+Since(r.AssignedAt, now)+note)
 	}
 	return nil
 }
