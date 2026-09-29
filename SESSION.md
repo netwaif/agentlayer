@@ -15,12 +15,11 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-09-29 오후(체크포인트, 마감 아님)** — **v1.10.3·v1.10.4 릴리즈 완료**(GitHub 릴리즈·tap cask 1.10.4·로컬 `~/.local/bin/agentlayer` v1.10.4 a73483d). folder-bot `v0.1.23`·ai-company `v0.2.11` 푸시 완료. 굳음 트리거는 디스플레이 꺼짐으로 확정, 재시작+탭 복원으로 대응. 원격 편지 준비물은 agentlayer가 깔게 됐으나 **실서버(hostinger) 적용은 미실행**(분류기가 운영 서버 접근 차단).
+**2026-09-29 오후(체크포인트, 마감 아님)** — **v1.10.3·v1.10.4 릴리즈 완료**(GitHub 릴리즈·tap cask 1.10.4·로컬 `~/.local/bin/agentlayer` v1.10.4 a73483d). folder-bot `v0.1.23`·ai-company `v0.2.11` 푸시 완료. 굳음 트리거는 디스플레이 꺼짐으로 확정, 재시작+탭 복원으로 대응. 원격 편지 준비물은 agentlayer가 깔고, **실서버(hostinger)도 새 이름(`company-letter`·`company-manager`)으로 전환·왕복 시험 통과**.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-0. **실서버 이름 전환(사용자 실행 또는 허용 필요)**: ① 서버에 `imac-manager` 앞 대기 편지가 없는지 확인 ② `agentlayer remote add hermes-qa --kind hermes --ssh hostinger --profile tech-qa --exec "docker exec -i -u hermes hermes-agent-iqxn-hermes-agent-1" --workspace-root /opt/data/ai-company/결과물 --mailbox company-manager`(add가 `company-letter`·스킬 설치) ③ 서버의 옛 `/opt/data/.local/bin/imac-letter`·`/opt/data/skills/autonomous-ai-agents/imac-letter/` 치우기 ④ `/opt/data/ai-company/AGENTS.md`의 imac 문안 교체. 전환 전까지는 옛 이름 그대로 정상 동작.
 1. **공지 게시**: 초안 `.claude/announce-draft-2026-09-29.md`(버전은 v1.10.4로 읽을 것). 사용자 문안 확정 뒤 디스코드 멤버 채널 1522490241859059784 + 유튜브 커뮤니티.
 2. **실기 적용**: 플러그인 업데이트 뒤 폴더 봇마다 `botctl add` 재실행(0.1.23 재시작 사이드카·`bot-id`·지침 블록). 총괄 채널 서버는 다음 `bot-restart company-bot` 때 v1.10.4 반영. 설치기 `pins.json` folder-bot 0.1.21→0.1.23 검토.
 3. **멤버 답변 후속(매뉴얼 저장소 관계 그림)**: 멤버 채널 최근 30건에 그 답변 없음 — 게시 위치·약속 문장 유지 여부 사용자 확인 필요.
@@ -294,6 +293,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-29 **v1.10.4 원격 편지 준비물**: 정본을 `internal/remote/hermesside/`에 두고 go:embed, `remote add`가 점검 뒤 설치(`--no-setup`), `remote setup <이름>`. 담당자·첨부 폴더는 등록값으로 채움(옛 등록은 `imac-manager` 그대로). 기본값 `company-manager`·`from-company`. 서버 원본은 `imac-letter` 23줄·스킬 36줄을 읽어 일반화. 수동 모드에서 `git push`·goreleaser는 통과, 운영 서버 ssh 조회는 계속 차단.
 - 2026-09-29 goreleaser는 태그가 HEAD가 아니거나 미추적 파일이 있으면 실패 — `git worktree add --detach <경로> <태그>`로 깨끗한 트리에서 실행하고 `dist/agentlayer_darwin_amd64_v1/agentlayer`를 설치.
 
+- 2026-09-29 **실서버 이름 전환 완료**(수동 모드): `remote add hermes-qa … --mailbox company-manager` 재등록(자동 설치 `/opt/data/.local/bin/company-letter`·`/opt/data/skills/autonomous-ai-agents/company-letter/SKILL.md`, 서버 HOME=HERMES_HOME=/opt/data), 옛 `imac-letter` 스크립트·스킬·AGENTS.md 원본은 서버 `/opt/data/backup-imac-letter-20260929/`로 이동, `/opt/data/ai-company/AGENTS.md` 40~43행 문안 교체(아이맥 총괄→회사 총괄, from-imac→from-company). 왕복 시험 카드 `t_57cc63a2`: claim 12초 → 총괄 답장 "받았습니다 — 총괄" 19초(수신함 `received/551c9262c6a8be058ccdcd1438202337.json`). 옛 서버 폴더 `참고자료/from-imac/`은 그대로 둠.
+
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
@@ -494,3 +495,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-29(ai-company v0.2.11 로컬, 0788949·2d9bbf1·25ccd9b·54a927c): `companyctl.py`(parse_mcp_get·channel_registered·doctor 분기)·`tests/{conftest.py,test_companyctl.py}`·`plugin.json`·`marketplace.json`·`SKILL.md`. 테스트 65 통과.
 - 2026-09-29 시스템 상태: `~/.local/bin/agentlayer` = ff92472 빌드, `~/.local/state/agentlayer/hang/`에 오늘 덤프 9건(실험 재시작)·`hangwatch.log`·`hangwatch.lock`, `~/.config/agentlayer/config.json`은 실험 중 `browser_hangwatch:false`로 바꿨다가 원복, 디스플레이를 실험으로 8회 껐다 켬(12:41~13:32).
 - 2026-09-29(v1.10.4 a73483d): 신규 `internal/remote/setup.go`(Installer·Hermes.Setup·LetterCommand·renderSide)·`setup_test.go`(3)·`internal/remote/hermesside/{company-letter.sh,SKILL.md}`, `internal/remote/registry.go`(DefaultMailbox company-manager·AttachDirName)·`adapter.go`·`hermes.go`, `internal/cli/remotecmd.go`(`case "setup"`·remoteSetup·`--no-setup`)·`remotecmd_test.go`(+1), `README.md`. `docs/hermes-side/`(서버 원본 사본)는 삭제. `.claude/release-notes-1.10.4.md`.
+- 2026-09-29 시스템 상태(전환): `~/.local/state/agentlayer/remotes/hermes-qa.json` mailbox company-manager, 옛 등록 백업 `~/.local/state/agentlayer/hermes-qa.json.bak-20260929`.
