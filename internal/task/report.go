@@ -44,13 +44,22 @@ func ShouldReport(prev, to state.AgentState) bool {
 	return false
 }
 
-// ReportFor는 등록된 에이전트의 보고 대상 전이면 Report를 만든다.
+// askChanged — WAITING에 머문 채 질문만 바뀌었는가. 상태 전이가 아니라서 ShouldReport는 놓치지만, 총괄은 옛 질문에
+// 답하게 되므로 알아야 한다. 마지막으로 보고한 질문(as.LastAsk)과 같으면 반복 알림이라 거른다. 빈 질문은 세지 않는다.
+func askChanged(as *Assignment, a *state.Agent, prev, to state.AgentState) bool {
+	return prev == state.StateWaiting && to == state.StateWaiting && a.Ask != "" && a.Ask != as.LastAsk
+}
+
+// ReportFor는 등록된 에이전트의 보고 대상 전이(또는 WAITING 중 질문 변화)면 Report를 만든다.
 func ReportFor(stateDir string, a *state.Agent, prev, to state.AgentState, now time.Time) (*Report, bool) {
-	if !ShouldReport(prev, to) {
+	if !ShouldReport(prev, to) && prev != to {
 		return nil, false
 	}
 	as, ok, err := Load(stateDir, a.ID)
 	if err != nil || !ok {
+		return nil, false
+	}
+	if prev == to && !askChanged(as, a, prev, to) {
 		return nil, false
 	}
 	// 낡은 등록 방지: 같은 에이전트 ID를 새 세션이 재사용했을 수 있다(재시작 등).
@@ -74,6 +83,21 @@ func WriteReport(r *Report) (string, error) {
 	}
 	p := filepath.Join(dir, r.ID+".json")
 	return p, writeAtomic(p, r)
+}
+
+// WriteReportFor는 보고를 쓰고, WAITING 보고면 그 질문을 등록 파일에 기억한다(다음 알림이 같은 질문인지 가리는 기준).
+// 보고가 먼저다 — 기억에 실패하면 같은 질문이 한 번 더 갈 뿐이고, 순서가 반대면 질문이 아예 안 갈 수 있다.
+func WriteReportFor(stateDir, agentID string, r *Report) (string, error) {
+	p, err := WriteReport(r)
+	if err != nil || r.To != string(state.StateWaiting) {
+		return p, err
+	}
+	as, ok, err := Load(stateDir, agentID)
+	if err != nil || !ok || as.TaskID != r.TaskID || as.LastAsk == r.Ask {
+		return p, err
+	}
+	as.LastAsk = r.Ask
+	return p, Save(stateDir, *as)
 }
 
 // ReadyReport는 부모가 전부 끝나 배정 가능해진 자식 업무를 총괄에게 알리는 이벤트.

@@ -520,7 +520,7 @@ func runHook(args []string) error {
 			// hook은 에이전트를 절대 막지 않는다 — 보고 쓰기가 느려도(NAS·SMB
 			// inbox 등) 위 예산에서 남은 시간만 기다리고 포기한다(둘을 합쳐 2초).
 			done := make(chan error, 1)
-			go func() { _, err := task.WriteReport(rep); done <- err }()
+			go func() { _, err := task.WriteReportFor(st.Dir, a.ID, rep); done <- err }()
 			select {
 			case err := <-done:
 				if err != nil {

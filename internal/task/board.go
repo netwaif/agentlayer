@@ -17,11 +17,12 @@ import (
 //	WORK  → in_progress (승인됨·새 턴 — 기록 없음)
 //	DONE  → reviewing + [REPORT] DONE: …
 //	ERR   → status 유지 + [ERROR] …
+//	WAIT 유지 + 질문 변화 → status 유지 + [ASK]
 //
 // 미등록·TaskDir 없음·세션/pane 불일치·그 밖의 전이는 무동작(false, nil). applied는 "실제로 반영됐다"는
 // 뜻이라 board 쓰기가 실패하면(false, err)를 돌려준다. 실패해도 에이전트는 막지 않는다(호출자 몫).
 func ApplyTransition(stateDir string, a *state.Agent, prev, to state.AgentState, now time.Time) (bool, error) {
-	if prev == to {
+	if prev == to && to != state.StateWaiting {
 		return false, nil
 	}
 	as, ok, err := Load(stateDir, a.ID)
@@ -32,6 +33,16 @@ func ApplyTransition(stateDir string, a *state.Agent, prev, to state.AgentState,
 		return false, nil
 	}
 	root, id := as.BoardRootID()
+	if prev == to {
+		// WAITING에 머문 채 질문만 바뀜 — status는 그대로, 새 질문을 [ASK]로 남긴다.
+		if !askChanged(as, a, prev, to) {
+			return false, nil
+		}
+		if err := board.AppendLog(root, id, "ASK", a.Ask, now); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
 	status, tag := "", ""
 	switch to {
 	case state.StateWaiting:

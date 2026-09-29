@@ -168,6 +168,7 @@ agentlayer task done VIDEO-07
 - `send`는 `WORK`(작업 중)·`WAIT`(승인창)에는 넣지 않는다. `--force`로 강제. `dead`는 거부.
 - 등록된 세션의 `DONE`·`WAIT`·`ERR` 전이를 hook이 `<inbox>/pending/<id>.json`으로 쓴다
   (`task_id`·세션·창·이전/현재 상태·요약·승인 문구·cwd·시각). heartbeat·승인됨·읽음은 무음.
+  `WAIT`에 머문 채 질문(승인 문구)만 바뀌면 `from`·`to`가 둘 다 `WAITING`인 보고가 새로 간다 — 같은 질문의 반복 알림은 가지 않는다(원격 직원도 같다).
 - `task watch`는 정상 건을 한 줄 JSON으로 출력하고 `received/`로 옮긴다. 깨진 파일·심볼릭 링크·16KiB 초과는 `quarantine/`.
 - **채널 수신(1.10.0+)**: 총괄은 `claude mcp add -s local agentlayer -- agentlayer channel serve <inbox>`로 서버를 등록하고
   `--dangerously-load-development-channels server:agentlayer`로 기동한다(research preview 플래그 — 기동마다 확인창이 한 번 뜨며

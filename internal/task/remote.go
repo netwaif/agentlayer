@@ -44,7 +44,7 @@ func RemoteAgent(as *Assignment, s remote.Status, cwd, kind string) *state.Agent
 	return a
 }
 
-// ApplyRemoteStatus는 관측 상태가 마지막 것과 다를 때만 task.md·log.md 갱신과 inbox 보고를 하고 등록 파일을 갱신한다.
+// ApplyRemoteStatus는 관측 상태(또는 WAITING 중의 질문)가 마지막 것과 다를 때만 task.md·log.md 갱신과 inbox 보고를 하고 등록 파일을 갱신한다.
 // 등록 파일은 다시 읽어 확인한 뒤 Remote 필드만 갱신한다(CAS) — 폴러가 사본을 든 사이 send(handle 교체)·task done(삭제)이
 // 끼어도 옛 사본으로 되돌리거나 지운 등록을 되살리지 않는다.
 func ApplyRemoteStatus(stateDir string, as *Assignment, s remote.Status, cwd string, now time.Time) (bool, error) {
@@ -72,16 +72,22 @@ func applyRemoteStatus(stateDir string, as *Assignment, s remote.Status, cwd, ki
 	if prev == "" {
 		prev = state.StateIdle
 	}
-	if prev == s.State && as.Remote.Seen == s.Seen {
+	a := RemoteAgent(as, s, cwd, kind)
+	// 같은 상태·같은 이벤트 시각이어도 질문이 바뀌었으면 변화다(Seen을 주지 않는 어댑터도 있다). 질문 기억이 없는
+	// 옛 등록은 예외 — 이미 보고한 질문을 업그레이드 직후 한 번 더 보내지 않는다.
+	askNew := cur.LastAsk != "" && askChanged(cur, a, prev, s.State)
+	if prev == s.State && as.Remote.Seen == s.Seen && !askNew {
 		return false, nil
 	}
-	a := RemoteAgent(as, s, cwd, kind)
 	if _, err := ApplyTransition(stateDir, a, prev, s.State, now); err != nil {
 		return false, err
 	}
 	if rep, ok := ReportFor(stateDir, a, prev, s.State, now); ok {
 		if _, err := WriteReport(rep); err != nil {
 			return false, err
+		}
+		if rep.To == string(state.StateWaiting) {
+			cur.LastAsk, as.LastAsk = rep.Ask, rep.Ask
 		}
 	}
 	cur.Remote.LastState = s.State

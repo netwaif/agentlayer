@@ -30,6 +30,9 @@ type Assignment struct {
 	AssignedAt time.Time `json:"assigned_at"`
 	// Remote는 원격 직원 등록일 때만. 훅이 아니라 task watch의 폴링이 상태를 채운다.
 	Remote *RemoteRef `json:"remote,omitempty"`
+	// LastAsk는 총괄에 마지막으로 보고한 질문(WAITING의 ask). 같은 WAITING 안에서 질문이 바뀌었는지, 같은 질문의
+	// 반복 알림인지 가린다. 훅(로컬)·폴링(원격)이 보고를 쓴 뒤 채운다.
+	LastAsk string `json:"last_ask,omitempty"`
 }
 
 // RemoteRef는 원격 직원(어댑터) 쪽 실행 식별자와 마지막 관측 상태.
