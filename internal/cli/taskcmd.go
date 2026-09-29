@@ -434,8 +434,17 @@ func taskAssignRemote(w io.Writer, st *state.Store, stateDir string, r *remote.R
 	if as.TaskDir == "" {
 		warn = "  ⚠ tasks/" + taskID + "/task.md가 없어 보드에 표시되지 않음"
 	}
+	// --replace는 등록 파일만 바꾼다 — 옛 등록이 만든 서버 카드는 handle을 잃어 아무도 닫지 못한다.
+	orphan := ""
+	if old, ok, _ := task.Load(stateDir, as.AgentID); ok && replace && old.Remote != nil && old.Remote.Handle != "" {
+		orphan = fmt.Sprintf("  ⚠ 옛 카드 %s(업무 %s)가 %s 서버에 그대로 남습니다 — 자동으로 지우지 않으니 필요하면 실행기에서 직접 닫으세요(archive)",
+			old.Remote.Handle, old.TaskID, r.Name)
+	}
 	if err := task.Assign(stateDir, as, replace); err != nil {
 		return err
+	}
+	if orphan != "" {
+		fmt.Fprintln(w, orphan)
 	}
 	if as.TaskDir != "" {
 		if err := board.RememberRoot(stateDir, root); err != nil {

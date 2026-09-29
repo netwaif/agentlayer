@@ -200,6 +200,7 @@ agentlayer task done PING-2                        # 서버 카드 archive까지
 - 보고는 훅이 아니라 **`task watch`의 폴링**(기본 5초)이 만든다 — 감시가 켜져 있어야 온다. 카드 상태 대응: running→`WORKING`, blocked→`WAITING`(ask = block 사유), done→`DONE_UNREAD`, crashed/timed_out→`ERROR`.
 - 완료 시 원격 작업 폴더를 `결과물/<업무ID>/remote/`로 회수하고 `RESULT.md`(result·summary·카드 ID)를 쓴다(50MiB 상한). 보고 JSON의 `cwd`가 그 폴더다. 회수한 파일 권한은 실행 파일 `0755`, 나머지 `0644`로만 남긴다(setuid·setgid·그룹/기타 쓰기 비트는 버림).
 - 작업 중(`WORKING`)인 원격에는 `--force`로도 보내지 않는다. 기동 실패(프로필 동시 실행 상한 등)는 `send`가 사유를 그대로 보여 주고, 다음 `send`가 같은 카드로 재시도한다.
+- `task assign --replace`로 원격 업무를 다시 배정하면 서버의 옛 카드는 그대로 남는다 — 카드 ID를 적은 경고가 나오며 자동으로 지우지 않는다(필요하면 실행기에서 직접 archive).
 - 원격 직원은 `agentlayer status`·대시보드에 나오지 않는다(`task list`·`remote list`로 본다).
 - ssh는 아이맥이 연다(원격→로컬 방향 없음). 연결이 5분 넘게 끊기면 `ERROR` 한 번 보고.
 - ssh 연결 재사용 소켓은 `/tmp/agentlayer-ssh-<uid>/`에 둔다. 이 폴더가 내 소유·`0700`·진짜 폴더(심볼릭 링크 아님)가 아니면 ssh를 띄우지 않고 오류로 멈춘다 — 폴더를 지우거나 `chmod 700` 뒤 다시 실행.
