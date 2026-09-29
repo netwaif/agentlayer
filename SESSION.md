@@ -21,7 +21,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
 1. **공지 게시**: 초안 `.claude/announce-draft-2026-09-29.md`(버전은 v1.10.4로 읽을 것). 사용자 문안 확정 뒤 디스코드 멤버 채널 1522490241859059784 + 유튜브 커뮤니티.
-2. **실기 적용**: 플러그인 업데이트 뒤 폴더 봇마다 `botctl add` 재실행(0.1.23 재시작 사이드카·`bot-id`·지침 블록). 총괄 채널 서버는 다음 `bot-restart company-bot` 때 v1.10.4 반영. 설치기 `pins.json` folder-bot 0.1.21→0.1.23 검토.
+2. **재시작한 봇 9개 재정박**: 15:00 전후 `bot-restart`로 재시작해 idle 상태 — 디스코드에서 "이어서하자"를 보내야 각자 재정박한다. 설치기 `pins.json` folder-bot 0.1.21→0.1.23 검토.
 3. **멤버 답변 후속(매뉴얼 저장소 관계 그림)**: 멤버 채널 최근 30건에 그 답변 없음 — 게시 위치·약속 문장 유지 여부 사용자 확인 필요.
 4. **텔레그램 확장(사용자 판단 대기)**: `.claude/telegram-cost-2026-09-29.md`. 최소 2~3일, 전체 10~15일.
 5. **v1.10.3 관찰**: 밤새 모니터 꺼짐 뒤 `~/.local/state/agentlayer/hang/hangwatch.log`에 재시작이 켜진 직후 1회만 찍히는지·탭 복원 여부. Apple Silicon `pmset -g powerstate IODisplayWrangler` 미확인.
@@ -294,6 +294,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-29 goreleaser는 태그가 HEAD가 아니거나 미추적 파일이 있으면 실패 — `git worktree add --detach <경로> <태그>`로 깨끗한 트리에서 실행하고 `dist/agentlayer_darwin_amd64_v1/agentlayer`를 설치.
 
 - 2026-09-29 **실서버 이름 전환 완료**(수동 모드): `remote add hermes-qa … --mailbox company-manager` 재등록(자동 설치 `/opt/data/.local/bin/company-letter`·`/opt/data/skills/autonomous-ai-agents/company-letter/SKILL.md`, 서버 HOME=HERMES_HOME=/opt/data), 옛 `imac-letter` 스크립트·스킬·AGENTS.md 원본은 서버 `/opt/data/backup-imac-letter-20260929/`로 이동, `/opt/data/ai-company/AGENTS.md` 40~43행 문안 교체(아이맥 총괄→회사 총괄, from-imac→from-company). 왕복 시험 카드 `t_57cc63a2`: claim 12초 → 총괄 답장 "받았습니다 — 총괄" 19초(수신함 `received/551c9262c6a8be058ccdcd1438202337.json`). 옛 서버 폴더 `참고자료/from-imac/`은 그대로 둠.
+
+- 2026-09-29 **폴더 봇 0.1.23 실기 적용**: 플러그인 folder-bot 0.1.23·ai-company 0.2.11 업데이트, 봇 10개 `botctl add` 재실행(설정값 변화 없음, 백업 `~/.config/folder-bot/bots.json.bak-20260929`), 각 폴더 `.discord-state/bot-id` 생성·CLAUDE.md 지침 블록 갱신, claude 봇 9개 `bot-restart`(전부 연결 성공). 총괄 채널 서버가 v1.10.4로 다시 떠 `runtime/inbox/.channel.lock` 보유. doctor WARN "워크스페이스 미신뢰" 7건은 기존부터 있던 것.
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
