@@ -30,7 +30,7 @@ func RemoteSendGate(s state.AgentState) (bool, string) {
 }
 
 // sendRemote — send의 원격 분기. 카드 없음/기동 실패(IDLE)면 Dispatch, WAIT면 Reply, DONE 뒤 지시는 후속 카드.
-func sendRemote(w io.Writer, stateDir string, r *remote.Remote, message string, o SendOptions, now time.Time) error {
+func sendRemote(ctx context.Context, w io.Writer, st *state.Store, stateDir string, r *remote.Remote, message string, o SendOptions, now time.Time) error {
 	as, ok, err := task.Load(stateDir, task.RemoteAgentID(r.Name))
 	if err != nil {
 		return err
@@ -42,7 +42,6 @@ func sendRemote(w io.Writer, stateDir string, r *remote.Remote, message string, 
 	if err != nil {
 		return err
 	}
-	ctx := context.Background()
 	cur := state.StateIdle
 	if as.Remote.Handle != "" {
 		s, err := ad.Poll(ctx, as.Remote.Handle)

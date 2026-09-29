@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -136,7 +137,8 @@ func LogExcerpt(msg string) string {
 }
 
 // RunSend: agentlayer send [--force] [--json] <세션[:창]> <메시지…|->
-func RunSend(w io.Writer, stdin io.Reader, st *state.Store, stateDir string, tm TextSender, args []string) error {
+// ctx는 원격 직원 경로(ssh)까지 내려간다 — Ctrl-C가 진행 중인 ssh를 바로 끊는다.
+func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store, stateDir string, tm TextSender, args []string) error {
 	o, rest, err := ParseSendFlags(args)
 	if err != nil {
 		return err
@@ -164,7 +166,7 @@ func RunSend(w io.Writer, stdin io.Reader, st *state.Store, stateDir string, tm 
 	}
 	// 원격 직원(remotes/<이름>.json)이면 어댑터 경로 — 이름 규칙(':' 없음)에 안 맞는 "<세션>:<창>"은 그대로 기존 경로.
 	if r, ok, err := remote.Load(stateDir, rest[0]); err == nil && ok {
-		return sendRemote(w, stateDir, r, message, o, time.Now())
+		return sendRemote(ctx, w, st, stateDir, r, message, o, time.Now())
 	}
 	agents, err := st.List()
 	if err != nil {

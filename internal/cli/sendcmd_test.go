@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -112,7 +113,7 @@ func TestRunSendRejectsOversizedBody(t *testing.T) {
 	_ = st.Save(mkAgent("claude", "collab-bot", "%1", state.StateIdle))
 	var out bytes.Buffer
 	big := strings.Repeat("a", 65537)
-	err := RunSend(&out, strings.NewReader(big), st, stateDir, &fakeSender{}, []string{"collab-bot", "-"})
+	err := RunSend(context.Background(), &out, strings.NewReader(big), st, stateDir, &fakeSender{}, []string{"collab-bot", "-"})
 	if err == nil || !strings.Contains(err.Error(), "너무 깁니다") {
 		t.Fatalf("64KiB 초과는 거부: %v", err)
 	}
@@ -125,7 +126,7 @@ func TestRunSendDeliversAndGates(t *testing.T) {
 	_ = st.Save(mkAgent("claude", "busy-bot", "%2", state.StateWorking))
 	var out bytes.Buffer
 	f := &fakeSender{}
-	if err := RunSend(&out, nil, st, stateDir, f, []string{"collab-bot", "주제", "3개"}); err != nil {
+	if err := RunSend(context.Background(), &out, nil, st, stateDir, f, []string{"collab-bot", "주제", "3개"}); err != nil {
 		t.Fatal(err)
 	}
 	if f.pane != "%1" || f.text != "주제 3개" {
@@ -133,16 +134,16 @@ func TestRunSendDeliversAndGates(t *testing.T) {
 	}
 	out.Reset()
 	f = &fakeSender{}
-	err := RunSend(&out, nil, st, stateDir, f, []string{"busy-bot", "x"})
+	err := RunSend(context.Background(), &out, nil, st, stateDir, f, []string{"busy-bot", "x"})
 	if err == nil || f.calls != 0 {
 		t.Fatalf("WORKING은 거부(전송 0회): err=%v calls=%d", err, f.calls)
 	}
-	if err := RunSend(&out, nil, st, stateDir, f, []string{"--force", "busy-bot", "x"}); err != nil || f.calls != 1 {
+	if err := RunSend(context.Background(), &out, nil, st, stateDir, f, []string{"--force", "busy-bot", "x"}); err != nil || f.calls != 1 {
 		t.Fatalf("--force면 전송: %v %d", err, f.calls)
 	}
 	// stdin 본문
 	f = &fakeSender{}
-	if err := RunSend(&out, strings.NewReader("첫 줄\n둘째 줄\n"), st, stateDir, f, []string{"collab-bot", "-"}); err != nil {
+	if err := RunSend(context.Background(), &out, strings.NewReader("첫 줄\n둘째 줄\n"), st, stateDir, f, []string{"collab-bot", "-"}); err != nil {
 		t.Fatal(err)
 	}
 	if f.text != "첫 줄\n둘째 줄" {
@@ -150,16 +151,16 @@ func TestRunSendDeliversAndGates(t *testing.T) {
 	}
 	// --json
 	out.Reset()
-	if err := RunSend(&out, nil, st, stateDir, &fakeSender{}, []string{"--json", "collab-bot", "x"}); err != nil {
+	if err := RunSend(context.Background(), &out, nil, st, stateDir, &fakeSender{}, []string{"--json", "collab-bot", "x"}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), `"sent":true`) || !strings.Contains(out.String(), `"pane":"%1"`) {
 		t.Errorf("json 출력: %s", out.String())
 	}
-	if err := RunSend(&out, nil, st, stateDir, &fakeSender{fail: true}, []string{"collab-bot", "x"}); err == nil {
+	if err := RunSend(context.Background(), &out, nil, st, stateDir, &fakeSender{fail: true}, []string{"collab-bot", "x"}); err == nil {
 		t.Error("전송 실패는 에러")
 	}
-	if err := RunSend(&out, nil, st, stateDir, f, []string{"collab-bot"}); err == nil {
+	if err := RunSend(context.Background(), &out, nil, st, stateDir, f, []string{"collab-bot"}); err == nil {
 		t.Error("메시지 없으면 오류")
 	}
 }
@@ -189,7 +190,7 @@ func TestRunSendLogsToLinkedTask(t *testing.T) {
 		Inbox: filepath.Join(root, "runtime", "inbox"), TaskDir: dir, AssignedAt: time.Now()}, false)
 	var out bytes.Buffer
 	fake := &fakeSender{}
-	if err := RunSend(&out, nil, st, stateDir, fake, []string{"collab-bot", "네, 읽어도 됩니다"}); err != nil {
+	if err := RunSend(context.Background(), &out, nil, st, stateDir, fake, []string{"collab-bot", "네, 읽어도 됩니다"}); err != nil {
 		t.Fatal(err)
 	}
 	lg, _ := os.ReadFile(filepath.Join(dir, "log.md"))
@@ -222,7 +223,7 @@ func TestRunSendJSONKeepsStdoutParseableWhenLogWriteFails(t *testing.T) {
 	defer func() { os.Stderr = origStderr }()
 
 	var out bytes.Buffer
-	sendErr := RunSend(&out, nil, st, stateDir, &fakeSender{}, []string{"--json", "collab-bot", "네, 됩니다"})
+	sendErr := RunSend(context.Background(), &out, nil, st, stateDir, &fakeSender{}, []string{"--json", "collab-bot", "네, 됩니다"})
 
 	w.Close()
 	os.Stderr = origStderr
@@ -250,7 +251,7 @@ func TestRunSendUnlinkedWritesNoLog(t *testing.T) {
 	_ = st.Save(&state.Agent{ID: "claude-%1", Kind: "claude", State: state.StateIdle,
 		Tmux: state.TmuxRef{Session: "collab-bot", PaneID: "%1"}})
 	var out bytes.Buffer
-	if err := RunSend(&out, nil, st, stateDir, &fakeSender{}, []string{"collab-bot", "hi"}); err != nil {
+	if err := RunSend(context.Background(), &out, nil, st, stateDir, &fakeSender{}, []string{"collab-bot", "hi"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "tasks")); !os.IsNotExist(err) {

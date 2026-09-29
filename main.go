@@ -83,7 +83,9 @@ func run(args []string) error {
 		if err != nil {
 			return err
 		}
-		return cli.RunSend(os.Stdout, os.Stdin, st, state.DefaultDir(), tmuxx.Tmux{}, args[1:])
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return cli.RunSend(ctx, os.Stdout, os.Stdin, st, state.DefaultDir(), tmuxx.Tmux{}, args[1:])
 	case "remote":
 		st, err := storeWithSync()
 		if err != nil {

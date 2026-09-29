@@ -71,7 +71,7 @@ func TestSendRemoteDispatchesFirstTime(t *testing.T) {
 	ad := &scriptedAdapter{handle: "t_new", status: remote.Status{State: state.StateIdle}}
 	st, stateDir, root := remoteSendFixture(t, ad)
 	var out bytes.Buffer
-	if err := RunSend(&out, strings.NewReader("본문 첫 줄\n둘째 줄\n"), st, stateDir, nil, []string{"hermes-qa", "-"}); err != nil {
+	if err := RunSend(context.Background(), &out, strings.NewReader("본문 첫 줄\n둘째 줄\n"), st, stateDir, nil, []string{"hermes-qa", "-"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(ad.dispatched) != 1 || ad.dispatched[0] != "PING-2|연결 시험|본문 첫 줄\n둘째 줄|" {
@@ -92,7 +92,7 @@ func TestSendRemoteDispatchesFirstTime(t *testing.T) {
 func TestSendRemoteRetryAfterDispatchFailure(t *testing.T) {
 	ad := &scriptedAdapter{handle: "t_new", dispatchErr: errors.New("카드 t_new 기동 실패: skipped_per_profile_capped"), status: remote.Status{State: state.StateIdle}}
 	st, stateDir, _ := remoteSendFixture(t, ad)
-	err := RunSend(&bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시"})
+	err := RunSend(context.Background(), &bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시"})
 	if err == nil || !strings.Contains(err.Error(), "skipped_per_profile_capped") {
 		t.Fatalf("기동 실패는 에러: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestSendRemoteRetryAfterDispatchFailure(t *testing.T) {
 		t.Errorf("카드는 남긴다(handle 저장): %+v", as.Remote)
 	}
 	// 두 번째 send: 카드가 이미 있으면 create를 다시 부르지 않고 그 카드를 재기동만 한다(멱등 키가 옛 카드를 돌려주는 사고 방지)
-	if err := RunSend(&bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시"}); err != nil {
+	if err := RunSend(context.Background(), &bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(ad.dispatched) != 1 || len(ad.resumed) != 1 || ad.resumed[0] != "t_new" {
@@ -117,7 +117,7 @@ func TestSendRemoteAttemptChangesWithReplace(t *testing.T) {
 	// ERROR 뒤 task assign --replace → send는 새 시도 키로 새 카드를 만들어야 한다(같은 키면 죽은 카드가 돌아온다)
 	ad := &scriptedAdapter{handle: "t_1", status: remote.Status{State: state.StateIdle}}
 	st, stateDir, _ := remoteSendFixture(t, ad)
-	if err := RunSend(&bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시"}); err != nil {
+	if err := RunSend(context.Background(), &bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시"}); err != nil {
 		t.Fatal(err)
 	}
 	as, _, _ := task.Load(stateDir, task.RemoteAgentID("hermes-qa"))
@@ -125,7 +125,7 @@ func TestSendRemoteAttemptChangesWithReplace(t *testing.T) {
 	as.AssignedAt = as.AssignedAt.Add(time.Second)
 	task.Save(stateDir, *as)
 	ad.handle = "t_2"
-	if err := RunSend(&bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시2"}); err != nil {
+	if err := RunSend(context.Background(), &bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시2"}); err != nil {
 		t.Fatal(err)
 	}
 	if len(ad.attempts) != 2 || ad.attempts[0] == ad.attempts[1] || ad.attempts[1] == "" {
@@ -152,7 +152,7 @@ func TestSendRemoteGate(t *testing.T) {
 		as, _, _ := task.Load(stateDir, task.RemoteAgentID("hermes-qa"))
 		as.Remote.Handle, as.Remote.LastState = "t_old", c.state
 		task.Save(stateDir, *as)
-		err := RunSend(&bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "답"})
+		err := RunSend(context.Background(), &bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "답"})
 		if c.wantErr == "" && err != nil {
 			t.Errorf("%s: %v", c.state, err)
 		}
@@ -171,7 +171,7 @@ func TestSendRemoteGate(t *testing.T) {
 func TestSendRemoteRequiresAssignment(t *testing.T) {
 	st, stateDir := newStore(t)
 	remote.Save(stateDir, remote.Remote{Name: "hermes-qa", Kind: "hermes", SSH: "h", Profile: "p", WorkspaceRoot: "/w"})
-	err := RunSend(&bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시"})
+	err := RunSend(context.Background(), &bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시"})
 	if err == nil || !strings.Contains(err.Error(), "task assign") {
 		t.Errorf("등록 없으면 task assign 안내: %v", err)
 	}

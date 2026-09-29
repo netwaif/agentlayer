@@ -38,7 +38,7 @@ func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string,
 	case "list":
 		return taskList(w, st, stateDir, args[1:], now)
 	case "done":
-		return taskDone(w, st, stateDir, args[1:], now)
+		return taskDone(ctx, w, st, stateDir, args[1:], now)
 	case "watch":
 		return taskWatch(ctx, w, st, stateDir, args[1:])
 	case "message":
@@ -50,7 +50,7 @@ func RunTask(ctx context.Context, w io.Writer, st *state.Store, stateDir string,
 	}
 }
 
-func taskDone(w io.Writer, st *state.Store, stateDir string, args []string, now time.Time) error {
+func taskDone(ctx context.Context, w io.Writer, st *state.Store, stateDir string, args []string, now time.Time) error {
 	var pos []string
 	root := ""
 	for i := 0; i < len(args); i++ {
@@ -126,7 +126,7 @@ func taskDone(w io.Writer, st *state.Store, stateDir string, args []string, now 
 	if remoteRef != nil {
 		if r, ok, _ := remote.Load(stateDir, remoteRef.Name); ok {
 			if ad, err := OpenRemote(*r, stateDir); err == nil {
-				if err := ad.Finish(context.Background(), remoteRef.Handle); err != nil {
+				if err := ad.Finish(ctx, remoteRef.Handle); err != nil {
 					fmt.Fprintln(w, "  ⚠ 원격 카드 마감(archive) 실패:", err)
 				}
 			}
