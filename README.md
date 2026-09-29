@@ -185,6 +185,13 @@ agentlayer task done VIDEO-07
 - inbox는 로컬 경로여야 한다(NAS·SMB 마운트 금지) — hook은 2초 안에 못 쓰면 보고를 포기하고 에이전트를 막지 않는다.
 - 여러 줄 본문(`-`)은 `\r`·제어문자를 제거하고 64KiB까지만 보낸다. 여러 줄은 tmux 붙여넣기(브래킷)로 들어가 Claude Code·codex·gemini 입력창에서 줄바꿈이 그대로 살아 있다(한 줄은 예전대로 키 입력).
 
+- **코덱스에는 `codex queue`로 보낸다(1.10.5+)**: `send`·`wake-all`·`close-all`·`broadcast`가 코덱스 세션에는 tmux 키 입력
+  대신 `codex queue --thread <세션ID>`를 쓴다. 떠 있는 세션에 그대로 들어가고, 작업 중이면 현재 턴 뒤에 처리되므로
+  `--force`가 필요 없다. 여러 줄 본문도 그대로 간다. 세션 ID는 훅이 남긴 값을 쓰고, 없으면 그 폴더의 가장 최근 세션이
+  지금 프로세스가 뜬 뒤에 만들어졌을 때만 쓴다. 큐가 실패하면 사유를 알리고 tmux 입력으로 되돌아간다.
+  출력 끝의 `(codex queue)`, `--json`의 `"via"`가 실제 경로다. 끄려면 설정에 `"codex_queue": false`.
+  Claude·Gemini는 예전대로 tmux 입력이다.
+
 ### 원격 직원 (호스팅어 Hermes 등)
 
 다른 머신의 실행기를 직원으로 붙인다. 등록 뒤에는 총괄 절차가 로컬 직원과 같다 — `task assign` → `send` → Monitor 이벤트 → `task done`.

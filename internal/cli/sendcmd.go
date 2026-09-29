@@ -176,12 +176,34 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 	if err != nil {
 		return err
 	}
+	cfg := config.Load()
+	// 훅이 세션 ID를 못 남긴 코덱스는 rollout에서 찾아 채운다(전송에만 쓰고 저장하지 않는다).
+	if a.Kind == "codex" && a.SessionID == "" {
+		c := *a
+		c.SessionID = ResolveCodexThread(a, agents)
+		a = &c
+	}
 	ok, reason := SendGate(a.State, o.Force)
-	if !ok {
+	// 코덱스 큐는 작업 중·승인 대기에도 안전하다(현재 턴 뒤에 처리) — tmux 관문에 걸려도 큐로는 보낸다.
+	if !ok && !canCodexQueue(a, cfg) {
 		return fmt.Errorf("%s(%s): %s", a.Tmux.Session, a.State, reason)
 	}
-	if err := tm.SendText(a.Tmux.PaneID, message); err != nil {
+	via, qwarn, err := deliver(ctx, a, cfg, tm, message, ok)
+	if err != nil {
 		return fmt.Errorf("%s 전송 실패: %w", a.Tmux.Session, err)
+	}
+	if via == "queue" {
+		reason = ""
+		if a.State == state.StateWorking || a.State == state.StateWaiting {
+			reason = "작업 중 — 현재 턴 뒤에 처리됩니다"
+		}
+	}
+	if qwarn != "" {
+		warnOut := w
+		if o.JSON {
+			warnOut = os.Stderr
+		}
+		fmt.Fprintln(warnOut, "  ⚠ "+qwarn)
 	}
 	// 회사 업무가 등록된 세션이면 총괄의 지시·답변을 log.md에 남긴다([ASK] 뒤의 [SEND]가 Q&A 한 쌍).
 	if as, ok, _ := task.Load(stateDir, a.ID); ok && as.TaskDir != "" && as.Session == a.Tmux.Session && as.Pane == a.Tmux.PaneID {
@@ -204,11 +226,14 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 	}
 	if o.JSON {
 		return json.NewEncoder(w).Encode(map[string]any{"session": a.Tmux.Session, "window": a.Tmux.WindowName,
-			"pane": a.Tmux.PaneID, "state": a.State, "sent": true})
+			"pane": a.Tmux.PaneID, "state": a.State, "sent": true, "via": via})
 	}
 	note := ""
 	if reason != "" {
 		note = "  ⚠ " + reason
+	}
+	if via == "queue" {
+		note = " (codex queue)" + note
 	}
 	fmt.Fprintf(w, "전송 완료 → %s %s [%s]%s\n", a.Tmux.Session, a.Tmux.PaneID, a.State, note)
 	return nil

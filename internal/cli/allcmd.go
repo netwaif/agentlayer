@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 )
@@ -135,8 +137,14 @@ func RunAll(w io.Writer, st *state.Store, tm tmuxx.Tmux, message string, o *AllO
 		}
 	}
 	var sent []*state.Agent
+	cfg := config.Load()
 	for _, a := range targets {
-		if err := tm.SendText(a.Tmux.PaneID, message); err != nil {
+		if a.Kind == "codex" && a.SessionID == "" {
+			c := *a
+			c.SessionID = ResolveCodexThread(a, agents)
+			a = &c
+		}
+		if _, _, err := deliver(context.Background(), a, cfg, tm, message, true); err != nil {
 			fmt.Fprintf(w, "  ✖ %s 전송 실패: %v\n", a.Tmux.Session, err)
 			continue
 		}
@@ -167,8 +175,14 @@ func SendAll(st *state.Store, tm tmuxx.Tmux, message string, handoffOnly bool) (
 		}
 		targets = kept
 	}
+	cfg := config.Load()
 	for _, a := range targets {
-		if tm.SendText(a.Tmux.PaneID, message) == nil {
+		if a.Kind == "codex" && a.SessionID == "" {
+			c := *a
+			c.SessionID = ResolveCodexThread(a, agents)
+			a = &c
+		}
+		if _, _, err := deliver(context.Background(), a, cfg, tm, message, true); err == nil {
 			sent++
 		}
 	}

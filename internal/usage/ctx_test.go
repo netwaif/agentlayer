@@ -166,3 +166,38 @@ func TestGeminiCommand(t *testing.T) {
 		t.Fatalf("antigravity-cli 흔적 있으면 agy여야: got %q", got)
 	}
 }
+
+func writeRollout(t *testing.T, root, name, sid, cwd, created string, mod time.Time) {
+	t.Helper()
+	dir := filepath.Join(root, "2026", "09", "29")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, name)
+	line := `{"timestamp":"` + created + `","ordinal":0,"type":"session_meta","payload":{"session_id":"` + sid + `","id":"` + sid + `","timestamp":"` + created + `","cwd":"` + cwd + `"}}` + "\n"
+	if err := os.WriteFile(p, []byte(line), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Chtimes(p, mod, mod)
+}
+
+// 지금 떠 있는 프로세스보다 나중에 만들어진 세션만 돌려준다 — 옛 세션에 메시지를 넣지 않는다.
+func TestCodexSessionSince(t *testing.T) {
+	root := t.TempDir()
+	base := time.Date(2026, 9, 29, 14, 0, 0, 0, time.UTC)
+	writeRollout(t, root, "rollout-old.jsonl", "sid-old", "/w/a", "2026-09-29T13:00:00.000Z", base.Add(-time.Hour))
+	writeRollout(t, root, "rollout-new.jsonl", "sid-new", "/w/a", "2026-09-29T14:05:00.000Z", base.Add(5*time.Minute))
+	writeRollout(t, root, "rollout-b.jsonl", "sid-b", "/w/b", "2026-09-29T13:00:00.000Z", base.Add(10*time.Minute))
+	if got := CodexSessionSince(root, "/w/a", base); got != "sid-new" {
+		t.Errorf("프로세스 기동 뒤 세션: %q", got)
+	}
+	if got := CodexSessionSince(root, "/w/a", base.Add(10*time.Minute)); got != "" {
+		t.Errorf("가장 최근 세션이 기동보다 오래됐으면 빈 값: %q", got)
+	}
+	if got := CodexSessionSince(root, "/w/b", base); got != "" {
+		t.Errorf("옛 세션만 있으면 빈 값: %q", got)
+	}
+	if got := CodexSessionSince(root, "/w/none", base); got != "" {
+		t.Errorf("기록 없음: %q", got)
+	}
+}

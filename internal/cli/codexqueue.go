@@ -1,0 +1,149 @@
+package cli
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/netwaif/agentlayer/internal/config"
+	"github.com/netwaif/agentlayer/internal/state"
+	"github.com/netwaif/agentlayer/internal/usage"
+)
+
+// 코덱스에는 tmux 키 입력 대신 `codex queue`로 보낸다(2026-09-29 실측, codex 0.157.1).
+//   - 떠 있는 TUI 세션에 그대로 들어가 사용자가 친 것처럼 처리된다.
+//   - 작업 중이면 현재 턴 뒤에 처리된다(승인창을 깨뜨리지 않는다) — tmux 경로의 --force가 필요 없다.
+//   - 여러 줄 본문이 그대로 간다. 붙여넣기 감지·제출 확인 같은 화면 의존이 없다.
+//   - 없는 세션이면 "Error: … no rollout found"로 끝난다.
+// 세션 ID는 훅이 채운 값(a.SessionID)만 쓴다 — 폴더로 추측하면 같은 폴더의 다른 세션(스레드 세션)에 들어간다.
+
+const codexQueueTimeout = 15 * time.Second
+
+// codexQueueFn은 큐 전송 주입점 — 테스트가 바꿔 끼운다.
+var codexQueueFn = execCodexQueue
+
+// codexBin은 codex 실행 파일을 찾는다. 훅·LaunchAgent처럼 PATH가 최소인 환경에서도 찾도록 흔한 위치를 본다.
+func codexBin() string {
+	if p, err := exec.LookPath("codex"); err == nil {
+		return p
+	}
+	home, _ := os.UserHomeDir()
+	for _, p := range []string{"/opt/homebrew/bin/codex", "/usr/local/bin/codex",
+		filepath.Join(home, ".local/bin/codex"), filepath.Join(home, ".npm-global/bin/codex")} {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+func execCodexQueue(ctx context.Context, thread, cwd, message string) error {
+	bin := codexBin()
+	if bin == "" {
+		return errors.New("codex 명령을 찾지 못함")
+	}
+	c, cancel := context.WithTimeout(ctx, codexQueueTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(c, bin, "queue", "--thread", thread, "--message", message)
+	if cwd != "" {
+		cmd.Dir = cwd
+	}
+	out, err := cmd.CombinedOutput()
+	return codexQueueResult(string(out), err)
+}
+
+// codexQueueResult는 출력으로 성패를 가른다 — 종료 코드만 믿지 않는다(실패해도 0으로 끝나는 판이 있다).
+func codexQueueResult(out string, runErr error) error {
+	if runErr == nil && strings.Contains(out, "Queued message") {
+		return nil
+	}
+	msg := strings.TrimSpace(out)
+	if i := strings.Index(msg, "Error:"); i >= 0 {
+		msg = msg[i:]
+	}
+	if r := []rune(msg); len(r) > 200 {
+		msg = string(r[:200]) + "…"
+	}
+	if msg == "" && runErr != nil {
+		msg = runErr.Error()
+	}
+	if msg == "" {
+		msg = "응답 없음"
+	}
+	return errors.New(msg)
+}
+
+// procStartFn은 pid의 기동 시각(`ps -o lstart=`). 테스트가 바꿔 끼운다.
+var procStartFn = func(pid int) (time.Time, bool) {
+	if pid <= 0 {
+		return time.Time{}, false
+	}
+	out, err := exec.Command("ps", "-o", "lstart=", "-p", fmt.Sprint(pid)).Output()
+	if err != nil {
+		return time.Time{}, false
+	}
+	t, err := time.ParseInLocation("Mon Jan _2 15:04:05 2006", strings.TrimSpace(string(out)), time.Local)
+	return t, err == nil
+}
+
+// codexSessionsRootFn — rollout 폴더. 테스트가 바꿔 끼운다.
+var codexSessionsRootFn = usage.CodexSessionsRoot
+
+// ResolveCodexThread는 큐로 보낼 세션 ID를 정한다. 훅이 남긴 값이 정본이고, 없을 때만 rollout에서 찾는다.
+// 찾는 조건은 엄격하다: 같은 폴더에 산 코덱스가 하나뿐이고(스레드 세션과 섞이지 않게), 그 폴더의 가장 최근
+// 세션이 이 프로세스가 뜬 뒤에 만들어졌을 때만. 어긋나면 빈 값 — tmux 입력으로 간다.
+func ResolveCodexThread(a *state.Agent, agents []*state.Agent) string {
+	if a == nil || a.Kind != "codex" {
+		return ""
+	}
+	if a.SessionID != "" {
+		return a.SessionID
+	}
+	for _, o := range agents {
+		if o != nil && o.ID != a.ID && o.Kind == "codex" && o.CWD == a.CWD && o.State != state.StateDead {
+			return ""
+		}
+	}
+	started, ok := procStartFn(a.PID)
+	if !ok || a.CWD == "" {
+		return ""
+	}
+	return usage.CodexSessionSince(codexSessionsRootFn(), a.CWD, started.Add(-5*time.Second))
+}
+
+// canCodexQueue — 큐로 보낼 수 있는 대상인가. 죽은 세션·세션 ID 없는 세션·설정으로 끈 경우는 tmux 경로.
+func canCodexQueue(a *state.Agent, cfg *config.Config) bool {
+	if a == nil || a.Kind != "codex" || a.SessionID == "" || !cfg.CodexQueueEnabled() {
+		return false
+	}
+	switch a.State {
+	case state.StateIdle, state.StateDoneUnread, state.StateWorking, state.StateWaiting:
+		return true
+	}
+	return false
+}
+
+// deliver는 에이전트 하나에 메시지를 넣는다. 코덱스는 큐를 먼저 쓰고, 실패하면 tmux 키 입력으로 되돌아간다.
+// via는 "queue" 또는 "tmux". warn은 큐가 실패해 되돌아갔을 때의 사유(없으면 "").
+// tmuxOK가 false면(작업 중·승인 대기인데 --force 없음) 큐 실패 시 tmux로 되돌아가지 않고 오류를 낸다.
+func deliver(ctx context.Context, a *state.Agent, cfg *config.Config, tm TextSender, message string, tmuxOK bool) (via, warn string, err error) {
+	if canCodexQueue(a, cfg) {
+		qerr := codexQueueFn(ctx, a.SessionID, a.CWD, message)
+		if qerr == nil {
+			return "queue", "", nil
+		}
+		warn = "codex queue 실패(" + qerr.Error() + ") — tmux 입력으로 보냄"
+		if !tmuxOK {
+			return "", "", fmt.Errorf("codex queue 실패: %v", qerr)
+		}
+	}
+	if err := tm.SendText(a.Tmux.PaneID, message); err != nil {
+		return "", warn, err
+	}
+	return "tmux", warn, nil
+}

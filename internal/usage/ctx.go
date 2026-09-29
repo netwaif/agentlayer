@@ -409,3 +409,36 @@ func parseCodexTokenCount(line string) (float64, bool) {
 	}
 	return used / (win - codexBaseline) * 100, true
 }
+
+var codexMetaTimeRe = regexp.MustCompile(`"payload":\{.*?"timestamp":"([^"]+)"`)
+
+// CodexSessionSince는 workdir의 가장 최근 rollout이 since 이후에 만들어진 세션일 때만 그 session_id를 돌려준다.
+// 훅이 세션 ID를 못 남긴 세션에 메시지를 넣을 때 쓴다 — 지금 떠 있는 프로세스보다 오래된 rollout은
+// 화면에 없는 옛 세션이라 거기에 넣으면 메시지가 사라진다. 그래서 가장 최근 것 하나만 보고, 오래됐으면 빈 값.
+func CodexSessionSince(root, workdir string, since time.Time) string {
+	needle := `"cwd":"` + workdir + `"`
+	for _, path := range codexRolloutsByRecency(root) {
+		f, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		head := make([]byte, 4096)
+		n, _ := f.Read(head)
+		f.Close()
+		h := string(head[:n])
+		if !strings.Contains(h, needle) {
+			continue
+		}
+		id := codexSessionIDRe.FindStringSubmatch(h)
+		ts := codexMetaTimeRe.FindStringSubmatch(h)
+		if id == nil || ts == nil {
+			return ""
+		}
+		created, err := time.Parse(time.RFC3339Nano, ts[1])
+		if err != nil || created.Before(since) {
+			return ""
+		}
+		return id[1]
+	}
+	return ""
+}

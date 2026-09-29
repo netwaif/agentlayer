@@ -51,6 +51,9 @@ type Config struct {
 	// BrowserHangwatch — 굳은 에이전트 브라우저를 감지해 강제 종료·재기동할지. 기본 true.
 	// false면 훅이 도는 정리 작업에서 행 감시 자체를 건너뛴다(lsof·CDP 프로브도 안 한다).
 	BrowserHangwatch *bool `json:"browser_hangwatch,omitempty"`
+	// CodexQueue — 코덱스 세션에 tmux 키 입력 대신 `codex queue`로 보낼지. 기본 true.
+	// false면 예전처럼 tmux 입력만 쓴다(codex queue는 실험 기능이라 끌 수 있게 둔다).
+	CodexQueue *bool `json:"codex_queue,omitempty"`
 }
 
 const (
@@ -150,6 +153,14 @@ func (c *Config) BrowserHangwatchEnabled() bool {
 		return true
 	}
 	return *c.BrowserHangwatch
+}
+
+// CodexQueueEnabled는 기본값(true)을 반영한 접근자.
+func (c *Config) CodexQueueEnabled() bool {
+	if c == nil || c.CodexQueue == nil {
+		return true
+	}
+	return *c.CodexQueue
 }
 
 // BrowserPortOrDefault는 browser_port를 반영한 디버깅 포트. 범위 밖(0 이하·65535 초과)은 기본값.
