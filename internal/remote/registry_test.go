@@ -49,8 +49,8 @@ func TestSaveLoadListDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, ok, err := Load(dir, "hermes-qa")
-	if err != nil || !ok || got.Profile != "tech-qa" || got.Mailbox != "imac-manager" {
-		t.Fatalf("Load: %+v ok=%v err=%v (Mailbox 기본값 imac-manager)", got, ok, err)
+	if err != nil || !ok || got.Profile != "tech-qa" || got.Mailbox != "company-manager" {
+		t.Fatalf("Load: %+v ok=%v err=%v (Mailbox 기본값 company-manager)", got, ok, err)
 	}
 	if _, ok, _ := Load(dir, "none"); ok {
 		t.Error("없는 이름은 ok=false")

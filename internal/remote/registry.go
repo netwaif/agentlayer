@@ -35,7 +35,8 @@ type Remote struct {
 }
 
 const (
-	DefaultMailbox    = "imac-manager"
+	DefaultMailbox    = "company-manager" // 1.10.3까지는 imac-manager — 옛 등록 파일에는 그 값이 적혀 있어 그대로 돈다
+	AttachDirName     = "from-company"    // 답장 첨부가 올라가는 원격 폴더 이름
 	DefaultMaxRuntime = "2h"
 	DefaultPoll       = 5 * time.Second
 )

@@ -85,7 +85,7 @@ func Open(r Remote, stateDir string) (Adapter, error) {
 		}
 		return &Hermes{R: runner, Profile: r.Profile, Board: r.Board,
 			WorkspaceRoot: r.WorkspaceRoot, MailboxAssignee: r.Mailbox, MaxRuntime: r.MaxRuntime,
-			AttachRoot: filepath.Dir(r.WorkspaceRoot) + "/참고자료/from-imac", Now: time.Now}, nil
+			AttachRoot: filepath.Dir(r.WorkspaceRoot) + "/참고자료/" + AttachDirName, Now: time.Now}, nil
 	case "exec":
 		return &Exec{Commands: r.Commands}, nil
 	}

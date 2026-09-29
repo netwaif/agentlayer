@@ -378,7 +378,7 @@ func (h *Hermes) upload(ctx context.Context, id, local string) (string, error) {
 	}
 	root := h.AttachRoot
 	if root == "" {
-		root = h.WorkspaceRoot + "/from-imac"
+		root = h.WorkspaceRoot + "/" + AttachDirName
 	}
 	dir := root + "/" + id
 	remotePath := dir + "/" + filepath.Base(local)

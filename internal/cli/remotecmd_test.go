@@ -49,7 +49,7 @@ func TestRemoteAddCheckListRm(t *testing.T) {
 		t.Fatal(err)
 	}
 	r, ok, _ := remote.Load(dir, "hermes-qa")
-	if !ok || r.Exec[0] != "docker" || len(r.Exec) != 6 || r.Mailbox != "imac-manager" {
+	if !ok || r.Exec[0] != "docker" || len(r.Exec) != 6 || r.Mailbox != "company-manager" {
 		t.Fatalf("등록: %+v", r)
 	}
 	if !strings.Contains(out.String(), "v0.20.0") {
@@ -117,5 +117,55 @@ func TestRemoteAddExecFromFile(t *testing.T) {
 	// 상대경로 명령은 정의 파일 위치 기준으로 절대화한다 — task watch는 회사 루트에서 돌기 때문
 	if r.Commands["dispatch"][0] != dir+"/d.sh" || r.Commands["poll"][0] != dir+"/p.sh" {
 		t.Errorf("절대화: %v %v", r.Commands["dispatch"], r.Commands["poll"])
+	}
+}
+
+type setupAdapter struct {
+	checkOnlyAdapter
+	calls *int
+	err   error
+}
+
+func (s setupAdapter) Setup(context.Context) ([]string, error) {
+	*s.calls++
+	return []string{"/opt/data/.local/bin/company-letter"}, s.err
+}
+
+// add는 점검 뒤 편지 준비물을 깔고, --no-setup이면 건너뛴다. 설치가 실패해도 등록은 남는다.
+func TestRemoteAddInstallsLetterSetup(t *testing.T) {
+	st, dir := newStore(t)
+	calls := 0
+	var setupErr error
+	open := func(r remote.Remote, _ string) (remote.Adapter, error) {
+		return setupAdapter{calls: &calls, err: setupErr}, nil
+	}
+	base := []string{"--kind", "hermes", "--local", "--profile", "tech-qa", "--workspace-root", "/home/u/.hermes/ai-company/결과물"}
+	var out bytes.Buffer
+	if err := RunRemote(context.Background(), &out, st, dir, open, append([]string{"add", "h1"}, base...), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || !strings.Contains(out.String(), "설치: /opt/data/.local/bin/company-letter") || !strings.Contains(out.String(), "담당자 company-manager") {
+		t.Fatalf("calls=%d out=%s", calls, out.String())
+	}
+	if err := RunRemote(context.Background(), &out, st, dir, open, append([]string{"add", "h2", "--no-setup"}, base...), time.Now()); err != nil || calls != 1 {
+		t.Fatalf("--no-setup이면 깔지 않는다: calls=%d err=%v", calls, err)
+	}
+	setupErr = errors.New("permission denied")
+	out.Reset()
+	if err := RunRemote(context.Background(), &out, st, dir, open, append([]string{"add", "h3"}, base...), time.Now()); err != nil {
+		t.Fatalf("설치 실패는 등록을 막지 않는다: %v", err)
+	}
+	if _, ok, _ := remote.Load(dir, "h3"); !ok || !strings.Contains(out.String(), "remote setup h3") {
+		t.Fatalf("등록은 남고 안내가 나와야 한다: %s", out.String())
+	}
+	out.Reset()
+	setupErr = nil
+	if err := RunRemote(context.Background(), &out, st, dir, open, []string{"setup", "h3"}, time.Now()); err != nil || calls != 3 {
+		t.Fatalf("setup 명령: calls=%d err=%v", calls, err)
+	}
+	// 준비물이 없는 어댑터는 조용히 지나간다
+	plain := func(r remote.Remote, _ string) (remote.Adapter, error) { return checkOnlyAdapter{}, nil }
+	if err := RunRemote(context.Background(), &out, st, dir, plain, []string{"setup", "h3"}, time.Now()); err != nil {
+		t.Fatal(err)
 	}
 }

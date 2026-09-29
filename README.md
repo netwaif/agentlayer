@@ -194,6 +194,7 @@ agentlayer remote add hermes-qa --kind hermes --ssh hostinger --profile tech-qa 
     --exec "docker exec -i -u hermes hermes-agent-iqxn-hermes-agent-1" --workspace-root /opt/data/ai-company/결과물
 agentlayer remote add hermes --kind hermes --local --profile tech-qa --workspace-root ~/.hermes/ai-company/결과물   # 같은 PC의 Hermes: ssh 없이 직접 실행
 agentlayer remote check hermes-qa            # ssh 왕복·버전·프로필 확인
+agentlayer remote setup hermes-qa            # 편지 명령(company-letter)·스킬을 원격에 다시 깐다 — add가 자동으로 한 번 한다(--no-setup으로 생략)
 agentlayer task assign PING-2 hermes-qa --inbox ~/ai-folder/company/runtime/inbox
 agentlayer send hermes-qa - < 업무요청/PING-2.md   # 첫 send가 칸반 카드를 만들고 dispatch로 띄운다
 agentlayer send hermes-qa "답: a.txt로"            # 카드가 blocked(질문)면 unblock --reason = 답변
@@ -213,10 +214,16 @@ agentlayer task done PING-2                        # 서버 카드 archive까지
 ```bash
 agentlayer task message "정리본을 결과물/VIDEO-07/에 두었습니다"      # 로컬 직원 pane에서 (Claude·Codex·Gemini 공통)
 agentlayer task message --task VIDEO-07 - < 정리본.md                 # 업무ID를 붙이면 log.md에 [MESSAGE]
-hermes kanban create "[VIDEO-07] 정리본" --assignee imac-manager --body "…"   # 원격 Hermes 쪽(예약 담당자 = 편지함)
+company-letter "정리본" "본문" VIDEO-07                                # 원격 Hermes 쪽 — remote add가 깔아 준 명령(카드 생성+답장 알림 구독)
+hermes kanban create "[VIDEO-07] 정리본" --assignee company-manager --body "…"   # 같은 일을 손으로(예약 담당자 = 편지함)
 agentlayer task reply t_da1d7ac4 "답장 본문"                          # 총괄: 원격 편지(이벤트의 letter)에 답장 → 편지 카드를 답으로 닫는다
-agentlayer task reply t_da1d7ac4 --attach 결과물/a.zip "파일 보냅니다"   # 첨부: 서버 <회사루트>/참고자료/from-imac/<편지ID>/ 에 올리고 카드에 attach(폴더는 zip으로)
+agentlayer task reply t_da1d7ac4 --attach 결과물/a.zip "파일 보냅니다"   # 첨부: 서버 <회사루트>/참고자료/from-company/<편지ID>/ 에 올리고 카드에 attach(폴더는 zip으로)
 ```
+
+편지 준비물(1.10.4+): `remote add`가 원격에 `~/.local/bin/company-letter`와 스킬
+`$HERMES_HOME/skills/autonomous-ai-agents/company-letter/SKILL.md`를 깐다(정본 `internal/remote/hermesside/`).
+편지함 담당자 기본값은 `company-manager`다. 1.10.3까지 등록한 원격은 등록 파일에 `imac-manager`가 적혀 있어 그대로 돌고,
+`remote setup`도 그 이름으로 깐다 — 이름을 바꾸려면 `--mailbox company-manager`로 다시 `add`한다(옛 `imac-letter`는 지워도 된다).
 
 원격 편지는 받을 때 닫지 않고 claim(24시간)만 한다. 총괄이 `task reply`로 닫으면, 보낸 Hermes가 그 카드를 `kanban notify-subscribe --platform discord --chat-id <채널ID> --chat-type channel`로 구독해 두었을 때 게이트웨이가 그 대화를 깨워 답을 보여 준다.
 

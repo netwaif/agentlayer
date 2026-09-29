@@ -17,10 +17,11 @@ import (
 
 const remoteUsage = `사용법:
   agentlayer remote add <이름> --kind hermes (--ssh <호스트> | --local) --profile <프로필> --workspace-root <절대경로>
-                      [--exec "<원격 명령 접두어>"] [--board <보드>] [--mailbox <담당자>] [--max-runtime 2h] [--poll 5s] [--no-check]
+                      [--exec "<원격 명령 접두어>"] [--board <보드>] [--mailbox <담당자>] [--max-runtime 2h] [--poll 5s] [--no-check] [--no-setup]
   agentlayer remote add <이름> --kind exec --file <어댑터 정의 JSON> [--no-check]
   agentlayer remote list [--json]
   agentlayer remote check <이름>
+  agentlayer remote setup <이름>     원격 Hermes에 편지 명령(company-letter)과 스킬을 깐다(add가 자동으로 한다)
   agentlayer remote rm <이름>`
 
 // RunRemote — 원격 직원 등록·점검·삭제. open은 remote.Open(테스트는 페이크).
@@ -46,6 +47,18 @@ func RunRemote(ctx context.Context, w io.Writer, st *state.Store, stateDir strin
 			return fmt.Errorf("원격 %q이 등록돼 있지 않습니다", args[1])
 		}
 		return remoteCheck(ctx, w, *r, stateDir, open)
+	case "setup":
+		if len(args) != 2 {
+			return errors.New(remoteUsage)
+		}
+		r, ok, err := remote.Load(stateDir, args[1])
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return fmt.Errorf("원격 %q이 등록돼 있지 않습니다", args[1])
+		}
+		return remoteSetup(ctx, w, *r, stateDir, open)
 	case "rm":
 		if len(args) != 2 {
 			return errors.New(remoteUsage)
@@ -70,11 +83,15 @@ func remoteAdd(ctx context.Context, w io.Writer, st *state.Store, stateDir strin
 		return errors.New(remoteUsage)
 	}
 	r := remote.Remote{Name: args[0], AddedAt: now}
-	file, noCheck := "", false
+	file, noCheck, noSetup := "", false, false
 	for i := 1; i < len(args); i++ {
 		flag := args[i]
 		if flag == "--no-check" {
 			noCheck = true
+			continue
+		}
+		if flag == "--no-setup" {
+			noSetup = true
 			continue
 		}
 		if flag == "--local" {
@@ -162,6 +179,14 @@ func remoteAdd(ctx context.Context, w io.Writer, st *state.Store, stateDir strin
 	if err := remote.Save(stateDir, r); err != nil {
 		return err
 	}
+	// 직원이 총괄에게 먼저 편지를 보낼 수단을 같이 깐다. 실패해도 등록은 유효하다 — 배정·지시는 준비물 없이 돈다.
+	if !noSetup && !noCheck {
+		if saved, ok, _ := remote.Load(stateDir, r.Name); ok {
+			if err := remoteSetup(ctx, w, *saved, stateDir, open); err != nil {
+				fmt.Fprintf(w, "  ⚠ 편지 준비물 설치 실패: %v — 나중에 'agentlayer remote setup %s'\n", err, r.Name)
+			}
+		}
+	}
 	fmt.Fprintf(w, "원격 %s 등록 (%s). 배정은 'agentlayer task assign <업무ID> %s …', 지시는 'agentlayer send %s …'\n", r.Name, r.Kind, r.Name, r.Name)
 	return nil
 }
@@ -184,6 +209,28 @@ func remoteCheck(ctx context.Context, w io.Writer, r remote.Remote, stateDir str
 	if r.Profile != "" {
 		fmt.Fprintf(w, "  프로필 %s: 사용 가능\n", r.Profile)
 	}
+	return nil
+}
+
+// remoteSetup은 원격에 편지 명령·스킬을 깐다. 준비물이 없는 종류(exec)는 조용히 지나간다.
+func remoteSetup(ctx context.Context, w io.Writer, r remote.Remote, stateDir string, open func(remote.Remote, string) (remote.Adapter, error)) error {
+	ad, err := open(r, stateDir)
+	if err != nil {
+		return err
+	}
+	in, ok := ad.(remote.Installer)
+	if !ok {
+		fmt.Fprintf(w, "  원격 %s(%s)에는 깔 준비물이 없습니다\n", r.Name, r.Kind)
+		return nil
+	}
+	paths, err := in.Setup(ctx)
+	for _, p := range paths {
+		fmt.Fprintf(w, "  설치: %s\n", p)
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "  편지 준비물 설치 완료 — 직원은 '%s \"제목\" \"본문\"'으로 총괄에게 편지를 보냅니다(담당자 %s)\n", remote.LetterCommand, r.Mailbox)
 	return nil
 }
 
