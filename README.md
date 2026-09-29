@@ -364,6 +364,7 @@ agentlayer browser mcp             # claude·codex·gemini에 chrome-devtools-mc
   화면이 잠긴 동안의 프레임 실패는 세지 않고, 켜진 뒤 20초가 지나도 프레임이 없으면
   그때 세어 한 번 재시작한다. 재시작 직후 90초는 어떤 실패도 세지 않는다(연쇄 재시작
   방지). 실패마다 사유와 판정을 `~/.local/state/agentlayer/hang/hangwatch.log`에 남긴다.
+  훅이 뜸한 유휴 시간에는 5분 주기 카드 작업이 같은 검사를 이어서 돌린다(`browser hangwatch`).
   `--disable-hang-monitor` 플래그를 빼 뒀으므로 렌더러(페이지)
   자체가 멈추면 Chrome 본연의 "페이지 응답 없음" 안내가 먼저 뜬다.
   `browser_hangwatch: false`면 감시 자체를 끈다. 사이에 브라우저가 죽고 새로 뜨면

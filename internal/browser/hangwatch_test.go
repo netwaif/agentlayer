@@ -551,3 +551,37 @@ func TestMissingTabs(t *testing.T) {
 		t.Fatalf("빠진 주소만: %v", got)
 	}
 }
+
+// 주기 작업은 훅 없이도 세 표를 모아 굳은 브라우저를 되살린다. 정상이면 한 번 보고 끝낸다.
+func TestHangWatchLoop(t *testing.T) {
+	dir := t.TempDir()
+	var l hangLog
+	clock := time.Now()
+	now := func() time.Time { return clock }
+	slept := 0
+	sleep := func(d time.Duration) { slept++; clock = clock.Add(d) }
+	pid := func() int { return 100 }
+	if r, _ := HangWatchLoop(dir, pid, fakeHangOps(&l, errors.New("timeout")), now, sleep); !r || l.killed != 1 || slept != 2 {
+		t.Fatalf("세 번 검사해 재시작: r=%v slept=%d %+v", r, slept, l)
+	}
+	dir2 := t.TempDir()
+	slept = 0
+	pings := 0
+	ok := fakeHangOps(&l, nil)
+	ok.Ping = func() error { pings++; return nil }
+	if r, _ := HangWatchLoop(dir2, pid, ok, now, sleep); r || pings != 1 || slept != 0 {
+		t.Fatalf("정상이면 한 번만: pings=%d slept=%d", pings, slept)
+	}
+	dir3 := t.TempDir()
+	pings = 0
+	off := fakeHangOps(&l, fmt.Errorf("%w: timeout", ErrNoFrame))
+	ping := off.Ping
+	off.Ping = func() error { pings++; return ping() }
+	off.DisplayAsleep = func() bool { return true }
+	if r, _ := HangWatchLoop(dir3, pid, off, now, sleep); r || pings != 1 || l.killed != 1 {
+		t.Fatalf("화면이 꺼져 있으면 한 번 보고 물러남: pings=%d %+v", pings, l)
+	}
+	if r, _ := HangWatchLoop(t.TempDir(), func() int { return 0 }, ok, now, sleep); r {
+		t.Fatal("브라우저가 없으면 아무것도 안 함")
+	}
+}

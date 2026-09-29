@@ -265,6 +265,10 @@ func runCard(args []string) error {
 			return publishCard(false, 24*time.Hour)
 		})
 	}
+	if !*outOnly {
+		// 5분 주기 실행에 얹어 굳은 브라우저를 본다 — 훅이 뜸한 유휴 시간의 굳음은 훅만으로는 못 잡는다.
+		spawnSelf("browser", "hangwatch")
+	}
 	return publishCard(*outOnly, 4*time.Minute)
 }
 
@@ -533,17 +537,7 @@ func runHook(args []string) error {
 	})
 	// 전이가 실제로 있었으면 카드 즉시 갱신을 백그라운드로 발사한다.
 	// hook은 에이전트를 막으면 안 되므로 기다리지 않는다(detached).
-	spawn := func(args ...string) {
-		self, err := os.Executable()
-		if err != nil {
-			return
-		}
-		cmd := exec.Command(self, args...)
-		cmd.Stdout, cmd.Stderr, cmd.Stdin = nil, nil, nil
-		if cmd.Start() == nil {
-			_ = cmd.Process.Release()
-		}
-	}
+	spawn := spawnSelf
 	defer func() {
 		if transitioned && cfg.DiscordWebhookURL != "" {
 			spawn("card", "--event")
@@ -744,4 +738,17 @@ func agyInstalled(home string) bool {
 	}
 	_, err := exec.LookPath("agy")
 	return err == nil
+}
+
+// spawnSelf는 자기 자신을 떼어 낸(detached) 자식으로 띄운다 — 부른 쪽을 기다리게 하지 않는다.
+func spawnSelf(args ...string) {
+	self, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(self, args...)
+	cmd.Stdout, cmd.Stderr, cmd.Stdin = nil, nil, nil
+	if cmd.Start() == nil {
+		_ = cmd.Process.Release()
+	}
 }

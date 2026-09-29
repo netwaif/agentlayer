@@ -62,6 +62,9 @@ func RunBrowser(out io.Writer, args []string) error {
 		return browserMCPServe()
 	case "autopreview":
 		return browserAutoPreview(out)
+	case "hangwatch":
+		browserHangWatchLoop(out)
+		return nil
 	case "control":
 		return browserControl(out, args)
 	case "restart":
@@ -1299,6 +1302,27 @@ func browserHangWatch(out io.Writer, cfg *config.Config, port int) (restarted bo
 		fmt.Fprintf(out, "에이전트 브라우저 강제 종료(행 감지, 재기동 실패) 진단: %s\n", diag)
 	}
 	return restarted
+}
+
+// browserHangWatchLoop: agentlayer browser hangwatch — 5분 주기 작업(card)이 부른다. 훅이 뜸한
+// 유휴 시간에도 굳은 브라우저를 끝까지 판정해 되살린다(browser.HangWatchLoop).
+func browserHangWatchLoop(out io.Writer) {
+	cfg := config.Load()
+	if !cfg.BrowserHangwatchEnabled() {
+		return
+	}
+	port := cfg.BrowserPortOrDefault()
+	notify := func(msg string) {
+		if url := cfg.NotifyURL(); url != "" && cfg.NotifyDiscord {
+			payload, _ := json.Marshal(map[string]any{"username": "agentlayer", "content": msg})
+			_ = notifypkg.DefaultSender().PostJSON(url, payload)
+		}
+	}
+	pid := func() int { return browser.ChromePID(port, browser.ExecLsof) }
+	ops := browser.DefaultHangOps(state.DefaultDir(), port, runtime.GOOS, notify)
+	if restarted, diag := browser.HangWatchLoop(state.DefaultDir(), pid, ops, time.Now, time.Sleep); restarted {
+		fmt.Fprintf(out, "에이전트 브라우저 재시작(행 감지) 진단: %s\n", diag)
+	}
 }
 
 // MCPCommands는 claude·codex·gemini에 chrome-devtools-mcp를 전용 브라우저

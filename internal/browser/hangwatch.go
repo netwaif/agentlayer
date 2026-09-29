@@ -231,6 +231,27 @@ func HangWatch(dir string, pid int, ops HangOps, now time.Time) (bool, string) {
 	return restarted, diag
 }
 
+// HangWatchLoop — 훅 없이도 굳음을 끝까지 판정한다(주기 작업용). HangWatch는 한 번에 한 표만 세므로
+// 훅이 뜸한 유휴 시간에는 세 표가 모이지 않는다 — 디스플레이가 켜진 뒤 아무 세션도 움직이지 않으면
+// 굳은 브라우저가 첫 사용 때까지 남는다. 첫 검사가 실패로 세어졌을 때만 hangMinGap 간격으로 이어서
+// 검사하고, 정상·건너뜀(화면 꺼짐·유예)·재시작이면 바로 끝낸다.
+func HangWatchLoop(dir string, pid func() int, ops HangOps, now func() time.Time, sleep func(time.Duration)) (bool, string) {
+	for i := 0; i < hangFailsNeeded; i++ {
+		p := pid()
+		if p <= 0 {
+			return false, ""
+		}
+		restarted, diag := HangWatch(dir, p, ops, now())
+		if restarted || diag != "" || loadHangState(dir).Fails == 0 {
+			return restarted, diag
+		}
+		if i < hangFailsNeeded-1 {
+			sleep(hangMinGap + time.Second)
+		}
+	}
+	return false, ""
+}
+
 // PingUI — 첫 웹 탭의 창 정보를 묻는다(UI 스레드 경유). 웹 탭이 없으면 Browser.getVersion.
 // b는 이미 호출자가 Timeout을 걸어 둔 채로 넘어온다 — 여기서 다시 Timeout(timeout)을 걸어도
 // rod의 Timeout은 부모 컨텍스트에서 파생된 자식 컨텍스트라 부모 데드라인보다 늦게까지
