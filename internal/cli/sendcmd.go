@@ -184,7 +184,7 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 		a = &c
 	}
 	ok, reason := SendGate(a.State, o.Force)
-	// 코덱스 큐는 작업 중·승인 대기에도 안전하다(현재 턴 뒤에 처리) — tmux 관문에 걸려도 큐로는 보낸다.
+	// 코덱스 큐는 작업 중에도 안전하다(현재 턴 뒤에 처리) — tmux 관문에 걸려도 큐로는 보낸다. 승인 대기는 제외.
 	if !ok && !canCodexQueue(a, cfg) {
 		return fmt.Errorf("%s(%s): %s", a.Tmux.Session, a.State, reason)
 	}
@@ -194,7 +194,7 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 	}
 	if via == "queue" {
 		reason = ""
-		if a.State == state.StateWorking || a.State == state.StateWaiting {
+		if a.State == state.StateWorking {
 			reason = "작업 중 — 현재 턴 뒤에 처리됩니다"
 		}
 	}

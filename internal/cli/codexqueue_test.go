@@ -105,6 +105,7 @@ func TestCanCodexQueue(t *testing.T) {
 	}{
 		{"코덱스+sid", codexAgent("c", "%1", state.StateIdle, "s"), on, true},
 		{"작업 중", codexAgent("c", "%1", state.StateWorking, "s"), on, true},
+		{"승인 대기", codexAgent("c", "%1", state.StateWaiting, "s"), on, false},
 		{"sid 없음", codexAgent("c", "%1", state.StateIdle, ""), on, false},
 		{"죽음", codexAgent("c", "%1", state.StateDead, "s"), on, false},
 		{"설정 끔", codexAgent("c", "%1", state.StateIdle, "s"), &config.Config{CodexQueue: &off}, false},

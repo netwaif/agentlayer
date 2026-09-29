@@ -187,7 +187,7 @@ agentlayer task done VIDEO-07
 
 - **코덱스에는 `codex queue`로 보낸다(1.10.5+)**: `send`·`wake-all`·`close-all`·`broadcast`가 코덱스 세션에는 tmux 키 입력
   대신 `codex queue --thread <세션ID>`를 쓴다. 떠 있는 세션에 그대로 들어가고, 작업 중이면 현재 턴 뒤에 처리되므로
-  `--force`가 필요 없다. 여러 줄 본문도 그대로 간다. 세션 ID는 훅이 남긴 값을 쓰고, 없으면 그 폴더의 가장 최근 세션이
+  `--force`가 필요 없다. 승인 대기(`WAIT`)는 예전대로 거부한다 — 큐에 넣어도 승인창이 풀리지 않는다. 여러 줄 본문도 그대로 간다. 세션 ID는 훅이 남긴 값을 쓰고, 없으면 그 폴더의 가장 최근 세션이
   지금 프로세스가 뜬 뒤에 만들어졌을 때만 쓴다. 큐가 실패하면 사유를 알리고 tmux 입력으로 되돌아간다.
   출력 끝의 `(codex queue)`, `--json`의 `"via"`가 실제 경로다. 끄려면 설정에 `"codex_queue": false`.
   Claude·Gemini는 예전대로 tmux 입력이다.

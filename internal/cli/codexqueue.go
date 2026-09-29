@@ -17,7 +17,7 @@ import (
 
 // 코덱스에는 tmux 키 입력 대신 `codex queue`로 보낸다(2026-09-29 실측, codex 0.157.1).
 //   - 떠 있는 TUI 세션에 그대로 들어가 사용자가 친 것처럼 처리된다.
-//   - 작업 중이면 현재 턴 뒤에 처리된다(승인창을 깨뜨리지 않는다) — tmux 경로의 --force가 필요 없다.
+//   - 작업 중이면 현재 턴 뒤에 처리된다 — tmux 경로의 --force가 필요 없다. 승인 대기는 예전대로 거부한다.
 //   - 여러 줄 본문이 그대로 간다. 붙여넣기 감지·제출 확인 같은 화면 의존이 없다.
 //   - 없는 세션이면 "Error: … no rollout found"로 끝난다.
 // 세션 ID는 훅이 채운 값(a.SessionID)만 쓴다 — 폴더로 추측하면 같은 폴더의 다른 세션(스레드 세션)에 들어간다.
@@ -121,8 +121,10 @@ func canCodexQueue(a *state.Agent, cfg *config.Config) bool {
 	if a == nil || a.Kind != "codex" || a.SessionID == "" || !cfg.CodexQueueEnabled() {
 		return false
 	}
+	// 승인 대기(WAIT)는 뺀다 — 큐에 넣은 글은 턴이 끝나야 처리되는데 승인창은 턴을 붙들고 있어
+	// 메시지가 조용히 쌓이기만 한다. 예전처럼 거부해 총괄이 승인 뒤 다시 보내게 한다.
 	switch a.State {
-	case state.StateIdle, state.StateDoneUnread, state.StateWorking, state.StateWaiting:
+	case state.StateIdle, state.StateDoneUnread, state.StateWorking:
 		return true
 	}
 	return false
