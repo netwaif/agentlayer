@@ -48,8 +48,8 @@ type HangOps struct {
 	Kill     func(pid int) error
 	Relaunch func() error
 	Notify   func(msg string)
-	// DisplayAsleep — 디스플레이가 꺼져 있는지. nil이거나 알 수 없으면 켜진 것으로 본다.
-	// 프레임 실패(ErrNoFrame)일 때만 부른다.
+	// DisplayAsleep — 화면이 안 보이는 상태인지(디스플레이 꺼짐 또는 화면 잠금). nil이거나
+	// 알 수 없으면 보이는 것으로 본다. 프레임 실패(ErrNoFrame)일 때만 부른다.
 	DisplayAsleep func() bool
 }
 
@@ -65,6 +65,35 @@ type hangState struct {
 }
 
 func hangStatePath(dir string) string { return filepath.Join(dir, "hangwatch.json") }
+
+// 행 감시 기록 — ping이 실패할 때마다 사유와 판정을 한 줄씩 남긴다. 덤프(sample)만으로는
+// "왜 죽였는지"를 알 수 없어 원인 조사가 매번 전원 기록 대조로 돌아갔다(2026-09-28).
+// 성공한 ping은 적지 않는다(훅마다 돌아 양이 많다).
+const hangLogMax = 256 << 10
+
+func hangLogPath(dir string) string { return filepath.Join(dir, "hang", "hangwatch.log") }
+
+func writeHangLog(dir string, now time.Time, pid int, verdict string, err error) {
+	path := hangLogPath(dir)
+	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	if st, serr := os.Stat(path); serr == nil && st.Size() > hangLogMax {
+		// 넘치면 뒤쪽 절반만 남긴다 — 최근 기록이 조사 대상이다.
+		if b, rerr := os.ReadFile(path); rerr == nil {
+			b = b[len(b)/2:]
+			if i := strings.IndexByte(string(b), '\n'); i >= 0 {
+				b = b[i+1:]
+			}
+			_ = os.WriteFile(path, b, 0o600)
+		}
+	}
+	f, oerr := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if oerr != nil {
+		return
+	}
+	defer f.Close()
+	msg := strings.ReplaceAll(fmt.Sprint(err), "\n", " ")
+	fmt.Fprintf(f, "%s pid=%d %s · %s\n", now.Format("2006-01-02 15:04:05"), pid, verdict, msg)
+}
 
 func loadHangState(dir string) hangState {
 	var s hangState
@@ -100,9 +129,11 @@ func HangWatch(dir string, pid int, ops HangOps, now time.Time) (bool, string) {
 		// 화면이 꺼져 있으면 프레임이 없는 게 정상이다 — 세지도 죽이지도 않는다.
 		if ops.DisplayAsleep != nil && ops.DisplayAsleep() {
 			saveHangState(dir, hangState{AsleepAt: now})
+			writeHangLog(dir, now, pid, "건너뜀(화면 꺼짐·잠금)", err)
 			return false, ""
 		}
 		if !s.AsleepAt.IsZero() && now.Sub(s.AsleepAt) < hangWakeGrace {
+			writeHangLog(dir, now, pid, fmt.Sprintf("건너뜀(켜진 뒤 유예 %s)", now.Sub(s.AsleepAt).Round(time.Second)), err)
 			if s.Fails != 0 {
 				saveHangState(dir, hangState{AsleepAt: s.AsleepAt})
 			}
@@ -120,8 +151,10 @@ func HangWatch(dir string, pid int, ops HangOps, now time.Time) (bool, string) {
 	s.Pid = pid
 	if s.Fails < hangFailsNeeded {
 		saveHangState(dir, s)
+		writeHangLog(dir, now, pid, fmt.Sprintf("실패 %d/%d", s.Fails, hangFailsNeeded), err)
 		return false, ""
 	}
+	writeHangLog(dir, now, pid, fmt.Sprintf("실패 %d/%d → 강제 재시작", s.Fails, hangFailsNeeded), err)
 	// Sample·Kill·Relaunch가 nil이면(부분만 채운 ops) 여기서 죽지 않게 각각 막는다.
 	diag := filepath.Join(dir, "hang", now.Format("20060102-150405")+".txt")
 	_ = os.MkdirAll(filepath.Dir(diag), 0o755)
@@ -373,8 +406,18 @@ func DefaultHangOps(stateDir string, port int, goos string, notify func(string))
 			if err != nil {
 				return false
 			}
-			asleep, _ := parseDisplayAsleep(string(out))
-			return asleep
+			if asleep, _ := parseDisplayAsleep(string(out)); asleep {
+				return true
+			}
+			// 디스플레이는 켜졌는데 잠금 화면인 구간 — 창이 가려져 프레임이 안 나온다.
+			// 잠금을 오래 안 풀면 유예(hangWakeGrace)가 끝나 멀쩡한 브라우저를 죽인다.
+			lctx, lcancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer lcancel()
+			lout, lerr := exec.CommandContext(lctx, "ioreg", "-n", "Root", "-d1").Output()
+			if lerr != nil {
+				return false
+			}
+			return parseConsoleLocked(string(lout))
 		},
 	}
 }
@@ -394,4 +437,17 @@ func parseDisplayAsleep(out string) (asleep, ok bool) {
 		}
 	}
 	return false, false
+}
+
+// parseConsoleLocked — `ioreg -n Root -d1` 출력의 "IOConsoleLocked" = Yes 여부.
+// 키가 없으면(리눅스·옛 macOS) 잠기지 않은 것으로 본다.
+func parseConsoleLocked(out string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, `"IOConsoleLocked"`) {
+			continue
+		}
+		i := strings.IndexByte(line, '=')
+		return i >= 0 && strings.TrimSpace(line[i+1:]) == "Yes"
+	}
+	return false
 }

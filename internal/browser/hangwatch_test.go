@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -394,5 +395,44 @@ func TestParseDisplayAsleep(t *testing.T) {
 	}
 	if a, ok := parseDisplayAsleep("No such driver\n"); a || ok {
 		t.Fatalf("모르면 꺼짐으로 보지 않음: asleep=%v ok=%v", a, ok)
+	}
+}
+
+func TestParseConsoleLocked(t *testing.T) {
+	if !parseConsoleLocked("    | {\n    |   \"IOConsoleLocked\" = Yes\n    | }\n") {
+		t.Fatal("잠금을 못 읽음")
+	}
+	if parseConsoleLocked("    |   \"IOConsoleLocked\" = No\n") {
+		t.Fatal("풀린 화면을 잠금으로 읽음")
+	}
+	if parseConsoleLocked("no such key\n") {
+		t.Fatal("키가 없으면 잠기지 않은 것으로 봐야 한다")
+	}
+}
+
+// 실패한 ping은 사유와 판정을 기록에 남긴다 — 덤프만으로는 왜 죽였는지 알 수 없었다.
+func TestHangWatchLogsFailureReason(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 9, 29, 10, 0, 0, 0, time.UTC)
+	ops := HangOps{Ping: func() error { return fmt.Errorf("%w: context deadline exceeded", ErrNoFrame) }}
+	ops.DisplayAsleep = func() bool { return true }
+	HangWatch(dir, 42, ops, now)
+	ops.DisplayAsleep = func() bool { return false }
+	base := now.Add(hangWakeGrace + time.Second)
+	for i := 0; i < hangFailsNeeded; i++ {
+		HangWatch(dir, 42, ops, base.Add(time.Duration(i)*(hangMinGap+time.Second)))
+	}
+	b, err := os.ReadFile(hangLogPath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	for _, want := range []string{"건너뜀(화면 꺼짐·잠금)", "실패 1/3", "실패 3/3 → 강제 재시작", "pid=42", "context deadline exceeded"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("기록에 %q 없음:\n%s", want, got)
+		}
+	}
+	if n := strings.Count(got, "\n"); n != 4 {
+		t.Fatalf("기록 줄 수 = %d, 4여야 함:\n%s", n, got)
 	}
 }
