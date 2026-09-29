@@ -502,3 +502,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-29(매뉴얼 v1.3.2): `~/ai-folder/youtube/AgentLoops/agentlayer/tasks/agentlayer-video-prep/artifacts/manual/`의 `agentlayer-manual.txt`(백업 `.bak-repos-0929`)·`VERSION`·`이미지/1-2.png`·`index.html`·`agentlayer-manual.pdf`. 그림 원본 `이미지/_1-2-source.html`.
 - 2026-09-29(매뉴얼 이미지 가림): `…/manual/이미지/3-5.png`를 사용자 편집본(`~/Desktop/_3-5-original.png`, Antigravity 계정 목록 중 knowhackking 외 4개 가림)으로 교체, 원본 백업 `이미지/_3-5-original.png`. 같은 Drive ID에 재배포(v1.3.2 유지). 이메일 세 줄과 `1-1.png` 등 헤더의 "Antigravity knowhackking"은 사용자 판단으로 그대로 둠.
 - 2026-09-29(매뉴얼 그림 크기): `이미지/3-5.png`는 편집본의 빈 오른쪽을 잘라 폭 1290px로(자르기 전 편집본 `이미지/_3-5-edited-full.png`), `이미지/1-2.png`는 폭 920px 기준으로 다시 렌더링해 글씨를 키움. 같은 Drive ID에 재배포.
+- 2026-09-29(공지 수정): 멤버 채널 공지(메시지 id 1554374913668947968)를 사용자 확정 문안으로 수정 — 기술 내용 제거, 매뉴얼 v1.3.2 안내 포함. 처음 게시는 문안 확정 없이 올려 지적받음(메모리 `feedback-announce-two-channels.md`에 규칙 추가).
