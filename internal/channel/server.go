@@ -38,6 +38,8 @@ type Server struct {
 	wmu          sync.Mutex // out 쓰기 직렬화(mu 안에서 잡을 수 있다 — 역순 금지)
 	ready        bool
 	queue        []Notification
+	inited       chan struct{} // initialize 응답을 보낸 뒤 닫힌다
+	initOnce     sync.Once
 	fail         chan error // 첫 stdout 쓰기 실패 — Run이 이 오류로 즉시 끝난다(편지 소모 방지)
 	Log          func(string)
 }
@@ -46,7 +48,7 @@ func New(in io.Reader, out io.Writer, version, instructions string) *Server {
 	if version == "" {
 		version = "dev"
 	}
-	return &Server{in: in, out: out, version: version, instructions: instructions, fail: make(chan error, 1), Log: func(string) {}}
+	return &Server{in: in, out: out, version: version, instructions: instructions, inited: make(chan struct{}), fail: make(chan error, 1), Log: func(string) {}}
 }
 
 type request struct {
@@ -132,6 +134,7 @@ func (s *Server) handle(raw []byte) {
 			"instructions": s.instructions,
 		})
 		s.ready = true
+		s.initOnce.Do(func() { close(s.inited) })
 		q := s.queue
 		s.queue = nil
 		for _, n := range q {
@@ -147,6 +150,9 @@ func (s *Server) handle(raw []byte) {
 			"error": map[string]any{"code": -32601, "message": "method not found: " + req.Method}})
 	}
 }
+
+// Initialized는 클라이언트가 initialize를 마치면 닫히는 채널 — 수신함 소비를 그 뒤로 미루는 데 쓴다.
+func (s *Server) Initialized() <-chan struct{} { return s.inited }
 
 // Notify는 편지 1건을 알림으로 보낸다. initialize 전이면 큐에 쌓아 두었다가 응답 직후 순서대로 보낸다.
 func (s *Server) Notify(n Notification) {

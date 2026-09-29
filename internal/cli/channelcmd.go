@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/channel"
@@ -40,6 +41,43 @@ func LetterNotification(r *task.Report) channel.Notification {
 	}
 	return channel.Notification{Content: string(b), Meta: map[string]string{
 		"task": r.TaskID, "event": r.To, "letter_id": r.ID, "origin": origin, "session": r.Session, "kind": r.Kind}}
+}
+
+// channelSettle — initialize 뒤 이만큼 살아 있어야 수신함을 소비한다(상태 점검용 짧은 접속 거르기).
+// channelLockRetry — 다른 채널 서버가 수신함을 쥐고 있을 때 다시 시도하는 간격. 테스트가 줄인다.
+var (
+	channelSettle    = 3 * time.Second
+	channelLockRetry = 2 * time.Second
+)
+
+// acquireInboxLock은 <inbox>/.channel.lock을 배타로 잡을 때까지 기다린다. 잡으면 푸는 함수를 돌려준다.
+// 프로세스가 죽으면 커널이 잠금을 풀어 주므로 낡은 잠금이 남지 않는다.
+func acquireInboxLock(ctx context.Context, inbox string, logf func(string, ...any)) (func(), bool) {
+	if err := os.MkdirAll(inbox, 0o700); err != nil {
+		logf("수신함 폴더 만들기 실패: %v", err)
+		return nil, false
+	}
+	f, err := os.OpenFile(filepath.Join(inbox, ".channel.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		logf("수신함 잠금 파일 열기 실패: %v", err)
+		return nil, false
+	}
+	waited := false
+	for {
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil {
+			return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, true
+		}
+		if !waited {
+			logf("다른 채널 서버가 수신함을 쥐고 있어 기다립니다: %s", inbox)
+			waited = true
+		}
+		select {
+		case <-ctx.Done():
+			f.Close()
+			return nil, false
+		case <-time.After(channelLockRetry):
+		}
+	}
 }
 
 // RunChannel — `agentlayer channel serve <inbox>`. stdin/stdout은 MCP 프로토콜, stderr는 로그.
@@ -82,7 +120,6 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 
 	wctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// 원격 직원 폴링은 taskWatch와 같은 방식 — 전이가 inbox 파일로 떨어져 아래 Watch가 같은 길로 흘린다.
 	opener := func(name string) (remote.Adapter, *remote.Remote, error) {
 		r, ok, err := remote.Load(stateDir, name)
 		if err != nil {
@@ -94,11 +131,32 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 		ad, err := OpenRemote(*r, stateDir)
 		return ad, r, err
 	}
-	go func() {
-		_ = task.RunRemotePolling(wctx, stateDir, abs, opener, func(s string) { logf("remote: %s", s) }, time.Now)
-	}()
+	// 수신함은 "진짜 채널 세션" 하나만 소비한다. `claude mcp get`·`mcp list`·doctor의 상태 점검도 이 서버를
+	// 띄워 initialize까지 하고 바로 죽인다(2026-09-29 실측: initialize→initialized→tools/list 뒤 1초 안에 종료).
+	// 그 짧은 인스턴스가 pending을 집으면 편지가 received/로 옮겨진 채 아무에게도 전달되지 않는다.
+	// 그래서 (1) initialize 뒤 channelSettle 동안 살아남은 뒤에만, (2) 수신함 잠금을 쥔 하나만 감시를 시작한다.
 	werr := make(chan error, 1)
 	go func() {
+		select {
+		case <-srv.Initialized():
+		case <-wctx.Done():
+			return
+		}
+		select {
+		case <-time.After(channelSettle):
+		case <-wctx.Done():
+			return
+		}
+		unlock, ok := acquireInboxLock(wctx, abs, logf)
+		if !ok {
+			return
+		}
+		defer unlock()
+		logf("수신함 감시 시작: %s", abs)
+		// 원격 직원 폴링은 taskWatch와 같은 방식 — 전이가 inbox 파일로 떨어져 아래 Watch가 같은 길로 흘린다.
+		go func() {
+			_ = task.RunRemotePolling(wctx, stateDir, abs, opener, func(s string) { logf("remote: %s", s) }, time.Now)
+		}()
 		werr <- task.Watch(wctx, abs, interval, false, func(r *task.Report) {
 			srv.Notify(LetterNotification(r))
 			refreshBoard(io.Discard, st, stateDir, time.Now())
@@ -106,7 +164,6 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 	}()
 	serr := make(chan error, 1)
 	go func() { serr <- srv.Run(wctx) }()
-	logf("수신함 감시 시작: %s", abs)
 	select {
 	case err = <-serr:
 	case err = <-werr:

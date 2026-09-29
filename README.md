@@ -174,6 +174,8 @@ agentlayer task done VIDEO-07
   `--dangerously-load-development-channels server:agentlayer`로 기동한다(research preview 플래그 — 기동마다 확인창이 한 번 뜨며
   folder-bot 0.1.22+의 bot-up이 넘긴다). 편지는 `<channel source="agentlayer" event="DONE_UNREAD" task="…" letter_id="…" origin="local|remote">`로
   세션에 직접 들어오고 Monitor·재무장이 필요 없다. 채널이 없으면 `task watch`가 그대로 대체 경로다.
+  수신함은 채널 서버 하나만 소비한다(1.10.3+): `<inbox>/.channel.lock`을 쥔 서버만 편지를 집고, initialize 뒤 3초를
+  살아남아야 시작한다 — `claude mcp get`·`mcp list`·doctor의 상태 점검용 짧은 접속이 편지를 가로채지 않는다.
 - 훅은 직원이 Bash로 띄운 자식 claude 세션(조상 사슬에 claude 2개)의 이벤트를 무시한다(1.10.0+).
 - 세션 소실(dead)은 hook이 아니라 `status`·TUI 실행 때 판정되므로 보고되지 않는다 — `agentlayer status`로 본다.
 - 회사 폴더·총괄 절차·직원 등록은 별도 플러그인 `ai-company`가 만든다(이 바이너리는 배관만).
