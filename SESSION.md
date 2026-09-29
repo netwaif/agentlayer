@@ -21,6 +21,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
 0. **세션 시작하면 먼저 사용자에게 물어볼 것(2026-09-30 사용자 지시)**: "tmux 입력이 남은 세 군데를 바꿀까요?" — ① 총괄(company-bot)에게 보내는 `send` ② 비서실장 봇(claude-discord, bots.json 밖 LaunchAgent 봇) ③ `browser pick` 라우팅·`wt review` 회신. agy는 tmux 유지. 답을 받은 뒤 적용한다. 이어서 아래 미착수 항목도 어느 것부터 할지 묻는다.
+   같이 물을 것(사용자 구상 = 앱·터미널 구분 없이 세션끼리 메시지): ④ `send --from <이름>` — tmux 밖(코덱스 데스크톱 앱 등)에서 보내면 보낸 쪽이 "user"로 찍힘 ⑤ Claude 데스크톱 앱 세션으로 보내는 경로(3단계, 9/28 조사: 채널 불가·소켓 경로 필요).
 
 **아래 "미착수"는 2026-09-29에 사용자가 "하나씩 모두 해"라고 지시했는데 하지 않았고 보고에서도 빠뜨렸던 항목이다. 끝난 것으로 읽지 말 것.**
 
@@ -315,6 +316,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-30 **v1.11.0 Claude 직원 채널 전송 설계**: 세션마다 전용 수신함 `~/.local/state/agentlayer/inboxes/p<pane 번호>/`, 직원 폴더 local 스코프에 `agentlayer channel serve --self` 등록, `send`는 그 수신함의 `.channel.lock`이 잡혀 있으면(서버 생존) 지시 편지(`to: SEND`)를 넣고 3초 안에 안 집어 가면 회수 후 tmux 되돌아가기. 기동 전 pending은 quarantine(pane ID 재사용 대비). 본문 상한 12,000바이트, 승인 대기는 거부. 같은 폴더의 메인 봇·스레드 세션이 pane별로 갈린다.
 - 2026-09-30 **v1.11.1 채널 플래그 판정**: MCP initialize 요청은 채널 플래그 유무와 무관하게 동일(가짜 서버 실측) → 서버가 조상 프로세스 인자에서 `--dangerously-load-development-channels server:agentlayer`를 찾아 없으면 수신함을 쥐지 않는다. 실측: 플래그 없는 세션 `"via":"tmux"`, 있는 세션 `"via":"channel"`.
 - 2026-09-30 **실회사 적용·검증**: `companyctl install`이 Claude 직원 8개 폴더에 채널 등록·직원 봇 7개에 플래그(claude-discord는 bots.json 밖이라 등록만). 봇 8개 재시작 뒤 직원 7개 pane 수신함 생성 확인, "이어서하자"도 채널로 전달. CHANNEL-TEST-1: 총괄 → 스레드 열기 → ensure(확인창 자동 통과) → `send` 출력 "(채널)" → crosscheck 스레드 세션이 `CHANNEL-OK` → DONE 보고 → `task done`.
+
+- 2026-09-30 **앱↔터미널 왕복 실측(사용자 시험)**: ① 이 세션 → 코덱스 **데스크톱 앱** 세션(`01a0eda2-3ff6-7410-9a5b-ce4a84f12c88`, 폴더 `~/VSCodeWorkspace/codex-test`)에 `codex queue --thread`로 전송, "수신 확인" 응답 — 세션 번호만으로 앱 세션에도 들어간다. ② 그 코덱스 앱 세션 → 이 세션(`agentlayer send agentlayer-dev …`) 도착 — 이 세션은 채널 플래그 없이 떠 있어 tmux 입력으로 들어왔고 사용자 입력과 구분되지 않음. 사용자: "내가 이걸 구상한 거였음".
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
