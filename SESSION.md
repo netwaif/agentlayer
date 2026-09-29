@@ -15,24 +15,23 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-09-28 밤 마감** — **에이전트 브라우저 반복 다운 원인 확정·v1.10.2 릴리즈**. 원인: 행 감시의 프레임 프로브가 디스플레이 꺼짐 동안 계속 실패해 멀쩡한 브라우저를 강제 재시작(`~/.local/state/agentlayer/hang/` 덤프 9/25 17건·9/26 8건·9/28 22건, 전부 `pmset -g log` "Display is turned off" 구간이거나 켜진 직후). 수정 876c4c5(ErrNoFrame + 디스플레이 전원 확인 + 켜진 뒤 2분 유예) → main 푸시·태그 v1.10.2·GitHub 릴리즈(자산 5)·tap cask 1.10.2·로컬 `~/.local/bin/agentlayer` v1.10.2. **실제 디스플레이 꺼짐 상태 실검증은 미완**. 직전 작업(총괄 수신함 채널화 v1.10.0~1.10.1, folder-bot 0.1.22, ai-company 0.2.10, 실회사 적용)은 완료 상태 그대로.
+**2026-09-29 낮(체크포인트, 마감 아님)** — **굳음 트리거 확정(디스플레이 꺼짐)·v1.10.3 로컬 준비 완료, 푸시 대기**. main ff92472에 태그 `v1.10.3`(로컬). folder-bot `v0.1.23`·ai-company `v0.2.11`도 로컬 커밋·태그까지. **세 레포 모두 푸시 안 됨**(auto 모드 분류기가 `git push` 차단) — 사용자가 푸시·goreleaser 실행해야 릴리즈된다. 로컬 `~/.local/bin/agentlayer`는 ff92472 빌드(make install). 에이전트 브라우저는 실험으로 여러 번 재시작됨, 지금 탭은 example.com·example.org.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-0-pre. **v1.10.2 실검증(최우선)**: 디스플레이가 꺼졌다 켜진 뒤 `/bin/ls ~/.local/state/agentlayer/hang | tail -3` — 마지막 파일이 `20260928-224843.txt` 그대로면 확정, 결정 기록에 한 줄. 새 덤프가 생기면 가설 틀림 → 그 시각과 `pmset -g log | grep "Display is turned"` 대조, `pmset -g powerstate IODisplayWrangler`가 꺼짐 때 4 미만을 내는지 확인. 급한 차단은 `~/.config/agentlayer/config.json`에 `"browser_hangwatch": false`.
-0-pre2. **v1.10.2 후속**: (a) Apple Silicon에서 `pmset -g powerstate IODisplayWrangler` 줄이 나오는지(안 나오면 `parseDisplayAsleep` ok=false → 이전 동작 그대로, 시청자 기기에서 같은 문제 남음) (b) 켜진 직후에도 실패한 3건(9/25 22:36:48, 9/26 10:22:57, 9/28 22:48:43) 원인 미상 — 화면 잠금 가능성 (c) 행 감시가 Ping 실패 사유를 어디에도 안 남김 → 덤프 옆에 오류 문자열 기록 (d) v1.10.2 공지 미작성(3번 공지 항목과 묶기).
-0-a. **채널 전환 비용 확인(계획 Task 12 단계 6)**: 총괄 transcript(`~/.claude/projects/-Users-soonho-ai-folder-company/` 최신 jsonl)에서 Monitor 호출·재무장 턴 0회, 편지 0건 구간 턴 없음 확인 → 결정 기록에 한 줄. 총괄의 채널 서버 프로세스는 v1.10.0 빌드로 떠 있음 — 다음 `bot-restart company-bot` 때 1.10.1 반영(억지로 재시작하지 말 것).
-0-b. **리뷰 이월 Minor 7건**(선택): register_channel remove→add 반복(스펙은 get 비교) / doctor의 claude 미발견 오진 메시지 / `channel serve` 오타 경로가 조용히 디렉터리 생성 / botctl doctor 리눅스 유닛 미검사 / ai-company plugin.json 설명 "≥1.6.0" / bot-up `--flag=value` 미매칭 / 훅마다 ps 1회.
-0-c. **멤버 답변 후속(folder-bot 제보)**: 답변에 약속한 것 — `--no-autostart` 봇도 재시작되게 기동 명령 사이드카 남기기 + bot-start 스킬(`~/.claude/skills/bot-start`, 사적) 일반화해 folder-bot에 동봉 + 봇 자기 멘션 예외. folder-bot 레포 백로그.
-0-d. **2단계(별도 스펙)**: 총괄→Claude 직원 send를 채널로(직원 세션에도 channel serve 등록·플래그·확인창), 총괄→codex는 `codex queue`, agy는 tmux 유지. 디스코드 스레드 라우팅 병목은 "스레드 세션마다 discord 플러그인 인스턴스" 스파이크로 확인. 3단계(데스크톱 앱 중계: Claude 앱=소켓, Codex=queue) 설계 참고: 스펙 후속 절.
-0. **멤버 답변 후속**: 답변 초안에 "저장소 관계 그림 버전은 매뉴얼에 추가하겠습니다" 약속이 들어 있음 — 사용자가 그 문장을 살려 게시했으면 agentlayer 매뉴얼(`~/ai-folder/youtube/AgentLoops/agentlayer/tasks/agentlayer-video-prep/artifacts/manual`, deploy-manual 스킬 표 기준)에 레포 관계 다이어그램 절 추가 → `/deploy-manual agentlayer`. 뺐으면 이 항목 삭제.
-1. **시청자 배포 준비(원격 직원)**: (a) Hermes 쪽 준비물(`imac-letter` 스크립트+스킬)을 agentlayer가 깔아 주게 — `remote add --local` 때 `$HERMES_HOME/skills/…`·`~/.local/bin`에 복사(원본을 레포 `docs/hermes-side/`에 두기). (b) 이름 일반화: `imac-letter`→`company-letter`, "아이맥 총괄"→"회사 총괄", 편지함 담당자 `imac-manager`→`company-manager`(서버 등록·스킬·README·플러그인 문안 동시 변경). (c) viewer-release `setup.py`(전담 프로필 생성)와 `remote add --local` 등록을 매뉴얼 한 흐름으로.
-2. **총괄 봇 재시작 확인**: v0.2.8 블록(답장 첨부 문안) 설치 뒤 `bot-restart company-bot` 했는지. 안 했으면 사용자에게 한 줄.
-3. **v1.8.x·1.9.x 공지(미게시)**: 디스코드 멤버 채널(1522490241859059784) + 유튜브 커뮤니티 통합본. 원격 직원·편지함이 큰 건이라 별도 영상 소재 후보(SESSION `~/ai-folder/youtube/Hermes-AI-Company` 타워와 연결).
-4. **리뷰 미결(minor, 원장에서 이월)**: `task list`의 `remote:unreachable` 미표시 / `task done`·`send` 원격 경로 `context.Background()`(Ctrl-C가 ssh 즉시 못 끊음) / 원격 `send` 뒤 보드 HTML 즉시 갱신 없음 / `task assign --replace` 때 서버 옛 카드 고아 경고 없음 / untar 모드 0644 고정 / 같은 WAITING에서 질문만 바뀌면 미보고 / `/tmp/agentlayer-ssh-<uid>` 권한 검증.
-5. **Hermes 답장 자동 wake(선택)**: 지금은 답이 스레드 알림 한 줄. Hermes가 스스로 깨어 답하려면 카드에 session_id가 있어야 함 → 서버 kanban 툴셋 활성화(config `toolsets: [kanban]` + gateway 재시작) 또는 `imac-letter`가 `_handle_create` 경로로 세션을 붙이게. 사용자 결정 대기.
-6. **세션 무관 주기 감시·굳음 재발 관찰·에이전트 브라우저 후속·Win10 재검증·매뉴얼 PDF 재빌드·usage-coach 개선·파킹 항목**: 이전 목록 그대로 이월(2026-09-24 마감 항목 3~13). `go test ./...` 전체 멈춤 조사는 사용자가 집으라고 할 때만.
+0. **릴리즈 마무리(사용자 몫 → 그 뒤 후속)**: 아래 순서. 푸시가 끝나면 tap cask 1.10.3·`brew` 확인, 설치기 `pins.json`의 folder-bot 0.1.21→0.1.23 갱신 검토.
+   - agentlayer: `git push origin main v1.10.3` → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean` → 릴리즈 본문을 `.claude/release-notes-1.10.3.md`로 교체
+   - folder-bot(`~/VSCodeWorkspace/folder-bot`): `git push origin main v0.1.23`
+   - ai-company(`~/VSCodeWorkspace/ai-company`): `git push origin main v0.2.11`
+1. **공지 게시**: 초안 `.claude/announce-draft-2026-09-29.md`(디스코드 멤버 채널 1522490241859059784 + 유튜브 커뮤니티). 사용자 문안 확정 뒤 게시. v1.8~1.10.3·folder-bot 0.1.23·ai-company 0.2.11 통합.
+2. **실기 적용**: 이 맥 폴더 봇들은 `botctl add` 재실행해야 0.1.23의 재시작 사이드카·`bot-id`·지침 블록이 깔린다(플러그인 업데이트 뒤). 총괄 채널 서버는 다음 `bot-restart company-bot` 때 v1.10.3 반영.
+3. **시청자 배포 준비(원격 직원) — 막힘**: 서버의 `imac-letter`·스킬 원본을 `docs/hermes-side/`에 받아 뒀으나(미추적: `imac-letter.orig`, `skill/SKILL.orig.md`) 분류기가 운영 서버 데이터 읽기를 막아 스킬 파일은 열어 보지 못함. 사용자가 읽기·서버 변경을 허용해야 진행. 할 일은 그대로: (a) `remote add --local` 때 Hermes 준비물 설치 (b) `imac-letter`→`company-letter`, `imac-manager`→`company-manager` 일괄 변경(서버 등록 포함) (c) 매뉴얼 한 흐름.
+4. **멤버 답변 후속(매뉴얼 저장소 관계 그림)**: 멤버 채널 최근 30건에는 그 답변이 없음(마지막 글 9/22) — 어디에 게시했는지, 약속 문장을 살렸는지 사용자 확인 필요.
+5. **텔레그램 확장(사용자 판단 대기)**: 조사 결과 `.claude/telegram-cost-2026-09-29.md`. 최소 범위 2~3일, 전체 동등 10~15일.
+6. **v1.10.3 관찰**: 밤새 모니터 꺼짐 뒤 `~/.local/state/agentlayer/hang/hangwatch.log`에 "강제 재시작"이 켜진 직후 1회만 찍히는지, 탭이 돌아오는지. Apple Silicon에서 `pmset -g powerstate IODisplayWrangler` 줄이 나오는지는 여전히 미확인(안 나오면 꺼진 동안에도 재시작 — 다만 재시작 뒤 90초 유예와 탭 복원이 피해를 줄임).
+7. **남은 사소**: `TestRunChannelDeliversPendingLetter`가 한 번 TempDir 정리 경합으로 실패(재현 6회 중 0회, 기존 결함) / folder-bot 테스트는 레포 루트에서 돌리면 `threads/999/log.md`를 건드림 / `~/.claude.json`에 scratchpad `mcpprobe` 빈 항목 / 훅마다 ps 1회는 76ms 실측이라 유지.
+8. **Hermes 답장 자동 wake·2단계(직원 send 채널화)·이월 파킹 항목**: 이전 목록 그대로(2026-09-28 마감의 0-d·5·6).
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -286,6 +285,15 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-28 수정 방침: 프레임 실패(ErrNoFrame)와 UI 무응답을 구분 — 프레임 실패일 때만 `pmset -g powerstate IODisplayWrangler`로 전원 확인, 꺼짐이면 미집계·상태 리셋(AsleepAt 기록), 마지막 꺼짐 관측 뒤 hangWakeGrace(2분) 유예. UI 무응답은 디스플레이와 무관하게 기존대로. 감지 불가(드라이버 줄 없음·비 darwin)면 켜진 것으로 봄.
 - 2026-09-28 사용자 지시로 실검증 대기 없이 즉시 릴리즈("지금도 충분히 문제 많아") — 권고(하루 이틀 관찰 뒤 릴리즈) 뒤집음. 릴리즈 명령은 auto 모드 분류기가 거부(Create Public Surface) → 사용자가 매뉴얼 모드로 바꿔 승인.
 
+- 2026-09-29 **굳음 트리거 = 디스플레이 꺼짐(v1.10.2 가설 정정)**. v1.10.2는 "꺼진 동안의 실패는 오탐"이라 봤지만 실측은 "실제 굳음"이었다: 꺼짐 1분쯤에 vsync 시계가 멎고 켜져도 안 돌아온다(켜진 뒤 90초까지 프레임 0, 8×8 캡처 5초 타임아웃). 9/22·9/23 첫 굳음도 꺼짐 구간(17:22~22:56, 18:19~23:00). 시험: 시계 CADisplayLink(20초 꺼짐에 멎음)/기본 CVDisplayLink(20초 버팀, 100초 멎음), `disable-gpu-vsync`(CPU 19%→41%, 효과 없음), `disable-gpu`, occluded·renderer 백그라운딩 제거, rod 플래그 전부 제거 — 전부 복구 안 됨. 되살리기(bringToFront·이동·크기·최소화 복원·activate·새 창)도 전부 실패.
+- 2026-09-29 **v1.10.3 방침**: 꺼짐·잠금(`IOConsoleLocked`) 중엔 세지 않음 → 켜진 뒤 유예 20초(2분에서 단축) → 3회 실패면 재시작 1회 + 탭 복원(Chrome 자체 세션 복원과 겹쳐 빠진 주소만, 최대 30개) → 재시작 뒤 90초 유예 → 판정 단일화(`hangwatch.lock`) → 5분 주기 card가 `browser hangwatch` 실행(훅 없는 유휴 시간). CADisplayLink 플래그 제거. 실검증: 꺼짐 2분 동안 재시작 0, 켜진 뒤 50초에 1회, 탭 2/2 복원, 이후 정상.
+- 2026-09-29 **채널 서버 편지 가로채기 차단**: `claude mcp get`·`mcp list`·doctor가 채널 서버를 띄워 initialize→initialized→tools/list 뒤 1초 안에 죽인다(가짜 서버 실측). 그 인스턴스가 pending을 집으면 편지 유실. initialize 뒤 3초 생존 + `<inbox>/.channel.lock` 보유자만 소비.
+- 2026-09-29 채널 전환 비용 확인(계획 Task 12 단계 6) 완료: 총괄 기록 `d37cf251-…jsonl`(09:25~12:27) Monitor 호출 0, 재무장 턴 0, agentlayer 채널 편지 6건 수신, 11:38~12:27 편지 없는 구간 턴 0. 총괄 봇은 9/29 09:25 재기동됨(채널 서버 pid 7693) — 옛 "v0.2.8 뒤 재시작 확인" 항목 해소.
+- 2026-09-29 리뷰 이월 Minor 7건 중 "훅마다 ps 1회"만 유지 결정(실측 76ms, 대안인 환경변수 판정은 미검증). 나머지 6건과 원격 미결 7건은 수정.
+- 2026-09-29 folder-bot "자기 멘션 예외" 해석: 멘션된 ID가 봇 자신이면 평소대로 처리. 봇 ID는 페어링 때 토큰 첫 마디에서 읽어 `<state_dir>/bot-id`에 기록. 모델이 지침대로 판정하는지는 실봇 미검증.
+- 2026-09-29 auto 모드 분류기가 `git push`(Create Public Surface)·운영 서버에서 받은 파일 읽기(Production Reads)를 차단 — 릴리즈는 로컬 태그까지, 메모리 `push-blocked-by-classifier.md`.
+- 2026-09-29 텔레그램 확장 비용 조사(사용자 요청): 판정 중. 공식 telegram 채널 플러그인 0.0.7 존재, 총괄↔직원은 agentlayer 경로라 봇 간 메시지 제약 비치명, 스레드가 최대 비용. 상세 `.claude/telegram-cost-2026-09-29.md`.
+
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
@@ -481,3 +489,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-28: 실회사 `~/ai-folder/company`: `CLAUDE.md` 블록 갱신, `~/.claude.json` projects[…/company].mcpServers.agentlayer(local), `~/.config/folder-bot/bots.json` company.dev_channels, `~/Library/LaunchAgents/com.folder-bot.company.plist`(플래그), `~/.local/bin/{bot-up,bot-restart}` 0.1.22판. 스파이크 잔재 없음(`/tmp/al-channel-check`·scratchpad spike 폴더 정리, `spike-channel`의 `~/.claude.json` 항목은 무해하게 남음).
 
 - 2026-09-28(v1.10.2 876c4c5): `internal/browser/hangwatch.go`(신규 ErrNoFrame·hangWakeGrace·HangOps.DisplayAsleep·hangState.AsleepAt·parseDisplayAsleep, HangWatch에 ErrNoFrame 분기, frameProbePages가 `%w: %w`로 ErrNoFrame 래핑, DefaultHangOps에 pmset 호출 2초 예산) · `internal/browser/hangwatch_test.go`(+4: TestHangWatchIgnoresNoFrameWhileDisplayAsleep·TestHangWatchWakeGraceThenCounts·TestHangWatchUIHangCountsEvenWhenDisplayAsleep·TestParseDisplayAsleep). 검증: `go test ./internal/browser/`(133초)·`./internal/cli/` 통과. 시스템: `~/.local/bin/agentlayer` v1.10.2(dist/agentlayer_darwin_amd64_v1), `.git/info/exclude`에 `.claude/` 추가, 브랜치 `fix/hangwatch-display-asleep`(main과 동일, 삭제 가능), 에이전트 브라우저 pid 41316(22:48:51 기동) 재시작 안 함. 메모리 `agent-browser-freeze-is-frame-death.md`에 디스플레이 꺼짐 오탐 절 추가. 릴리즈 노트 scratchpad `notes-1.10.2.md`(GitHub 릴리즈 페이지에 있음).
+- 2026-09-29(v1.10.3, main ff92472, 커밋 d6763cc·cd294f3·e80e61f·66d2bf8·96e4a7c·cf7c4ae·f94a62c·d1b07f3·a28bd83·785b556·58587bd·ff92472): `internal/browser/hangwatch.go`(writeHangLog·hangLogPath·parseConsoleLocked·hangRestartGrace·hangState.RestartedAt·HangOps.Tabs/Reopen·OpenTabs·restorableTabs·missingTabs·ReopenTabs·HangWatchLoop·hangwatch.lock, hangWakeGrace 20s)·`hangwatch_test.go`(+11)·`instance.go`(enable-features 제거)·`engine_test.go` · `internal/cli/browsercmd.go`(`case "hangwatch"`, browserHangWatchLoop, browserRestartWith 탭 복원) · `main.go`(spawnSelf, runCard가 `browser hangwatch` 발사, send에 NotifyContext, 훅이 WriteReportFor) · `internal/channel/server.go`(Initialized) · `internal/cli/channelcmd.go`(channelSettle·channelLockRetry·acquireInboxLock, 상위 폴더 검사)·`channelcmd_test.go`(+3) · `internal/remote/{controldir_unix,controldir_other,untar,shell,adapter}.go` · `internal/task/{report,board,remote,assign}.go`(LastAsk·UnreachableSince·WriteReportFor·askChanged) · `internal/cli/{taskcmd,sendcmd,sendremote}.go` · `README.md`. 미추적: `docs/hermes-side/`. git 제외 폴더 `.claude/`: `release-notes-1.10.3.md`·`announce-draft-2026-09-29.md`·`telegram-cost-2026-09-29.md`.
+- 2026-09-29(folder-bot v0.1.23 로컬, 6bf7669·613f7e3·ce25801·cdbe633·2dd55fc+범프): `plugins/folder-bot/skills/configure-bot/generator/botctl.py`·`assets/{bot-up.sh,bot-restart.sh,directive-block.md}`·`SKILL.md`·`README.md`, 신규 `plugins/folder-bot/skills/bot-start/{SKILL.md,scripts/botstart.py}`, `tests/{test_botctl.py,test_botstart.py,test_bot_up_devchannel.sh}`. 테스트 92 통과(cwd는 레포 밖).
+- 2026-09-29(ai-company v0.2.11 로컬, 0788949·2d9bbf1·25ccd9b·54a927c): `companyctl.py`(parse_mcp_get·channel_registered·doctor 분기)·`tests/{conftest.py,test_companyctl.py}`·`plugin.json`·`marketplace.json`·`SKILL.md`. 테스트 65 통과.
+- 2026-09-29 시스템 상태: `~/.local/bin/agentlayer` = ff92472 빌드, `~/.local/state/agentlayer/hang/`에 오늘 덤프 9건(실험 재시작)·`hangwatch.log`·`hangwatch.lock`, `~/.config/agentlayer/config.json`은 실험 중 `browser_hangwatch:false`로 바꿨다가 원복, 디스플레이를 실험으로 8회 껐다 켬(12:41~13:32).
