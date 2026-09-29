@@ -14,6 +14,7 @@ import (
 
 	"github.com/netwaif/agentlayer/internal/channel"
 	"github.com/netwaif/agentlayer/internal/remote"
+	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
 )
@@ -191,6 +192,47 @@ func acquireInboxLock(ctx context.Context, inbox string, logf func(string, ...an
 	}
 }
 
+// channelFlag — 이 서버를 채널로 받겠다는 Claude Code 기동 인자.
+const channelFlag = "--dangerously-load-development-channels"
+
+// HasChannelFlag — pid의 조상 중에 이 서버(server:<이름>)를 채널로 띄운 프로세스가 있는가.
+// 초기화 요청은 플래그가 있든 없든 똑같아서(2026-09-29 실측) 프로토콜로는 가릴 수 없다. 플래그 없이 뜬 세션은
+// 채널 알림을 버리므로, 그런 세션의 서버가 수신함을 쥐면 지시·편지가 소비만 되고 화면에 나타나지 않는다.
+func HasChannelFlag(pt scan.ProcTable, pid int) bool {
+	want := "server:" + channel.Name
+	for p, depth := pid, 0; p > 1 && depth < 8; depth++ {
+		e, ok := pt[p]
+		if !ok || e.PPID == p {
+			return false
+		}
+		f := strings.Fields(e.Args)
+		for i, a := range f {
+			if a == channelFlag && i+1 < len(f) && f[i+1] == want {
+				return true
+			}
+			if a == channelFlag+"="+want {
+				return true
+			}
+		}
+		p = e.PPID
+	}
+	return false
+}
+
+// channelEnabledFn — 이 프로세스가 채널로 떠 있는가. 테스트가 바꿔 끼운다.
+var channelEnabledFn = func() bool { return HasChannelFlag(scan.LoadProcTable(), os.Getppid()) }
+
+// servePassive는 수신함을 건드리지 않고 핸드셰이크만 받는다.
+func servePassive(ctx context.Context, stdin io.Reader, stdout io.Writer, version, instructions string, logf func(string, ...any)) error {
+	srv := channel.New(stdin, stdout, version, instructions)
+	srv.Log = func(m string) { logf("%s", m) }
+	err := srv.Run(ctx)
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return nil
+	}
+	return err
+}
+
 // RunChannel — `agentlayer channel serve <inbox>`. stdin/stdout은 MCP 프로토콜, stderr는 로그.
 func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, st *state.Store, stateDir, version string, args []string) error {
 	if len(args) < 2 || args[0] != "serve" {
@@ -221,13 +263,15 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 	if self && inbox == "" {
 		// tmux 밖 세션 — 받을 주소가 없다. 핸드셰이크만 받고 조용히 머문다(send는 tmux pane만 대상으로 한다).
 		logf("tmux pane이 아니라 수신함 없이 뜹니다(TMUX_PANE 없음)")
-		srv := channel.New(stdin, stdout, version, selfInstructions)
-		srv.Log = func(m string) { logf("%s", m) }
-		err := srv.Run(ctx)
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil
+		return servePassive(ctx, stdin, stdout, version, selfInstructions, logf)
+	}
+	if !channelEnabledFn() {
+		logf("이 세션은 %s server:%s 없이 떴습니다 — 수신함을 쥐지 않습니다(지시·편지는 다른 경로로 간다)", channelFlag, channel.Name)
+		ins := channelInstructions
+		if self {
+			ins = selfInstructions
 		}
-		return err
+		return servePassive(ctx, stdin, stdout, version, ins, logf)
 	}
 	if self {
 		if err := os.MkdirAll(inbox, 0o700); err != nil {

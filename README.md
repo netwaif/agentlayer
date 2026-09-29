@@ -198,6 +198,8 @@ agentlayer task done VIDEO-07
   들어오고 본문은 친 것과 똑같이 처리된다. 작업 중이면 현재 턴 뒤에 처리되므로 `--force`가 필요 없고, 승인 대기는 거부한다.
   서버가 3초 안에 집어 가지 않으면 지시를 회수하고 tmux 입력으로 되돌아간다(두 번 전달되지 않는다). 본문이 12,000바이트를
   넘거나 채널 서버가 없는 세션은 예전대로 tmux 입력이다. 끄려면 설정에 `"claude_channel": false`.
+  채널 서버는 자신을 띄운 Claude가 `--dangerously-load-development-channels server:agentlayer`로 떴을 때만 수신함을 쥔다(1.11.1+) —
+  플래그 없이 뜬 세션은 채널 알림을 버리므로, 그런 세션에는 지시가 tmux 입력으로 간다. 총괄 수신함(`channel serve <inbox>`)도 같다.
 
 ### 원격 직원 (호스팅어 Hermes 등)
 

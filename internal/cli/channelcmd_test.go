@@ -13,11 +13,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
 )
 
 func init() {
+	channelEnabledFn = func() bool { return true } // 테스트 프로세스의 조상에는 채널 플래그가 없다
 	channelSettle = 150 * time.Millisecond
 	channelLockRetry = 20 * time.Millisecond
 }
@@ -226,6 +228,50 @@ func TestRunChannelWaitsForInboxLock(t *testing.T) {
 			t.Fatal("잠금이 풀렸는데 편지를 이어받지 않음")
 		}
 		time.Sleep(20 * time.Millisecond)
+	}
+	inw.Close()
+	<-done
+}
+
+func TestHasChannelFlag(t *testing.T) {
+	pt := scan.ProcTable{
+		10: {PID: 10, PPID: 1, Args: "tmux new-session"},
+		20: {PID: 20, PPID: 10, Args: "claude -n x --channels plugin:discord@o --dangerously-load-development-channels server:agentlayer"},
+		21: {PID: 21, PPID: 10, Args: "claude -n x --dangerously-load-development-channels=server:agentlayer"},
+		22: {PID: 22, PPID: 10, Args: "claude -n x --dangerously-load-development-channels server:other"},
+		23: {PID: 23, PPID: 10, Args: "claude -n x"},
+		30: {PID: 30, PPID: 20, Args: "node wrapper"},
+	}
+	for pid, want := range map[int]bool{20: true, 21: true, 22: false, 23: false, 30: true, 99: false} {
+		if got := HasChannelFlag(pt, pid); got != want {
+			t.Errorf("pid %d: got %v want %v", pid, got, want)
+		}
+	}
+}
+
+// 채널 플래그 없이 뜬 세션의 서버는 수신함을 쥐지도 편지를 집지도 않는다.
+func TestRunChannelPassiveWithoutFlag(t *testing.T) {
+	old := channelEnabledFn
+	channelEnabledFn = func() bool { return false }
+	defer func() { channelEnabledFn = old }()
+	dir := t.TempDir()
+	st, _ := state.NewStore(dir)
+	inbox := filepath.Join(t.TempDir(), "inbox")
+	id := strings.Repeat("e", 32)
+	pendingLetter(t, inbox, id)
+	inr, inw := io.Pipe()
+	var errb bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		done <- RunChannel(context.Background(), inr, io.Discard, &errb, st, dir, "1.11.1", []string{"serve", inbox, "--interval", "10ms"})
+	}()
+	inw.Write([]byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` + "\n"))
+	time.Sleep(400 * time.Millisecond)
+	if _, err := os.Stat(filepath.Join(inbox, "pending", id+".json")); err != nil {
+		t.Fatalf("플래그 없는 세션이 편지를 집었다: %v", err)
+	}
+	if ChannelLive(inbox) {
+		t.Fatal("플래그 없는 세션이 수신함을 쥐었다")
 	}
 	inw.Close()
 	<-done
