@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"strings"
 )
@@ -55,7 +54,10 @@ func (s SSHRunner) Argv(args ...string) []string {
 
 func (s SSHRunner) Run(ctx context.Context, stdin io.Reader, args ...string) ([]byte, error) {
 	if s.ControlDir != "" {
-		_ = os.MkdirAll(s.ControlDir, 0o700)
+		// 남이 만들어 둔 폴더에 소켓을 두느니 실행을 거부한다.
+		if err := EnsureControlDir(s.ControlDir); err != nil {
+			return nil, err
+		}
 	}
 	argv := s.Argv(args...)
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)

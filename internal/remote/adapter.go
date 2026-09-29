@@ -72,6 +72,7 @@ const (
 
 // ControlDir은 ssh ControlMaster 소켓 폴더. state dir 아래는 macOS Unix 소켓 경로 상한(104바이트)을 넘겨
 // ssh가 "path too long"으로 죽으므로 /tmp 아래 짧은 경로를 쓴다(사용자별, 0700).
+// 만들기·소유자/권한 검증은 EnsureControlDir(ssh를 띄우기 직전마다).
 func ControlDir() string { return fmt.Sprintf("/tmp/agentlayer-ssh-%d", os.Getuid()) }
 
 // Open은 등록에 맞는 어댑터를 만든다.
