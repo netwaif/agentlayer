@@ -126,3 +126,25 @@ func TestRunChannelStopsWhenStdinCloses(t *testing.T) {
 		t.Fatal("EOF 뒤 종료돼야 함(감시 goroutine이 붙들면 안 됨)")
 	}
 }
+
+// 경로 오타 — 상위 폴더까지 없으면 거부하고 아무것도 만들지 않는다. 수신함만 없으면 만들되 알린다.
+func TestRunChannelRejectsMissingParent(t *testing.T) {
+	st, _ := state.NewStore(t.TempDir())
+	root := t.TempDir()
+	typo := filepath.Join(root, "runtmie", "inbox")
+	var out, errb bytes.Buffer
+	err := RunChannel(context.Background(), strings.NewReader(""), &out, &errb, st, t.TempDir(), "1.10.3", []string{"serve", typo})
+	if err == nil || !strings.Contains(err.Error(), "상위 폴더가 없습니다") {
+		t.Fatalf("상위 폴더 없음 → 거부: %v", err)
+	}
+	if _, serr := os.Stat(filepath.Join(root, "runtmie")); serr == nil {
+		t.Fatal("거부했으면 폴더를 만들면 안 된다")
+	}
+	fresh := filepath.Join(root, "inbox")
+	if err := RunChannel(context.Background(), strings.NewReader(""), &out, &errb, st, t.TempDir(), "1.10.3", []string{"serve", fresh}); err != nil {
+		t.Fatalf("수신함만 없는 첫 기동은 통과: %v", err)
+	}
+	if !strings.Contains(errb.String(), "새로 만듭니다") {
+		t.Fatalf("새로 만들 때는 알려야 한다: %q", errb.String())
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -68,6 +69,14 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 		return err
 	}
 	logf := func(f string, a ...any) { fmt.Fprintf(stderr, "agentlayer channel: "+f+"\n", a...) }
+	// 경로 오타를 조용히 새 폴더로 만들어 "편지가 안 온다"로 헤매지 않게 — 상위 폴더가 없으면
+	// 거부하고, 수신함만 없을 때는 만든다고 알린다(새 회사의 첫 기동은 정상 경로다).
+	if _, serr := os.Stat(abs); errors.Is(serr, os.ErrNotExist) {
+		if _, perr := os.Stat(filepath.Dir(abs)); perr != nil {
+			return fmt.Errorf("수신함의 상위 폴더가 없습니다: %s — 경로를 확인하세요", filepath.Dir(abs))
+		}
+		logf("수신함 폴더가 없어 새로 만듭니다: %s (경로가 맞는지 확인하세요)", abs)
+	}
 	srv := channel.New(stdin, stdout, version, channelInstructions)
 	srv.Log = func(m string) { logf("%s", m) }
 
