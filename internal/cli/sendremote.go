@@ -110,6 +110,8 @@ func sendRemote(ctx context.Context, w io.Writer, st *state.Store, stateDir stri
 		if err := board.SetStatus(root, id, "in_progress", now); err != nil {
 			fmt.Fprintln(warnOut, "  ⚠ task.md status 갱신 실패:", err)
 		}
+		// 로컬 send와 같게 — 열어 둔 보드가 다음 폴링(task watch)까지 옛 상태로 남지 않게 바로 다시 쓴다.
+		refreshBoard(warnOut, st, stateDir, now)
 	}
 	if o.JSON {
 		return json.NewEncoder(w).Encode(map[string]any{"session": r.Name, "remote": r.Kind, "handle": as.Remote.Handle,
