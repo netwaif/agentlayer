@@ -15,23 +15,20 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-09-29 낮(체크포인트, 마감 아님)** — **굳음 트리거 확정(디스플레이 꺼짐)·v1.10.3 로컬 준비 완료, 푸시 대기**. main ff92472에 태그 `v1.10.3`(로컬). folder-bot `v0.1.23`·ai-company `v0.2.11`도 로컬 커밋·태그까지. **세 레포 모두 푸시 안 됨**(auto 모드 분류기가 `git push` 차단) — 사용자가 푸시·goreleaser 실행해야 릴리즈된다. 로컬 `~/.local/bin/agentlayer`는 ff92472 빌드(make install). 에이전트 브라우저는 실험으로 여러 번 재시작됨, 지금 탭은 example.com·example.org.
+**2026-09-29 오후(체크포인트, 마감 아님)** — **v1.10.3·v1.10.4 릴리즈 완료**(GitHub 릴리즈·tap cask 1.10.4·로컬 `~/.local/bin/agentlayer` v1.10.4 a73483d). folder-bot `v0.1.23`·ai-company `v0.2.11` 푸시 완료. 굳음 트리거는 디스플레이 꺼짐으로 확정, 재시작+탭 복원으로 대응. 원격 편지 준비물은 agentlayer가 깔게 됐으나 **실서버(hostinger) 적용은 미실행**(분류기가 운영 서버 접근 차단).
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-0. **릴리즈 마무리(사용자 몫 → 그 뒤 후속)**: 아래 순서. 푸시가 끝나면 tap cask 1.10.3·`brew` 확인, 설치기 `pins.json`의 folder-bot 0.1.21→0.1.23 갱신 검토.
-   - agentlayer: `git push origin main v1.10.3` → `GITHUB_TOKEN=$(gh auth token) goreleaser release --clean` → 릴리즈 본문을 `.claude/release-notes-1.10.3.md`로 교체
-   - folder-bot(`~/VSCodeWorkspace/folder-bot`): `git push origin main v0.1.23`
-   - ai-company(`~/VSCodeWorkspace/ai-company`): `git push origin main v0.2.11`
-1. **공지 게시**: 초안 `.claude/announce-draft-2026-09-29.md`(디스코드 멤버 채널 1522490241859059784 + 유튜브 커뮤니티). 사용자 문안 확정 뒤 게시. v1.8~1.10.3·folder-bot 0.1.23·ai-company 0.2.11 통합.
-2. **실기 적용**: 이 맥 폴더 봇들은 `botctl add` 재실행해야 0.1.23의 재시작 사이드카·`bot-id`·지침 블록이 깔린다(플러그인 업데이트 뒤). 총괄 채널 서버는 다음 `bot-restart company-bot` 때 v1.10.3 반영.
-3. **시청자 배포 준비(원격 직원) — 막힘**: 서버의 `imac-letter`·스킬 원본을 `docs/hermes-side/`에 받아 뒀으나(미추적: `imac-letter.orig`, `skill/SKILL.orig.md`) 분류기가 운영 서버 데이터 읽기를 막아 스킬 파일은 열어 보지 못함. 사용자가 읽기·서버 변경을 허용해야 진행. 할 일은 그대로: (a) `remote add --local` 때 Hermes 준비물 설치 (b) `imac-letter`→`company-letter`, `imac-manager`→`company-manager` 일괄 변경(서버 등록 포함) (c) 매뉴얼 한 흐름.
-4. **멤버 답변 후속(매뉴얼 저장소 관계 그림)**: 멤버 채널 최근 30건에는 그 답변이 없음(마지막 글 9/22) — 어디에 게시했는지, 약속 문장을 살렸는지 사용자 확인 필요.
-5. **텔레그램 확장(사용자 판단 대기)**: 조사 결과 `.claude/telegram-cost-2026-09-29.md`. 최소 범위 2~3일, 전체 동등 10~15일.
-6. **v1.10.3 관찰**: 밤새 모니터 꺼짐 뒤 `~/.local/state/agentlayer/hang/hangwatch.log`에 "강제 재시작"이 켜진 직후 1회만 찍히는지, 탭이 돌아오는지. Apple Silicon에서 `pmset -g powerstate IODisplayWrangler` 줄이 나오는지는 여전히 미확인(안 나오면 꺼진 동안에도 재시작 — 다만 재시작 뒤 90초 유예와 탭 복원이 피해를 줄임).
-7. **남은 사소**: `TestRunChannelDeliversPendingLetter`가 한 번 TempDir 정리 경합으로 실패(재현 6회 중 0회, 기존 결함) / folder-bot 테스트는 레포 루트에서 돌리면 `threads/999/log.md`를 건드림 / `~/.claude.json`에 scratchpad `mcpprobe` 빈 항목 / 훅마다 ps 1회는 76ms 실측이라 유지.
-8. **Hermes 답장 자동 wake·2단계(직원 send 채널화)·이월 파킹 항목**: 이전 목록 그대로(2026-09-28 마감의 0-d·5·6).
+0. **실서버 이름 전환(사용자 실행 또는 허용 필요)**: ① 서버에 `imac-manager` 앞 대기 편지가 없는지 확인 ② `agentlayer remote add hermes-qa --kind hermes --ssh hostinger --profile tech-qa --exec "docker exec -i -u hermes hermes-agent-iqxn-hermes-agent-1" --workspace-root /opt/data/ai-company/결과물 --mailbox company-manager`(add가 `company-letter`·스킬 설치) ③ 서버의 옛 `/opt/data/.local/bin/imac-letter`·`/opt/data/skills/autonomous-ai-agents/imac-letter/` 치우기 ④ `/opt/data/ai-company/AGENTS.md`의 imac 문안 교체. 전환 전까지는 옛 이름 그대로 정상 동작.
+1. **공지 게시**: 초안 `.claude/announce-draft-2026-09-29.md`(버전은 v1.10.4로 읽을 것). 사용자 문안 확정 뒤 디스코드 멤버 채널 1522490241859059784 + 유튜브 커뮤니티.
+2. **실기 적용**: 플러그인 업데이트 뒤 폴더 봇마다 `botctl add` 재실행(0.1.23 재시작 사이드카·`bot-id`·지침 블록). 총괄 채널 서버는 다음 `bot-restart company-bot` 때 v1.10.4 반영. 설치기 `pins.json` folder-bot 0.1.21→0.1.23 검토.
+3. **멤버 답변 후속(매뉴얼 저장소 관계 그림)**: 멤버 채널 최근 30건에 그 답변 없음 — 게시 위치·약속 문장 유지 여부 사용자 확인 필요.
+4. **텔레그램 확장(사용자 판단 대기)**: `.claude/telegram-cost-2026-09-29.md`. 최소 2~3일, 전체 10~15일.
+5. **v1.10.3 관찰**: 밤새 모니터 꺼짐 뒤 `~/.local/state/agentlayer/hang/hangwatch.log`에 재시작이 켜진 직후 1회만 찍히는지·탭 복원 여부. Apple Silicon `pmset -g powerstate IODisplayWrangler` 미확인.
+6. **매뉴얼 한 흐름(원격 직원)**: viewer-release `setup.py`(전담 프로필 생성) → `remote add --local` → `company-letter` 순서를 agentlayer 매뉴얼에. viewer-release 위치는 이 기록에 없음(Hermes-AI-Company 타워 쪽 확인).
+7. **남은 사소**: `TestRunChannelDeliversPendingLetter` TempDir 정리 경합(드묾) / folder-bot 테스트를 레포 루트에서 돌리면 `threads/999/log.md` 변경 / `~/.claude.json`의 scratchpad `mcpprobe` 빈 항목 / 훅마다 ps 1회(76ms, 유지).
+8. **Hermes 답장 자동 wake·2단계(직원 send 채널화)·이월 파킹 항목**: 이전 목록 그대로.
 
 ## 결정 기록
 <!-- 누적. 삭제 금지. 형식: - YYYY-MM-DD 한 줄 -->
@@ -294,6 +291,9 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-29 auto 모드 분류기가 `git push`(Create Public Surface)·운영 서버에서 받은 파일 읽기(Production Reads)를 차단 — 릴리즈는 로컬 태그까지, 메모리 `push-blocked-by-classifier.md`.
 - 2026-09-29 텔레그램 확장 비용 조사(사용자 요청): 판정 중. 공식 telegram 채널 플러그인 0.0.7 존재, 총괄↔직원은 agentlayer 경로라 봇 간 메시지 제약 비치명, 스레드가 최대 비용. 상세 `.claude/telegram-cost-2026-09-29.md`.
 
+- 2026-09-29 **v1.10.4 원격 편지 준비물**: 정본을 `internal/remote/hermesside/`에 두고 go:embed, `remote add`가 점검 뒤 설치(`--no-setup`), `remote setup <이름>`. 담당자·첨부 폴더는 등록값으로 채움(옛 등록은 `imac-manager` 그대로). 기본값 `company-manager`·`from-company`. 서버 원본은 `imac-letter` 23줄·스킬 36줄을 읽어 일반화. 수동 모드에서 `git push`·goreleaser는 통과, 운영 서버 ssh 조회는 계속 차단.
+- 2026-09-29 goreleaser는 태그가 HEAD가 아니거나 미추적 파일이 있으면 실패 — `git worktree add --detach <경로> <태그>`로 깨끗한 트리에서 실행하고 `dist/agentlayer_darwin_amd64_v1/agentlayer`를 설치.
+
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
 <!-- 형식: - `경로` 무엇을 (함수명·핵심 식별자 포함) -->
@@ -493,3 +493,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-29(folder-bot v0.1.23 로컬, 6bf7669·613f7e3·ce25801·cdbe633·2dd55fc+범프): `plugins/folder-bot/skills/configure-bot/generator/botctl.py`·`assets/{bot-up.sh,bot-restart.sh,directive-block.md}`·`SKILL.md`·`README.md`, 신규 `plugins/folder-bot/skills/bot-start/{SKILL.md,scripts/botstart.py}`, `tests/{test_botctl.py,test_botstart.py,test_bot_up_devchannel.sh}`. 테스트 92 통과(cwd는 레포 밖).
 - 2026-09-29(ai-company v0.2.11 로컬, 0788949·2d9bbf1·25ccd9b·54a927c): `companyctl.py`(parse_mcp_get·channel_registered·doctor 분기)·`tests/{conftest.py,test_companyctl.py}`·`plugin.json`·`marketplace.json`·`SKILL.md`. 테스트 65 통과.
 - 2026-09-29 시스템 상태: `~/.local/bin/agentlayer` = ff92472 빌드, `~/.local/state/agentlayer/hang/`에 오늘 덤프 9건(실험 재시작)·`hangwatch.log`·`hangwatch.lock`, `~/.config/agentlayer/config.json`은 실험 중 `browser_hangwatch:false`로 바꿨다가 원복, 디스플레이를 실험으로 8회 껐다 켬(12:41~13:32).
+- 2026-09-29(v1.10.4 a73483d): 신규 `internal/remote/setup.go`(Installer·Hermes.Setup·LetterCommand·renderSide)·`setup_test.go`(3)·`internal/remote/hermesside/{company-letter.sh,SKILL.md}`, `internal/remote/registry.go`(DefaultMailbox company-manager·AttachDirName)·`adapter.go`·`hermes.go`, `internal/cli/remotecmd.go`(`case "setup"`·remoteSetup·`--no-setup`)·`remotecmd_test.go`(+1), `README.md`. `docs/hermes-side/`(서버 원본 사본)는 삭제. `.claude/release-notes-1.10.4.md`.
