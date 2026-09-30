@@ -225,6 +225,7 @@ func TestEmptyStdinTolerated(t *testing.T) {
 	}
 }
 
+// tmux 밖이고 조상에 에이전트 프로세스도 없으면(TestMain 기본값) 조용히 no-op. 앱 세션 경로는 locate_test.go.
 func TestOutsideTmuxNoop(t *testing.T) {
 	st := newStore(t)
 	if err := RunClaude(st, "stop", strings.NewReader(payload), env(""), t0); err != nil {
@@ -232,7 +233,7 @@ func TestOutsideTmuxNoop(t *testing.T) {
 	}
 	got, _ := st.List()
 	if len(got) != 0 {
-		t.Errorf("tmux 밖 이벤트는 레코드를 만들지 않음: %+v", got)
+		t.Errorf("좌표 없는 이벤트는 레코드를 만들지 않음: %+v", got)
 	}
 }
 

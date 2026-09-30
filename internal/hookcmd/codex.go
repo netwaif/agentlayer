@@ -5,7 +5,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/state"
 )
 
@@ -21,8 +20,8 @@ type codexPayload struct {
 // codex는 JSON 하나를 마지막 인자로 넘긴다. notify는 codex의 자식
 // 프로세스라 TMUX_PANE을 상속하므로 pane 식별이 그대로 된다.
 func RunCodex(st *state.Store, args []string, env func(string) string, now time.Time) error {
-	pane := hookPane(env)
-	if pane == "" {
+	loc, ok := locate("codex", env)
+	if !ok {
 		return nil
 	}
 	var p codexPayload
@@ -36,12 +35,12 @@ func RunCodex(st *state.Store, args []string, env func(string) string, now time.
 	default:
 		return nil // 미래 이벤트는 조용히 무시
 	}
-	id := scan.IDForPane("codex", pane)
-	a, err := st.Load(id)
+	a, err := st.Load(loc.id)
 	if err != nil {
-		a = &state.Agent{ID: id, Kind: "codex", State: state.StateIdle,
-			Tmux: state.TmuxRef{PaneID: pane}, UpdatedAt: now, StateSince: now}
+		a = &state.Agent{ID: loc.id, Kind: "codex", State: state.StateIdle,
+			Tmux: state.TmuxRef{PaneID: loc.pane}, UpdatedAt: now, StateSince: now}
 	}
+	loc.apply(a)
 	if p.CWD != "" {
 		a.CWD = p.CWD
 	}
@@ -73,8 +72,8 @@ type codexHookPayload struct {
 // 보였다(2026-09-03 촬영 실측). hooks가 WORK·WAIT를 채운다. 훅은 codex의 자식이라
 // TMUX_PANE을 상속하고, stdout을 비워 두면 codex 동작에 개입하지 않는다.
 func RunCodexEvent(st *state.Store, event string, stdin io.Reader, env func(string) string, now time.Time) error {
-	pane := hookPane(env)
-	if pane == "" {
+	loc, ok := locate("codex", env)
+	if !ok {
 		return nil
 	}
 	var p codexHookPayload
@@ -94,12 +93,12 @@ func RunCodexEvent(st *state.Store, event string, stdin io.Reader, env func(stri
 	default:
 		return nil
 	}
-	id := scan.IDForPane("codex", pane)
-	a, err := st.Load(id)
+	a, err := st.Load(loc.id)
 	if err != nil {
-		a = &state.Agent{ID: id, Kind: "codex", State: state.StateIdle,
-			Tmux: state.TmuxRef{PaneID: pane}, UpdatedAt: now, StateSince: now}
+		a = &state.Agent{ID: loc.id, Kind: "codex", State: state.StateIdle,
+			Tmux: state.TmuxRef{PaneID: loc.pane}, UpdatedAt: now, StateSince: now}
 	}
+	loc.apply(a)
 	if p.SessionID != "" {
 		a.SessionID = p.SessionID
 	}

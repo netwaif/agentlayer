@@ -90,13 +90,15 @@ func (pt ProcTable) DescendantKind(pid int) string {
 // KindFromArgs는 명령행에서 에이전트 종류를 읽는다.
 // `node /…/bin/codex` 처럼 래퍼 뒤 첫 인자, 또는 실행 파일 자체의 basename이
 // claude·codex·gemini·agy면 그것. npm 패키지 경로도 신호로 쓴다.
+// basename은 대소문자를 구분한다 — 데스크톱 앱의 실행 파일이 `/Applications/Claude.app/Contents/MacOS/Claude`라,
+// 무시하면 앱 자체와 그 헬퍼가 claude 에이전트로 잡혀 앱 안에서 뜬 CLI가 전부 "중첩 claude"로 무시된다.
 func KindFromArgs(args string) string {
 	tokens := strings.Fields(args)
 	for i, tok := range tokens {
 		if i > 1 {
 			break
 		}
-		switch strings.ToLower(filepath.Base(tok)) {
+		switch filepath.Base(tok) {
 		case "claude":
 			return "claude"
 		case "codex":

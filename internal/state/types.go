@@ -55,15 +55,18 @@ type Agent struct {
 	// Ask는 지금 사람에게 묻고 있는 것(Claude Notification 문구). 승인·새 지시·턴 종료가
 	// 오면 해소된 것이니 hook이 지운다. Task(최근 작업)와 섞지 않는다 — 섞으면 DONE·dead
 	// 행이 영원히 "Claude needs your permission"을 단다.
-	Ask        string     `json:"ask,omitempty"`
-	State      AgentState `json:"state"`
-	Tmux       TmuxRef    `json:"tmux"`
-	CWD        string     `json:"cwd,omitempty"`
-	SessionID  string     `json:"session_id,omitempty"` // 비상 복구(resume)용
-	Model      string     `json:"model,omitempty"`      // hook이 알려준 사용 모델 (agy modelName 등)
-	PID        int        `json:"pid,omitempty"`
-	UpdatedAt  time.Time  `json:"updated_at"`
-	StateSince time.Time  `json:"state_since"`
+	Ask       string     `json:"ask,omitempty"`
+	State     AgentState `json:"state"`
+	Tmux      TmuxRef    `json:"tmux"`
+	CWD       string     `json:"cwd,omitempty"`
+	SessionID string     `json:"session_id,omitempty"` // 비상 복구(resume)용
+	// Name은 세션 이름(`claude -n <이름>`). tmux 밖 세션의 훅이 에이전트 프로세스 명령행에서 읽는다.
+	// send 대상·SESSION 열 표시에 쓴다. tmux pane 세션은 세션 이름이 이미 있어 채우지 않는다.
+	Name       string    `json:"name,omitempty"`
+	Model      string    `json:"model,omitempty"` // hook이 알려준 사용 모델 (agy modelName 등)
+	PID        int       `json:"pid,omitempty"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	StateSince time.Time `json:"state_since"`
 	// Threads는 표시용 — Fold가 이 행 뒤로 접은 스레드 pane 수. 저장하지 않는다.
 	Threads int `json:"-"`
 	// ThreadStates는 표시용 — 접힌 스레드의 상태별 개수(idle 제외). Fold가 채우고 저장하지 않는다.
@@ -104,4 +107,38 @@ func (a *Agent) Headline() string {
 		return a.Ask
 	}
 	return a.Task
+}
+
+// Detached는 tmux pane 없이 기록된 세션인가 — 데스크톱 앱(Claude Code Desktop)이나 맨 터미널에서 뜬 세션.
+// 좌표는 pane 대신 에이전트 프로세스 PID(ID `<kind>-pid<N>`)다. 이런 세션은 tmux 키 입력 폴백이 없다.
+func (a *Agent) Detached() bool { return a.Tmux.PaneID == "" }
+
+// Label은 사람에게 보이는 세션 이름 — tmux 세션 이름, tmux 밖이면 `-n` 이름, 그것도 없으면 세션 ID 앞 8자리, 끝으로 ID.
+// status·TUI·카드·알림·send 출력이 같은 규칙을 쓴다.
+func (a *Agent) Label() string {
+	switch {
+	case a.Tmux.Session != "":
+		return a.Tmux.Session
+	case a.Name != "":
+		return a.Name
+	case a.SessionID != "":
+		return ShortSessionID(a.SessionID)
+	}
+	return a.ID
+}
+
+// Where는 위치 표기 — tmux pane이면 "tmux", 아니면 "app"(데스크톱 앱·맨 터미널).
+func (a *Agent) Where() string {
+	if a.Detached() {
+		return "app"
+	}
+	return "tmux"
+}
+
+// ShortSessionID는 세션 ID 앞 8자리 — send 대상·표시용 접두.
+func ShortSessionID(id string) string {
+	if len(id) > 8 {
+		return id[:8]
+	}
+	return id
 }

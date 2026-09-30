@@ -5,7 +5,6 @@ import (
 	"io"
 	"time"
 
-	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/state"
 )
 
@@ -32,9 +31,9 @@ type geminiPayload struct {
 //
 // 훅 출력 규약(stdout "{}")은 main이 담당한다 — 여기서는 상태만 만진다.
 func RunGemini(st *state.Store, event string, stdin io.Reader, env func(string) string, now time.Time) error {
-	pane := hookPane(env)
-	if pane == "" {
-		return nil // tmux 밖(또는 비기본 서버) 세션은 관제 대상이 아니다
+	loc, ok := locate("gemini", env)
+	if !ok {
+		return nil // 별도 tmux 서버·잔류 TMUX_PANE·종류를 못 읽는 프로세스는 관제 대상이 아니다
 	}
 	var p geminiPayload
 	if b, err := io.ReadAll(stdin); err == nil && len(b) > 0 {
@@ -53,13 +52,13 @@ func RunGemini(st *state.Store, event string, stdin io.Reader, env func(string) 
 	default:
 		return nil // 모르는 이벤트는 미래 호환을 위해 조용히 무시
 	}
-	id := scan.IDForPane("gemini", pane)
-	a, err := st.Load(id)
+	a, err := st.Load(loc.id)
 	if err != nil {
-		a = &state.Agent{ID: id, Kind: "gemini", State: state.StateIdle,
-			Tmux:      state.TmuxRef{PaneID: pane}, // 세션·창은 다음 Sync가 채운다
+		a = &state.Agent{ID: loc.id, Kind: "gemini", State: state.StateIdle,
+			Tmux:      state.TmuxRef{PaneID: loc.pane}, // 세션·창은 다음 Sync가 채운다
 			UpdatedAt: now, StateSince: now}
 	}
+	loc.apply(a)
 	if p.ConversationID != "" {
 		a.SessionID = p.ConversationID
 	} else if p.SessionID != "" {

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/netwaif/agentlayer/internal/scan"
 	"github.com/netwaif/agentlayer/internal/state"
 )
 
@@ -27,12 +26,13 @@ type claudePayload struct {
 // RunClaude는 `agentlayer hook claude --event <event>`의 본체.
 // env는 os.Getenv 주입점(테스트용), now도 주입한다.
 func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) string, now time.Time) error {
-	pane := hookPane(env)
-	if pane == "" {
-		return nil // tmux 밖(또는 비기본 서버) 세션은 관제 대상이 아니다
+	// tmux pane이면 pane 좌표, tmux 밖(데스크톱 앱·맨 터미널)이면 프로세스 좌표로 기록한다. 별도 서버·잔류 TMUX_PANE은 무시(locate).
+	loc, ok := locate("claude", env)
+	if !ok {
+		return nil
 	}
-	if nestedCheck() {
-		return nil // 직원이 띄운 자식 claude 세션 — 부모 pane의 기록·전이·보고를 오염시키지 않는다
+	if loc.nested || (loc.pane != "" && nestedCheck()) {
+		return nil // 직원이 띄운 자식 claude 세션 — 부모의 기록·전이·보고를 오염시키지 않는다
 	}
 
 	var p claudePayload
@@ -56,13 +56,13 @@ func RunClaude(st *state.Store, event string, stdin io.Reader, env func(string) 
 		return nil // 모르는 이벤트는 미래 호환을 위해 조용히 무시
 	}
 
-	id := scan.IDForPane("claude", pane)
-	a, err := st.Load(id)
+	a, err := st.Load(loc.id)
 	if err != nil {
-		a = &state.Agent{ID: id, Kind: "claude", State: state.StateIdle,
-			Tmux:      state.TmuxRef{PaneID: pane}, // 세션·창은 다음 Sync가 채운다
+		a = &state.Agent{ID: loc.id, Kind: "claude", State: state.StateIdle,
+			Tmux:      state.TmuxRef{PaneID: loc.pane}, // 세션·창은 다음 Sync가 채운다
 			UpdatedAt: now, StateSince: now}
 	}
+	loc.apply(a)
 	// 유휴 에코: Claude Code는 프롬프트에서 60초 입력이 없으면
 	// "Claude is waiting for your input" Notification을 보낸다.
 	// 승인 요청이 아니므로 DONE·IDLE·WAIT를 덮지 않는다. 단 WORK 상태에서

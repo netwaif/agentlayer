@@ -54,6 +54,16 @@ func IDForPane(kind, paneID string) string {
 	return fmt.Sprintf("%s-%s", kind, strings.TrimPrefix(paneID, "%"))
 }
 
+// IDForProcess는 tmux 밖 세션(데스크톱 앱·맨 터미널)의 ID 규칙 — 좌표가 pane 대신 에이전트 프로세스 PID다.
+//
+// 세션 ID가 아니라 PID를 키로 쓰는 이유: 훅과 채널 서버(Claude가 띄운 MCP 자식)가 서로 조율 없이 같은 주소를
+// 만들 수 있는 값은 "자기를 띄운 에이전트 프로세스"뿐이다. 세션 ID는 훅만 알고, /clear 때 바뀌지만 프로세스와
+// MCP 서버는 그대로이며, 코덱스 notify 경로는 세션 ID를 아예 주지 않는다. 세션 ID·이름은 레코드 필드로 남겨
+// send 대상 해석에 쓴다. PID 재사용(재부팅)은 pane 번호 재사용과 같은 방식으로 다룬다(SyncDetached·purgeStale).
+func IDForProcess(kind string, pid int) string {
+	return fmt.Sprintf("%s-pid%d", kind, pid)
+}
+
 // Sync는 pane 목록을 정본 저장소에 반영한다.
 func Sync(st *state.Store, panes []tmuxx.Pane, now time.Time) error {
 	existing, err := st.List()
@@ -109,8 +119,8 @@ func Sync(st *state.Store, panes []tmuxx.Pane, now time.Time) error {
 	}
 
 	for _, a := range existing {
-		if alive[a.ID] {
-			continue
+		if alive[a.ID] || a.Detached() {
+			continue // pane 없는 레코드는 pane 목록으로 판정할 수 없다 — SyncDetached가 프로세스 표로 본다
 		}
 		switch {
 		case a.State == state.StateDead && occupied[liveSlot(a.Kind, a.Tmux.Session, a.CWD)]:
@@ -136,4 +146,84 @@ func Sync(st *state.Store, panes []tmuxx.Pane, now time.Time) error {
 		}
 	}
 	return nil
+}
+
+// SyncDetached는 tmux 밖(pane 없는) 레코드를 프로세스 표와 대조한다. 에이전트 프로세스가 사라졌거나 그 PID에
+// 다른 종류의 프로세스가 앉아 있으면 레코드를 지운다 — pane 레코드와 달리 restore로 되살릴 자리가 없어 DEAD를
+// 보존할 이유가 없다. 프로세스 표를 못 읽으면(빈 표) 아무것도 건드리지 않는다. 표는 대상이 있을 때만 읽는다(ps 1회).
+func SyncDetached(st *state.Store, now time.Time) error {
+	existing, err := st.List()
+	if err != nil {
+		return err
+	}
+	var pt ProcTable
+	for _, a := range existing {
+		if !a.Detached() {
+			continue
+		}
+		if pt == nil {
+			pt = loadProcTable()
+			if len(pt) == 0 {
+				return nil
+			}
+		}
+		if ProcessIsAgent(pt, a.PID, a.Kind) {
+			continue
+		}
+		if err := st.Delete(a.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ProcessIsAgent는 pid에 kind 에이전트가 살아 있는가. 명령행에서 종류를 못 읽는 프로세스는 산 것으로 본다 —
+// 훅이 조상에서 kind를 찾지 못해 부모 PID로 기록한 경우까지 즉시 지우지 않기 위해서다.
+func ProcessIsAgent(pt ProcTable, pid int, kind string) bool {
+	if pid <= 0 {
+		return false
+	}
+	p, ok := pt[pid]
+	if !ok {
+		return false
+	}
+	k := KindFromArgs(p.Args)
+	return k == "" || k == kind
+}
+
+// maxAncestorDepth — 훅(agentlayer ← sh ← claude)·MCP 서버(agentlayer ← claude)·Bash 도구(agentlayer ← bash ← claude)
+// 모두 서너 단계 안에 에이전트가 있다. 더 올라가면 터미널 앱·launchd까지 닿는다.
+const maxAncestorDepth = 8
+
+// FindAgentProcess는 pid에서 조상으로 올라가며 가장 가까운 kind 에이전트 프로세스를 찾는다(kind가 비면 아무 종류).
+// 훅은 셸을 거쳐 뜨고 MCP 서버는 직접 뜨므로 os.Getppid()가 서로 다르다 — 둘 다 "가장 가까운 에이전트 조상"으로
+// 맞춰야 같은 주소(IDForProcess)가 나온다. pid 자신도 후보다. 돌려주는 값: (에이전트 PID, 종류, 명령행).
+func FindAgentProcess(pt ProcTable, pid int, kind string) (int, string, string, bool) {
+	for p, depth := pid, 0; p > 1 && depth < maxAncestorDepth; depth++ {
+		e, ok := pt[p]
+		if !ok || e.PPID == p {
+			return 0, "", "", false
+		}
+		if k := KindFromArgs(e.Args); k != "" && (kind == "" || k == kind) {
+			return p, k, e.Args, true
+		}
+		p = e.PPID
+	}
+	return 0, "", "", false
+}
+
+// NameFromArgs는 명령행의 세션 이름(`claude -n <이름>`·`--name <이름>`·`--name=<이름>`)을 읽는다. 없으면 빈 값.
+func NameFromArgs(args string) string {
+	f := strings.Fields(args)
+	for i, tok := range f {
+		switch {
+		case tok == "-n" || tok == "--name":
+			if i+1 < len(f) && !strings.HasPrefix(f[i+1], "-") {
+				return f[i+1]
+			}
+		case strings.HasPrefix(tok, "--name="):
+			return strings.TrimPrefix(tok, "--name=")
+		}
+	}
+	return ""
 }
