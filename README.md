@@ -209,11 +209,10 @@ agentlayer task done VIDEO-07
   pane 대신 그 세션의 Claude 프로세스 PID(레코드 `claude-pid<N>`)이고, status·TUI의 SESSION 열에는 `claude -n <이름>`의 이름
   (없으면 세션 ID 앞 8자리) 뒤에 `(app)`이 붙는다. 프로세스가 사라지면 레코드는 바로 지워진다(restore할 pane이 없다).
   `send`는 tmux 세션 이름 외에 그 `-n` 이름이나 세션 ID 앞자리(4자 이상, `agentlayer status --json`의 `session_id`)로도
-  대상을 찾는다 — 둘 이상 맞으면 후보를 보이고 거부한다. 이런 세션의 수신함은 `~/.local/state/agentlayer/inboxes/pid<N>/`
-  이며 `channel serve --self` 서버가 tmux 밖에서 뜨면 자기 Claude 프로세스의 PID 수신함을 쥔다(같은 `claude mcp add -s local`
-  등록으로 앱·CLI가 공유한다). **tmux 키 입력 폴백이 없다** — 채널 서버가 없거나 채널·코덱스 큐가 실패하면 `send`는 오류로
-  끝난다. 앱 세션이 개발 채널 플래그 없이 채널 알림을 받는지는 아직 실기 확인 전이다. 별도 tmux 서버(-L/-S)나 서버가 죽은 뒤
-  남은 TMUX_PANE의 세션은 예전대로 무시한다.
+  대상을 찾는다 — 둘 이상 맞으면 후보를 보이고 거부한다. **tmux 키 입력 폴백이 없다** — 코덱스는 `codex queue`로 가고,
+  큐가 실패하면 오류로 끝난다. Claude 앱 세션의 채널 수신함(`channel serve --self`가 pane 밖에서 쥘 주소)은 아직 없어
+  `send`가 지금은 오류로 끝난다(방안은 `docs/superpowers/plans/2026-09-30-desktop-session-address.md`). 별도 tmux 서버(-L/-S)나
+  서버가 죽은 뒤 남은 TMUX_PANE의 세션은 예전대로 무시한다.
 
 ### 원격 직원 (호스팅어 Hermes 등)
 

@@ -137,15 +137,19 @@ type Delivery struct {
 	TaskID   string // 업무ID(없으면 "")
 }
 
-// canClaudeChannel — 채널로 보낼 수 있는 대상인가: Claude이고, 그 세션 수신함(pane 또는 PID)의 채널 서버가 살아 있고, 본문이 상한 안.
-// 승인 대기(WAIT)는 코덱스 큐와 같은 이유로 뺀다.
+// canClaudeChannel — 채널로 보낼 수 있는 대상인가: Claude이고, 그 pane의 채널 서버가 살아 있고, 본문이 상한 안.
+// 승인 대기(WAIT)는 코덱스 큐와 같은 이유로 뺀다. tmux 밖(앱) 세션은 아직 수신함 키가 없어 false —
+// 방안은 docs/superpowers/plans/2026-09-30-desktop-session-address.md(채널 수신함 절), 구현은 다음 단계.
 func canClaudeChannel(a *state.Agent, cfg *config.Config, d Delivery, message string) bool {
 	if a == nil || a.Kind != "claude" || d.StateDir == "" || !cfg.ClaudeChannelEnabled() || len(message) > maxChannelDirective {
 		return false
 	}
 	switch a.State {
 	case state.StateIdle, state.StateDoneUnread, state.StateWorking:
-		return ChannelLive(AgentInbox(d.StateDir, a))
+		if a.Detached() {
+			return false
+		}
+		return ChannelLive(PaneInbox(d.StateDir, a.Tmux.PaneID))
 	}
 	return false
 }
@@ -164,7 +168,7 @@ func DeliverTo(ctx context.Context, stateDir string, agents []*state.Agent, a *s
 }
 
 // errNoFallback — tmux 밖 세션(데스크톱 앱)에는 키 입력 폴백이 없다. 채널·큐가 안 되면 여기서 끝난다.
-var errNoFallback = errors.New("tmux 밖 세션(app)이라 키 입력 폴백이 없습니다 — 채널 서버(claude mcp add -s local agentlayer -- agentlayer channel serve --self)나 codex 큐가 필요합니다")
+var errNoFallback = errors.New("tmux 밖 세션(app)이라 키 입력 폴백이 없습니다 — Claude 앱 세션의 채널 수신함은 아직 없고(다음 단계), 코덱스는 큐로만 갑니다")
 
 // deliver는 에이전트 하나에 메시지를 넣는다. 코덱스는 큐, 채널 서버가 뜬 Claude는 채널을 먼저 쓰고,
 // 실패하면 tmux 키 입력으로 되돌아간다. via는 "queue"·"channel"·"tmux". warn은 되돌아갔을 때의 사유(없으면 "").
@@ -173,7 +177,7 @@ var errNoFallback = errors.New("tmux 밖 세션(app)이라 키 입력 폴백이 
 func deliver(ctx context.Context, a *state.Agent, cfg *config.Config, tm TextSender, message string, tmuxOK bool, d Delivery) (via, warn string, err error) {
 	tmuxOK = tmuxOK && !a.Detached()
 	if canClaudeChannel(a, cfg, d, message) {
-		cerr := SendViaChannel(AgentInbox(d.StateDir, a), d.From, d.TaskID, message, time.Now())
+		cerr := SendViaChannel(PaneInbox(d.StateDir, a.Tmux.PaneID), d.From, d.TaskID, message, time.Now())
 		if cerr == nil {
 			return "channel", "", nil
 		}

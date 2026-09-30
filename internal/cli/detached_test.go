@@ -5,52 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/config"
 	"github.com/netwaif/agentlayer/internal/state"
 )
-
-// 테스트 프로세스는 Claude 세션 안에서 돌 수도 있다(조상에 claude). 기본값은 "Claude 프로세스 없음"으로 고정하고,
-// tmux 밖 경로를 보는 테스트만 stubSelfProcess로 PID를 준다.
-func TestMain(m *testing.M) {
-	selfProcessFn = func() int { return 0 }
-	os.Exit(m.Run())
-}
-
-func stubSelfProcess(t *testing.T, pid int) {
-	t.Helper()
-	old := selfProcessFn
-	selfProcessFn = func() int { return pid }
-	t.Cleanup(func() { selfProcessFn = old })
-}
 
 // mkApp — tmux 밖(데스크톱 앱) 세션 레코드.
 func mkApp(kind, name, sid string, pid int, st state.AgentState) *state.Agent {
 	return &state.Agent{ID: kind + "-pid" + strconv.Itoa(pid), Kind: kind, State: st, PID: pid, Name: name, SessionID: sid, CWD: "/tmp/app"}
-}
-
-func TestProcessInboxAndAgentInbox(t *testing.T) {
-	if got := ProcessInbox("/s", 4242); got != "/s/inboxes/pid4242" {
-		t.Errorf("got %q", got)
-	}
-	if got := ProcessInbox("/s", 0); got != "" {
-		t.Errorf("pid 0은 빈 값: %q", got)
-	}
-	if got := AgentInbox("/s", mkAgent("claude", "ai", "%12", state.StateIdle)); got != "/s/inboxes/p12" {
-		t.Errorf("pane 세션: %q", got)
-	}
-	if got := AgentInbox("/s", mkApp("claude", "", "sid", 4242, state.StateIdle)); got != "/s/inboxes/pid4242" {
-		t.Errorf("앱 세션: %q", got)
-	}
-	if got := AgentInbox("/s", nil); got != "" {
-		t.Errorf("nil: %q", got)
-	}
 }
 
 // send 대상: tmux 세션 이름이 먼저, 없으면 -n 이름 정확 일치나 세션 ID 접두(4자 이상). 모호하면 후보를 보이고 거부.
@@ -89,49 +55,9 @@ func TestResolveTargetByNameOrSessionID(t *testing.T) {
 	}
 }
 
-// 채널 서버가 뜬 앱 세션에는 이름·세션 ID로 찾아 채널로 보낸다. 서버는 자기 Claude 프로세스 PID 수신함을 쥔다.
-func TestRunSendToDetachedSessionViaChannel(t *testing.T) {
-	t.Setenv("AGENTLAYER_CONFIG", t.TempDir()+"/config.json")
-	stubSelfProcess(t, 4242)
-	stateDir := t.TempDir()
-	lines, stop := startSelfServer(t, stateDir, "")
-	defer stop()
-	st, _ := state.NewStore(stateDir)
-	app := mkApp("claude", "기획서", "10ec8033-ca55-4c1e-9f1a-000000000001", 4242, state.StateWorking)
-	_ = st.Save(app)
-	f := &fakeSender{}
-	for _, target := range []string{"기획서", "10ec8033"} {
-		var out bytes.Buffer
-		if err := RunSend(context.Background(), &out, nil, st, stateDir, f, []string{"--json", target, "지시 본문"}); err != nil {
-			t.Fatalf("%s: %v", target, err)
-		}
-		var res map[string]any
-		_ = json.Unmarshal(out.Bytes(), &res)
-		if f.calls != 0 || res["via"] != "channel" || res["session"] != "기획서" || res["where"] != "app" || res["session_id"] != app.SessionID {
-			t.Fatalf("%s: tmux 0회·채널 경로·앱 표시여야 함: tmux=%d %s", target, f.calls, out.String())
-		}
-		select {
-		case l := <-lines:
-			if !strings.Contains(l, `"event":"SEND"`) || !strings.Contains(l, "지시 본문") {
-				t.Errorf("알림: %s", l)
-			}
-		case <-time.After(3 * time.Second):
-			t.Fatal("세션이 지시를 받지 못함")
-		}
-	}
-	// 사람이 읽는 출력도 앱 표시
-	var out bytes.Buffer
-	if err := RunSend(context.Background(), &out, nil, st, stateDir, f, []string{"기획서", "둘째"}); err != nil {
-		t.Fatal(err)
-	}
-	<-lines
-	if !strings.Contains(out.String(), "전송 완료 → 기획서 app [WORKING] (채널)") {
-		t.Errorf("출력: %s", out.String())
-	}
-}
-
-// 앱 세션은 tmux 폴백이 없다 — 채널 서버가 없으면 오류로 끝나고 키 입력을 시도하지 않는다.
-func TestRunSendToDetachedWithoutChannelFails(t *testing.T) {
+// 앱 Claude 세션은 tmux 폴백이 없고 채널 수신함도 아직 없다 — 오류로 끝나고 키 입력을 시도하지 않는다.
+// (idle이라 tmux 관문은 통과하는 상태에서도 그렇다.) 사람이 읽는 출력의 대상 표시도 본다.
+func TestRunSendToDetachedClaudeFails(t *testing.T) {
 	t.Setenv("AGENTLAYER_CONFIG", t.TempDir()+"/config.json")
 	stateDir := t.TempDir()
 	st, _ := state.NewStore(stateDir)
@@ -145,37 +71,37 @@ func TestRunSendToDetachedWithoutChannelFails(t *testing.T) {
 	if !strings.Contains(err.Error(), "기획서 전송 실패") {
 		t.Errorf("대상 이름이 보여야 함: %v", err)
 	}
+	// 앱 세션은 pane 수신함이 없으니 채널 후보도 아니다
+	if canClaudeChannel(mkApp("claude", "기획서", "10ec8033-ca55", 4243, state.StateIdle), config.Load(), Delivery{StateDir: stateDir}, "x") {
+		t.Error("앱 Claude 세션은 아직 채널 대상이 아니다")
+	}
 }
 
-// 서버가 잠금은 쥐었는데 집어 가지 않으면(먹통) 지시를 회수하고 오류 — 앱 세션은 tmux로 되돌아갈 곳이 없다.
-func TestRunSendToDetachedChannelNotConsumedFails(t *testing.T) {
+// 앱 세션도 사람이 읽는 send 출력·JSON에 app 위치와 세션 ID가 실린다(코덱스 큐 경로로 확인).
+func TestRunSendDetachedOutputShowsApp(t *testing.T) {
 	t.Setenv("AGENTLAYER_CONFIG", t.TempDir()+"/config.json")
-	old := channelDeliverWait
-	channelDeliverWait = 100 * time.Millisecond
-	defer func() { channelDeliverWait = old }()
 	stateDir := t.TempDir()
 	st, _ := state.NewStore(stateDir)
-	_ = st.Save(mkApp("claude", "기획서", "10ec8033-ca55", 4244, state.StateIdle))
-	inbox := ProcessInbox(stateDir, 4244)
-	if err := os.MkdirAll(inbox, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	lock, err := os.OpenFile(filepath.Join(inbox, ".channel.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		t.Fatal(err)
-	}
+	_ = st.Save(mkApp("codex", "리뷰", "c0dex-thread-0002", 4246, state.StateIdle))
+	old := codexQueueFn
+	codexQueueFn = func(context.Context, string, string, string) error { return nil }
+	defer func() { codexQueueFn = old }()
 	f := &fakeSender{}
 	var out bytes.Buffer
-	err = RunSend(context.Background(), &out, nil, st, stateDir, f, []string{"기획서", "지시"})
-	if err == nil || !strings.Contains(err.Error(), "채널 전송 실패") || f.calls != 0 {
-		t.Fatalf("채널 실패는 오류로 끝나야 함: err=%v tmux=%d", err, f.calls)
+	if err := RunSend(context.Background(), &out, nil, st, stateDir, f, []string{"리뷰", "하나"}); err != nil {
+		t.Fatal(err)
 	}
-	if left, _ := filepath.Glob(filepath.Join(inbox, "pending", "*.json")); len(left) != 0 {
-		t.Errorf("지시를 회수해야 함: %v", left)
+	if !strings.Contains(out.String(), "전송 완료 → 리뷰 app [IDLE] (codex queue)") {
+		t.Errorf("출력: %s", out.String())
+	}
+	out.Reset()
+	if err := RunSend(context.Background(), &out, nil, st, stateDir, f, []string{"--json", "리뷰", "둘"}); err != nil {
+		t.Fatal(err)
+	}
+	var res map[string]any
+	_ = json.Unmarshal(out.Bytes(), &res)
+	if f.calls != 0 || res["where"] != "app" || res["session"] != "리뷰" || res["session_id"] != "c0dex-thread-0002" {
+		t.Errorf("JSON: %s tmux=%d", out.String(), f.calls)
 	}
 }
 
