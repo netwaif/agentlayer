@@ -191,6 +191,13 @@ agentlayer task done VIDEO-07
   지금 프로세스가 뜬 뒤에 만들어졌을 때만 쓴다. 큐가 실패하면 사유를 알리고 tmux 입력으로 되돌아간다.
   출력 끝의 `(codex queue)`, `--json`의 `"via"`가 실제 경로다. 끄려면 설정에 `"codex_queue": false`.
   Claude·Gemini는 예전대로 tmux 입력이다.
+  **코덱스 앱 세션은 세션 ID로 바로 보낸다**: 코덱스 데스크톱 앱에서 연 세션은 훅도 tmux도 없어 `status`에 없지만,
+  `agentlayer send <세션 ID> <메시지>`처럼 세션 ID(UUID 전체 또는 앞자리 8자 이상)를 대상으로 주면 `codex queue --thread <ID>`로
+  바로 들어간다. 앞자리만 주면 rollout 폴더(`~/.codex/sessions`)에서 전체 ID와 작업 폴더를 찾고, 둘 이상 맞으면 후보를 보이고 거부한다.
+  작업 폴더는 `--cwd <폴더>`로 줄 수 있다(없으면 rollout의 cwd). 성공하면 `(codex queue)`·`"via":"queue"`, 실패하면 오류로 끝난다
+  (tmux 폴백 없음). 상태를 모르니 작업 중·승인 대기 관문은 없다. 훅이 세션 ID를 남긴 tmux 코덱스도 같은 방법으로 찾을 수 있다.
+  Claude 데스크톱 앱 세션은 채널·세션 간 메시지를 받지 못해(2026-09-30 실측) 관제·전송 대상이 아니다 — 앱에서는 tmux 세션을
+  `--remote-control`로 본다(`docs/superpowers/plans/2026-09-30-desktop-session-address.md`).
 
 - **채널 서버가 뜬 Claude 세션에는 채널로 보낸다(1.11.0+)**: 직원 폴더에 `claude mcp add -s local agentlayer -- agentlayer channel serve --self`를
   등록하고 세션을 `--dangerously-load-development-channels server:agentlayer`로 띄우면, `send`가 tmux 키 입력 대신 그 세션 전용
