@@ -21,7 +21,7 @@ import (
 
 const channelUsage = `사용법:
   agentlayer channel serve --self [--interval 200ms]
-    직원 세션용 — 이 세션(tmux pane) 전용 수신함을 감시한다. 'agentlayer send'가 tmux 키 입력 대신 여기로 지시를 넣는다.
+    직원 세션용 — 이 세션 전용 수신함(tmux pane, tmux 밖이면 Claude 프로세스 PID)을 감시한다. 'agentlayer send'가 tmux 키 입력 대신 여기로 지시를 넣는다.
     등록: (직원 폴더에서) claude mcp add -s local agentlayer -- agentlayer channel serve --self
   agentlayer channel serve <inbox> [--interval 200ms]
     총괄 세션에 수신함 편지를 Claude Code 채널(MCP 알림)로 밀어 넣는다 — Monitor 폴링 대체.
@@ -57,6 +57,41 @@ func PaneInbox(stateDir, paneID string) string {
 		}
 	}
 	return filepath.Join(stateDir, "inboxes", "p"+id)
+}
+
+// ProcessInbox는 tmux 밖 세션(데스크톱 앱·맨 터미널)의 전용 수신함 경로 — 키는 에이전트 프로세스 PID.
+//
+// 세션 ID가 아니라 PID를 키로 쓰는 이유: 채널 서버는 Claude가 띄운 MCP 자식이라 환경에서 아는 것이 부모 PID뿐이고
+// 세션 ID는 모른다. 상태 저장소에서 부모 PID로 자기 레코드를 찾아 세션 ID 수신함을 쓸 수도 있지만, (1) 훅이 아직
+// 안 돌았을 때(기동 직후) 레코드가 없고 (2) /clear로 세션 ID가 바뀌어도 프로세스와 MCP 서버는 그대로라 수신함이
+// 어긋난다. PID는 훅(레코드 PID)·서버(조상 사슬)·send(레코드 PID)가 조율 없이 같은 값을 얻는다. 세션 ID·이름은
+// send 대상 해석(ResolveTarget)에 쓴다. PID 재사용(재부팅)은 pane 재사용과 같이 purgeStale이 낡은 지시를 치운다.
+func ProcessInbox(stateDir string, pid int) string {
+	if pid <= 0 {
+		return ""
+	}
+	return filepath.Join(stateDir, "inboxes", fmt.Sprintf("pid%d", pid))
+}
+
+// AgentInbox는 레코드의 전용 수신함 — pane이 있으면 pane 수신함, tmux 밖이면 PID 수신함. 좌표가 없으면 빈 값.
+func AgentInbox(stateDir string, a *state.Agent) string {
+	if a == nil {
+		return ""
+	}
+	if !a.Detached() {
+		return PaneInbox(stateDir, a.Tmux.PaneID)
+	}
+	return ProcessInbox(stateDir, a.PID)
+}
+
+// selfProcessFn — 이 서버를 띄운 Claude 프로세스의 PID(조상 사슬에서 가장 가까운 claude). 훅의 detachedSelf와 같은
+// 규칙이라 같은 PID가 나온다. 못 찾으면 0. 테스트가 바꿔 끼운다.
+var selfProcessFn = func() int {
+	pid, _, _, ok := scan.FindAgentProcess(scan.LoadProcTable(), os.Getppid(), "claude")
+	if !ok {
+		return 0
+	}
+	return pid
 }
 
 // DirectiveNotification은 지시 한 건을 채널 알림으로 바꾼다. content = 지시 본문 그대로.
@@ -124,8 +159,8 @@ func SendViaChannel(inbox, from, taskID, text string, now time.Time) error {
 	return errNotConsumed
 }
 
-// purgeStale은 서버가 뜨기 전부터 있던 pending을 quarantine으로 치운다. pane ID는 tmux 서버가 다시 뜨면 재사용되므로
-// 옛 세션 앞으로 남은 지시가 새 세션에 들어가면 안 된다. send는 서버가 살아 있을 때만 넣으므로 기동 시점의 pending은 전부 낡은 것이다.
+// purgeStale은 서버가 뜨기 전부터 있던 pending을 quarantine으로 치운다. pane ID는 tmux 서버가 다시 뜨면, PID는 재부팅 뒤
+// 재사용되므로 옛 세션 앞으로 남은 지시가 새 세션에 들어가면 안 된다. send는 서버가 살아 있을 때만 넣으므로 기동 시점의 pending은 전부 낡은 것이다.
 func purgeStale(inbox string) int {
 	files, _ := filepath.Glob(filepath.Join(inbox, "pending", "*.json"))
 	if len(files) == 0 {
@@ -243,7 +278,11 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 	self := inbox == "--self"
 	// pane 수신함 — 직원(--self)은 이것만, 총괄(serve <inbox>)도 tmux pane 안이면 함께 쥔다. 총괄 메인·총괄 스레드 세션에도
 	// `send`가 채널로 들어가게(tmux 붙여넣기는 이미지 경로가 든 여러 줄에서 접힌 채 제출되지 않는다, 2026-09-30).
+	// tmux 밖(데스크톱 앱·맨 터미널)이면 Claude 프로세스 PID 수신함이 pane 수신함 자리를 대신한다(ProcessInbox 주석).
 	pane := PaneInbox(stateDir, os.Getenv("TMUX_PANE"))
+	if pane == "" && os.Getenv("TMUX_PANE") == "" {
+		pane = ProcessInbox(stateDir, selfProcessFn())
+	}
 	if self {
 		inbox = pane
 	}
@@ -265,8 +304,8 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 	}
 	logf := func(f string, a ...any) { fmt.Fprintf(stderr, "agentlayer channel: "+f+"\n", a...) }
 	if self && inbox == "" {
-		// tmux 밖 세션 — 받을 주소가 없다. 핸드셰이크만 받고 조용히 머문다(send는 tmux pane만 대상으로 한다).
-		logf("tmux pane이 아니라 수신함 없이 뜹니다(TMUX_PANE 없음)")
+		// 좌표가 없다 — tmux pane도 아니고 조상에서 claude 프로세스도 못 찾았다. 핸드셰이크만 받고 조용히 머문다.
+		logf("tmux pane도 아니고 Claude 프로세스도 찾지 못해 수신함 없이 뜹니다(TMUX_PANE 없음)")
 		return servePassive(ctx, stdin, stdout, version, selfInstructions, logf)
 	}
 	if !channelEnabledFn() {
@@ -355,7 +394,7 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 		}
 		if pane != "" {
 			if err := os.MkdirAll(pane, 0o700); err != nil {
-				logf("pane 수신함 만들기 실패(%s): %v — 지시는 tmux 입력으로 온다", pane, err)
+				logf("세션 수신함 만들기 실패(%s): %v — 지시는 tmux 입력으로 온다", pane, err)
 			} else {
 				go watchDirectives(pane)
 			}
