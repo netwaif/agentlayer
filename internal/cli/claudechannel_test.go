@@ -54,12 +54,8 @@ func startSelfServer(t *testing.T, stateDir, pane string) (lines chan string, st
 		}
 	}()
 	<-lines // initialize 응답
-	box := PaneInbox(stateDir, pane)
-	if pane == "" { // tmux 밖 — 서버는 자기 Claude 프로세스(selfProcessFn, 테스트가 끼운 값)의 PID 수신함을 쥔다
-		box = ProcessInbox(stateDir, selfProcessFn())
-	}
 	deadline := time.Now().Add(3 * time.Second)
-	for !ChannelLive(box) {
+	for !ChannelLive(PaneInbox(stateDir, pane)) {
 		if time.Now().After(deadline) {
 			t.Fatal("채널 서버가 수신함을 잡지 못함")
 		}
