@@ -15,7 +15,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-09-30 23:00 마감** — agentlayer **v1.12.0** 릴리즈·설치(앱 세션 수신 `inbox wait/open/close`, `--remote` 원격 폴링, 코덱스 세션 ID 직송, 업무 없는 원격 직송). baton(앱 간 대화 연결) 관계도의 모든 방향 실기 통과: Claude앱↔코덱스앱, Claude앱↔헤르메스(카드·첨부·결과), 헤르메스→디스코드 게시. 미실기 하나: 디스코드→헤르메스→Claude 편지(경로 동일, 대표님 VPS는 편지함을 총괄과 분리해야 함). baton 플러그인 골격 로컬(`~/VSCodeWorkspace/baton` fd530af, 원격 없음). 클라우드 세션에 `send --from` 작업 지시 보냄(승인 창 뜰 수 있음, 원문 `docs/superpowers/plans/2026-09-30-cloud-prompt-send-from.md`). 사용자 만족 확인("이게 다 된다는거지? 그러면 만족함").
+**2026-10-01 00:10 마감** — 9/30 23:00 마감 뒤 컴퓨터가 다운돼 재시작. 이 레포는 변경 없음(main fb668c9 기준 문서만). 재부팅 복구: 봇 13개 LaunchAgent 자동 기동 → 죽은 4개 botstart로 기동 → 11개 Claude 봇을 재부팅 전 세션 ID로 `--resume` 교체(마감 못 한 어젯밤 맥락 복구) → 총괄 스레드 t871647 `bot-thread ensure`로 복원. 모델은 사용자가 Opus 5.5로 정리. 개발 상태는 9/30 23:00 마감 그대로: agentlayer v1.12.0 릴리즈, baton 전 방향 실기 통과, 클라우드에 `send --from` 지시 보냄(승인 대기 가능). 사용자 몫: 스킬 문구 확정·`netwaif/baton` 공개.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
@@ -329,6 +329,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-30 **헤르메스 양방향·설치 범위 정정(사용자 지적 3건)**: ① baton 설치는 Claude(앱)에만 — 코덱스·헤르메스는 메시지 본문에 적힌 `agentlayer send al-xxxxxx "…"` 명령 한 줄을 셸로 치기만 함(스킬 불필요, 같은 맥 바이너리) ② 헤르메스 회신은 `send`가 아니라 **칸반**(카드 결과·편지) — 내가 "VPS는 한 방향"이라 한 것은 틀림, ssh·로컬은 전송 수단만 다름 → `inbox wait --remote <이름>:<카드>`(531dff9) 추가로 코덱스와 같은 양방향, 실기 통과 ③ **윈도우**: brew·릴리즈 바이너리가 맥/리눅스만이라 "문제 없다"고 못 함 — 다음 단계 0-⑥으로 미확인 위험 명시. 디스코드는 헤르메스→디스코드 게시(확인됨)와 디스코드→헤르메스→Claude(같은 맥 헤르메스 필요, 미실기) 두 방향.
 - 2026-09-30 **코덱스 실기·v1.12.0 릴리즈**: `inbox open --name codextest`→`al-1a8bc5`, `send --json <UUID>`(cwd `~/VSCodeWorkspace/codex-test`를 rollout에서 찾음, via=queue) → 코덱스 앱이 본문의 `agentlayer send al-1a8bc5 "수신 확인 — 코덱스 앱 세션"`을 실행 → 연결 수신함 도착(`from: user` — tmux 밖 발신자 이름 없음, ④' 과제). 네 경로 실기 완료 후 v1.12.0 태그·goreleaser(자산 4종·cask)·설치. 사용자 지시: "가능하면 추가 구현도 클라우드 세션에 넘겨, 여기서 수정하는 게 맞을 때만 여기서" — 오늘 연결 모드·원격 폴링을 여기서 짠 건 그 원칙 위반(토큰 낭비 지적). 사용자 확인: 코덱스·헤르메스에서 사용자는 명령을 안 침(에이전트가 본문의 한 줄을 실행), 스킬은 Claude 쪽 하나.
 - 2026-09-30 **마감 정리**: 관계도 확정 — Claude앱 중심, 코덱스·헤르메스는 각각 Claude와 양방향, 헤르메스↔디스코드는 헤르메스 자체 봇 대화(처음 한 방향으로 그려 지적받음, 전부 양방향이 맞음). 디스코드→Claude는 뺀 것이 아니라 VPS 편지함 분리 뒤 실기. 클라우드 세션에 `send --from` 지시(회신 from "user" 문제). 시험 흔적: `~/ai-folder/dev/app-session-test`(채널 서버 local 등록), 서버 칸반 카드 t_ed9ef304·t_4cc486c1(done)·t_7fad3a7b(닫음), `~/.local/state/agentlayer/inboxes/a58666·a97425`.
+- 2026-10-01 **다운 뒤 복구 절차(재사용 가치)**: ① `botstart.py list` → ❌만 `start` ② Claude 봇은 빈 세션으로 뜨므로 마감 못 한 날엔 **재부팅 전 세션으로 resume**: 봇 폴더의 `~/.claude/projects/<폴더 인코딩>/*.jsonl` 중 부팅 시각(`sysctl -n kern.boottime`, `^\{ sec = ` 파싱) 이전 최신 파일명 = 세션 ID; plist ProgramArguments 마지막 인자(`zsh -lc '…exec bot-up …'`)의 **작은따옴표 안쪽 끝**에 ` --resume <ID>`를 넣어 `tmux respawn-pane -k -t <세션>:0.0`(따옴표 밖에 붙이면 zsh 인자로 버려짐 — 첫 시도 실패 원인). bot-restart는 추가 인자를 못 받고, `BOT_RESTART_DRY_RUN`은 예약 래퍼를 안 거쳐 실제 재시작이 감 ③ 스레드 창은 `bot-thread ensure <봇> <스레드ID>`(threads.json의 session_id로 resume). 후보 개선(클라우드 위임 목록에 추가 가능): bot-restart `--resume <ID|last>` 옵션, 대화 상태(resume-all)가 빈 세션을 감지해 resume 제안. 상태 저장소 dead 기록은 재기동이 덮어 세션 ID 복원에 못 씀.
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
