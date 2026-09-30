@@ -15,7 +15,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-09-30 00:30 마감** — agentlayer **v1.11.1**(f786b92)·folder-bot **0.1.24**·ai-company **0.2.12** 릴리즈·이 맥 적용 완료, 세 레포 모두 푸시됨. 총괄→직원 지시는 코덱스=`codex queue`, Claude=채널(실회사 검증 통과), agy=tmux. tmux 입력이 남은 곳 세 군데와 미착수 항목은 아래. 코덱스 데스크톱 앱 세션과 이 터미널 세션 사이 메시지 왕복도 실측 확인.
+**2026-09-30 14:20 체크포인트** — 촬영 중 tmux 서버가 죽어 봇 13개·orchestrator·총괄 스레드(t871647) 전부 복구(모델은 사용자가 Opus 5.5로 통일). 그 직후 스레드 첨부 이미지 미전달을 구조적으로 고침: agentlayer **v1.11.2**(fd36de5, 총괄 모드 채널 서버도 pane 수신함 겸용)·folder-bot **0.1.25**(9e79687, 라우팅 훅이 `agentlayer send`로 전달). 이 맥에 설치·총괄 메인·스레드 재기동·수신함 잠금 확인까지 끝. **미푸시**(태그 v1.11.2·v0.1.25 로컬만). 사용자 실기(스레드에 이미지 전송) 대기.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
@@ -318,6 +318,8 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-30 **실회사 적용·검증**: `companyctl install`이 Claude 직원 8개 폴더에 채널 등록·직원 봇 7개에 플래그(claude-discord는 bots.json 밖이라 등록만). 봇 8개 재시작 뒤 직원 7개 pane 수신함 생성 확인, "이어서하자"도 채널로 전달. CHANNEL-TEST-1: 총괄 → 스레드 열기 → ensure(확인창 자동 통과) → `send` 출력 "(채널)" → crosscheck 스레드 세션이 `CHANNEL-OK` → DONE 보고 → `task done`.
 
 - 2026-09-30 **앱↔터미널 왕복 실측(사용자 시험)**: ① 이 세션 → 코덱스 **데스크톱 앱** 세션(`01a0eda2-3ff6-7410-9a5b-ce4a84f12c88`, 폴더 `~/VSCodeWorkspace/codex-test`)에 `codex queue --thread`로 전송, "수신 확인" 응답 — 세션 번호만으로 앱 세션에도 들어간다. ② 그 코덱스 앱 세션 → 이 세션(`agentlayer send agentlayer-dev …`) 도착 — 이 세션은 채널 플래그 없이 떠 있어 tmux 입력으로 들어왔고 사용자 입력과 구분되지 않음. 사용자: "내가 이걸 구상한 거였음".
+- 2026-09-30 **tmux 서버 사망 복구**: 촬영(`TMUX_TMPDIR=/tmp/tdemo` 격리 데모) 중 기본 소켓 서버가 죽어 봇 세션 전부 dead. `botstart.py start <봇>` 13개 순차(각 ~20초, bridge 포함) ✅, orchestrator는 KeepAlive 없는 LaunchAgent라 `launchctl kickstart gui/501/com.discord-multiagent.orchestrator`. 총괄 스레드 창은 bot-restart가 안 살림 → `bot-thread ensure company <thread_id>`가 threads.json의 session_id로 `--resume`(맥락 유지). 재정박 신호는 6개가 /model 입력과 겹쳐 씹혀 SendMessage로 재전송. 정확한 사인은 미확정(이력상 격리 없는 pane의 kill-server 추정). 실수: 총괄 메인이 [WAIT](승인창)인데 `--restart`해 승인 대기 1건이 사라짐 — 재시작 전 상태 확인 규칙을 어김.
+- 2026-09-30 **스레드 첨부 이미지 미전달 → 채널 전달로 구조 수정(v1.11.2·folder-bot 0.1.25)**: 증상 — 첨부가 든 스레드 메시지가 pane에 "[Pasted text #16 +4 lines]"로 접힌 채 Enter 4회에도 미제출(텍스트만은 정상). 원인 — 총괄 폴더의 채널 서버 등록이 `channel serve <회사 수신함>`(총괄 모드)이라 스레드 세션의 서버는 총괄 메인이 쥔 잠금만 기다리며 pane 수신함(`inboxes/p<N>`)을 안 만들고, `send`가 채널을 못 써 tmux 붙여넣기로 떨어짐(직원 봇 `--self`는 해당 없음). 그런데 라우팅 훅은 애초에 `send`가 아니라 `bot-thread deliver`(붙여넣기)를 썼음(0.1.24 README의 "send가 채널로" 문구는 훅에는 적용 안 됐던 것). 수정 ① agentlayer `RunChannel`: 총괄 모드도 TMUX_PANE이 있으면 pane 수신함을 함께 쥐고(`watchDirectives`), 지침문은 편지+SEND 합침, 직원 지침에 디스코드 원문 처리 한 줄. 회사 수신함은 여전히 하나만. → 총괄 메인에게 `send`도 이제 채널(다음 단계 0-①은 해소, 단 스레드 창이 있으면 `company-bot:2.1.285`처럼 창 명시 필요). ② folder-bot `bot-thread-route.sh`: `agentlayer send --json <세션>:t<6자리> -` 우선, 거부·실패 시에만 deliver 폴백, `BOT_THREAD_AGENTLAYER` 테스트 override, thread-route.log에 via 기록. 검증 — Go `TestRunChannelInboxModeAlsoServesPaneInbox`, 셸 `tests/test_bot_thread_route_send.sh`, pytest 92 통과. 실기 — 총괄 재시작·스레드 gc+ensure 뒤 p2·p21 잠금 잡힘 확인. Claude Code 내부(붙여넣기의 이미지 경로 처리)는 조사 안 함(분류기 차단).
 
 ## 파일 흔적
 <!-- 누적. 만든/고친 파일의 경로를 그대로 적는다. "설정 파일 고침" 같은 산문 금지 -->
@@ -530,3 +532,5 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-30(folder-bot v0.1.24 9498a82): `plugins/folder-bot/skills/configure-bot/assets/bot-thread.sh`(DEV_CHANNELS·dev_flag·확인창 통과 뒤 준비 판정), 신규 `tests/test_bot_thread_devchannel.sh`, `README.md`.
 - 2026-09-30(ai-company v0.2.12 967ab01+문서 커밋): `companyctl.py`(SELF_CHANNEL·register_employee_channel·employee_bot_of·set_bot_dev_channel·doctor 직원 채널 점검·MIN 1.11.0), `tests/conftest.py`(가짜 claude 폴더별 등록), `tests/test_companyctl.py`(+3, 68 통과), `README.md`·`SKILL.md`·`plugin.json`.
 - 2026-09-30 시스템 상태: `~/.claude.json`에 직원 8개 폴더 local MCP `agentlayer`(channel serve --self), `~/.config/folder-bot/bots.json` 직원 봇 7개 dev_channels 추가(백업 `bots.json.bak-20260929b`), LaunchAgent plist 재생성, `~/.local/bin/bot-thread` 0.1.24판, 봇 8개 23:54~23:59 재시작, `~/.local/state/agentlayer/inboxes/p*` 생성.
+- 2026-09-30(v1.11.2 fd36de5): `internal/cli/channelcmd.go`(RunChannel pane 수신함 겸용·`watchDirectives`·지침 합침, `selfInstructions` 디스코드 문장), `internal/cli/channelcmd_test.go`(`TestRunChannelInboxModeAlsoServesPaneInbox`), `README.md`(채널 절 1.11.2 문단). 설치: `go build -ldflags "-X main.version=1.11.2 …"` → `~/.local/bin/agentlayer`.
+- 2026-09-30(folder-bot v0.1.25 9e79687, `~/VSCodeWorkspace/folder-bot`): `plugins/folder-bot/skills/configure-bot/assets/bot-thread-route.sh`(SESSION 추출·`send_via_agentlayer`·deliver 폴백), `tests/test_bot_thread_route_send.sh`(신규), `docs/thread-live-view.md`, `README.md`, `plugin.json`·`marketplace.json` 0.1.25. 설치본 `~/.local/bin/bot-thread-route` 직접 갱신(마켓플레이스 클론 `~/.claude/plugins/marketplaces/folder-bot`은 아직 0.1.24 — 푸시 뒤 플러그인 업데이트 필요).
