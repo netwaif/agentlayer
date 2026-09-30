@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/netwaif/agentlayer/internal/config"
+	"github.com/netwaif/agentlayer/internal/hookcmd"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/tmuxx"
 )
@@ -64,7 +65,7 @@ func Targets(agents []*state.Agent, selfPane string, except []string) []*state.A
 		if selfPane != "" && a.Tmux.PaneID == selfPane {
 			continue
 		}
-		if skip[a.Tmux.Session] {
+		if skip[a.Label()] {
 			continue
 		}
 		out = append(out, a)
@@ -103,6 +104,16 @@ func RunAll(w io.Writer, st *state.Store, tm tmuxx.Tmux, message string, o *AllO
 		return err
 	}
 	targets := Targets(agents, tmuxx.CurrentPaneID(), o.except)
+	// tmux 밖(앱) 세션 안에서 부른 경우 — pane이 없어 Targets의 자기 pane 제외에 안 걸리므로 레코드로 자신을 뺀다.
+	if me := hookcmd.SelfAgent(os.Getenv, agents); me != nil && me.Detached() {
+		kept := targets[:0]
+		for _, a := range targets {
+			if a.ID != me.ID {
+				kept = append(kept, a)
+			}
+		}
+		targets = kept
+	}
 	if handoffOnly {
 		var kept []*state.Agent
 		for _, a := range targets {
@@ -125,7 +136,7 @@ func RunAll(w io.Writer, st *state.Store, tm tmuxx.Tmux, message string, o *AllO
 		if a.State == state.StateWorking {
 			note = "  ⚠ 작업 중 — 지시가 현재 턴 뒤에 처리됩니다"
 		}
-		fmt.Fprintf(w, "  %-7s %-20s %s%s\n", a.Kind, a.Tmux.Session, ShortenHome(a.CWD), note)
+		fmt.Fprintf(w, "  %-7s %-20s %s%s\n", a.Kind, a.Label(), ShortenHome(a.CWD), note)
 	}
 	if !o.yes {
 		fmt.Fprint(w, "진행할까요? [y/N] ")
@@ -145,7 +156,7 @@ func RunAll(w io.Writer, st *state.Store, tm tmuxx.Tmux, message string, o *AllO
 			a = &c
 		}
 		if _, _, err := deliver(context.Background(), a, cfg, tm, message, true, Delivery{StateDir: st.Dir, From: senderName(agents)}); err != nil {
-			fmt.Fprintf(w, "  ✖ %s 전송 실패: %v\n", a.Tmux.Session, err)
+			fmt.Fprintf(w, "  ✖ %s 전송 실패: %v\n", a.Label(), err)
 			continue
 		}
 		sent = append(sent, a)
@@ -207,7 +218,7 @@ func watchDone(w io.Writer, st *state.Store, sent []*state.Agent, sentAt time.Ti
 			}
 			// 전송 이후에 끝난 턴만 인정
 			if cur.State == state.StateDoneUnread && cur.StateSince.After(sentAt) {
-				fmt.Fprintf(w, "  ✔ %-20s 완료 (%s)\n", a.Tmux.Session, Since(sentAt, time.Now()))
+				fmt.Fprintf(w, "  ✔ %-20s 완료 (%s)\n", a.Label(), Since(sentAt, time.Now()))
 				delete(pending, id)
 			}
 		}
@@ -222,7 +233,7 @@ func watchDone(w io.Writer, st *state.Store, sent []*state.Agent, sentAt time.Ti
 		if a.Kind == "codex" {
 			reason = "codex는 notify 활성화 전이면 완료가 안 잡힙니다 — 직접 확인 필요"
 		}
-		fmt.Fprintf(w, "  ? %-20s %s\n", a.Tmux.Session, reason)
+		fmt.Fprintf(w, "  ? %-20s %s\n", a.Label(), reason)
 	}
 	return nil
 }

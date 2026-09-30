@@ -12,6 +12,7 @@ import (
 
 	"github.com/netwaif/agentlayer/internal/board"
 	"github.com/netwaif/agentlayer/internal/config"
+	"github.com/netwaif/agentlayer/internal/hookcmd"
 	"github.com/netwaif/agentlayer/internal/remote"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
@@ -22,8 +23,14 @@ type TextSender interface {
 	SendText(paneID, text string) error
 }
 
-// ResolveTarget은 "<세션>" 또는 "<세션>:<창이름>"을 산 pane 하나로 해석한다.
-// 창 이름은 folder-bot 스레드 창(t+6자리)을 가리키는 용도. 후보가 둘 이상이면 창 명시를 요구한다.
+// minSessionIDPrefix — 세션 ID 접두로 대상을 찾을 때 요구하는 최소 길이. 짧은 접두가 우연히 맞는 일을 막는다.
+const minSessionIDPrefix = 4
+
+// ResolveTarget은 대상 지정을 에이전트 하나로 해석한다. 순서:
+//  1. "<세션>" 또는 "<세션>:<창이름>" — tmux 세션 이름(예전 규칙). 창 이름은 folder-bot 스레드 창(t+6자리)을 가리키는 용도.
+//     같은 세션에 pane이 둘 이상이면 창 명시를 요구한다.
+//  2. tmux 세션에 없으면 `-n` 이름(정확히 일치)이나 세션 ID(앞자리 접두, 4자 이상) — tmux 밖(앱) 세션이 주 대상이지만
+//     pane 세션도 세션 ID로 찾을 수 있다. 산 레코드를 죽은 레코드보다 먼저 본다. 후보가 둘 이상이면 보여 주고 거부한다.
 func ResolveTarget(agents []*state.Agent, spec string) (*state.Agent, error) {
 	session, window := spec, ""
 	if i := strings.LastIndex(spec, ":"); i > 0 {
@@ -39,6 +46,16 @@ func ResolveTarget(agents []*state.Agent, spec string) (*state.Agent, error) {
 		}
 		found = append(found, a)
 	}
+	if len(found) == 0 && window == "" {
+		found = matchByNameOrSessionID(agents, spec)
+		if len(found) > 1 {
+			names := make([]string, 0, len(found))
+			for _, a := range found {
+				names = append(names, TargetLabel(a))
+			}
+			return nil, fmt.Errorf("%q에 맞는 세션이 둘 이상입니다 — 더 긴 세션 ID나 이름을 쓰세요: %s", spec, strings.Join(names, ", "))
+		}
+	}
 	switch len(found) {
 	case 0:
 		return nil, fmt.Errorf("세션 %q을 찾지 못했습니다 ('agentlayer status'로 이름 확인)", spec)
@@ -50,6 +67,39 @@ func ResolveTarget(agents []*state.Agent, spec string) (*state.Agent, error) {
 		names = append(names, fmt.Sprintf("%s:%s(%s)", a.Tmux.Session, a.Tmux.WindowName, a.Tmux.PaneID))
 	}
 	return nil, fmt.Errorf("세션 %q에 pane이 둘 이상입니다 — 창을 명시하세요: %s", session, strings.Join(names, ", "))
+}
+
+// matchByNameOrSessionID — `-n` 이름 정확 일치 또는 세션 ID 접두 일치. 산 레코드가 하나라도 있으면 죽은 것은 뺀다.
+func matchByNameOrSessionID(agents []*state.Agent, spec string) []*state.Agent {
+	var live, dead []*state.Agent
+	for _, a := range agents {
+		byName := a.Name != "" && a.Name == spec
+		byID := len(spec) >= minSessionIDPrefix && a.SessionID != "" && strings.HasPrefix(a.SessionID, spec)
+		if !byName && !byID {
+			continue
+		}
+		if a.State == state.StateDead {
+			dead = append(dead, a)
+		} else {
+			live = append(live, a)
+		}
+	}
+	if len(live) > 0 {
+		return live
+	}
+	return dead
+}
+
+// TargetLabel은 후보 목록·전송 결과에 쓰는 한 줄 주소 — pane 세션은 "세션:창(%pane)", tmux 밖 세션은 "이름 (app, 세션 <앞 8자리>)".
+func TargetLabel(a *state.Agent) string {
+	if !a.Detached() {
+		return fmt.Sprintf("%s:%s(%s)", a.Tmux.Session, a.Tmux.WindowName, a.Tmux.PaneID)
+	}
+	sid := state.ShortSessionID(a.SessionID)
+	if sid == "" {
+		sid = "?"
+	}
+	return fmt.Sprintf("%s (app, 세션 %s)", a.Label(), sid)
 }
 
 // SendGate — idle·DONE만 보낸다. WORK는 현재 턴 뒤에 처리되고 WAIT(승인창)는 입력이 승인창을
@@ -136,15 +186,10 @@ func LogExcerpt(msg string) string {
 	return fmt.Sprintf("%s (%d자)", flat, n)
 }
 
-// senderName은 이 명령을 부른 세션의 이름(자기 pane의 에이전트 레코드). 못 찾으면 "user".
+// senderName은 이 명령을 부른 세션의 이름(자기 pane, tmux 밖이면 자기 프로세스의 레코드). 못 찾으면 "user".
 func senderName(agents []*state.Agent) string {
-	pane := os.Getenv("TMUX_PANE")
-	if pane != "" {
-		for _, a := range agents {
-			if a != nil && a.Tmux.PaneID == pane && a.State != state.StateDead {
-				return a.Tmux.Session
-			}
-		}
+	if me := hookcmd.SelfAgent(os.Getenv, agents); me != nil {
+		return me.Label()
 	}
 	return "user"
 }
@@ -203,11 +248,11 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 	}
 	// 코덱스 큐·Claude 채널은 작업 중에도 안전하다(현재 턴 뒤에 처리) — tmux 관문에 걸려도 보낸다. 승인 대기는 제외.
 	if !ok && !CanBypassGate(a, cfg, d, message) {
-		return fmt.Errorf("%s(%s): %s", a.Tmux.Session, a.State, reason)
+		return fmt.Errorf("%s(%s): %s", a.Label(), a.State, reason)
 	}
 	via, qwarn, err := deliver(ctx, a, cfg, tm, message, ok, d)
 	if err != nil {
-		return fmt.Errorf("%s 전송 실패: %w", a.Tmux.Session, err)
+		return fmt.Errorf("%s 전송 실패: %w", a.Label(), err)
 	}
 	if via == "queue" || via == "channel" {
 		reason = ""
@@ -242,8 +287,8 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 		}
 	}
 	if o.JSON {
-		return json.NewEncoder(w).Encode(map[string]any{"session": a.Tmux.Session, "window": a.Tmux.WindowName,
-			"pane": a.Tmux.PaneID, "state": a.State, "sent": true, "via": via})
+		return json.NewEncoder(w).Encode(map[string]any{"session": a.Label(), "window": a.Tmux.WindowName,
+			"pane": a.Tmux.PaneID, "session_id": a.SessionID, "where": a.Where(), "state": a.State, "sent": true, "via": via})
 	}
 	note := ""
 	if reason != "" {
@@ -255,6 +300,10 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 	case "channel":
 		note = " (채널)" + note
 	}
-	fmt.Fprintf(w, "전송 완료 → %s %s [%s]%s\n", a.Tmux.Session, a.Tmux.PaneID, a.State, note)
+	addr := a.Tmux.PaneID
+	if a.Detached() {
+		addr = "app"
+	}
+	fmt.Fprintf(w, "전송 완료 → %s %s [%s]%s\n", a.Label(), addr, a.State, note)
 	return nil
 }

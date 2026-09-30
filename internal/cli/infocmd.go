@@ -25,11 +25,7 @@ type InfoData struct {
 // TUI와 CLI가 같은 내용을 쓴다 (색은 TUI가 자체 처리).
 func RenderInfo(w io.Writer, d InfoData, now time.Time) {
 	a := d.Agent
-	name := a.Tmux.Session
-	if name == "" {
-		name = a.ID
-	}
-	fmt.Fprintf(w, "%s  %s\n", name, stateLabel(a, now))
+	fmt.Fprintf(w, "%s  %s\n", a.Label(), stateLabel(a, now))
 
 	fmt.Fprintf(w, "  폴더       %s\n", ShortenHome(a.CWD))
 	engine := a.Kind
@@ -47,7 +43,11 @@ func RenderInfo(w io.Writer, d InfoData, now time.Time) {
 	if d.Branch != "" {
 		fmt.Fprintf(w, "  브랜치     ⎇ %s (worktree)\n", d.Branch)
 	}
-	fmt.Fprintf(w, "  tmux       %s:%d %s (pid %d)\n", a.Tmux.Session, a.Tmux.Window, a.Tmux.PaneID, a.PID)
+	if a.Detached() {
+		fmt.Fprintf(w, "  위치       app — tmux 밖 세션 (pid %d)\n", a.PID)
+	} else {
+		fmt.Fprintf(w, "  tmux       %s:%d %s (pid %d)\n", a.Tmux.Session, a.Tmux.Window, a.Tmux.PaneID, a.PID)
+	}
 
 	if d.Wiring.BotName != "" {
 		fmt.Fprintf(w, "  folder-bot %s (engine %s)\n", d.Wiring.BotName, d.Wiring.Engine)
@@ -114,12 +114,15 @@ func shortSession(id string) string {
 	return id[:8] + "…"
 }
 
-// FindAgent는 세션 이름 또는 ID로 에이전트를 찾는다.
+// FindAgent는 세션 이름 또는 ID로 에이전트를 찾는다. 없으면 `-n` 이름·세션 ID 접두(send와 같은 규칙, 유일할 때만).
 func FindAgent(agents []*state.Agent, key string) *state.Agent {
 	for _, a := range agents {
 		if a.ID == key || a.Tmux.Session == key {
 			return a
 		}
+	}
+	if found := matchByNameOrSessionID(agents, key); len(found) == 1 {
+		return found[0]
 	}
 	return nil
 }

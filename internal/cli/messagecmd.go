@@ -51,24 +51,19 @@ func taskMessage(w io.Writer, stdin io.Reader, st *state.Store, stateDir, compan
 	if strings.TrimSpace(text) == "" {
 		return errors.New("본문이 비었습니다")
 	}
-	pane := hookcmd.PaneFromEnv(env)
-	if pane == "" {
-		return errors.New("tmux pane 밖에서는 보낼 수 없습니다 (직원 세션 안에서 실행하세요)")
-	}
 	agents, err := st.List()
 	if err != nil {
 		return err
 	}
-	var me *state.Agent
-	for _, a := range agents {
-		if a.Tmux.PaneID == pane {
-			me = a
-			break
-		}
+	// 나는 누구인가 — pane 안이면 pane 레코드, tmux 밖(앱)이면 프로세스 레코드(훅과 같은 규칙).
+	pane := hookcmd.PaneFromEnv(env)
+	me := hookcmd.SelfAgent(env, agents)
+	if pane == "" && me == nil {
+		return errors.New("tmux pane 밖이고 관제 기록도 없는 세션에서는 보낼 수 없습니다 (직원 세션 안에서 실행하세요)")
 	}
 	from := "pane-" + strings.TrimPrefix(pane, "%")
 	if me != nil {
-		from = me.Tmux.Session
+		from = me.Label()
 	}
 	// inbox: 이 세션에 등록된 그 업무 → 등록의 inbox(+로그). 아니면 회사 루트(설정 → 등록 inbox들 → 기억된 루트).
 	inbox, taskDir := "", ""
