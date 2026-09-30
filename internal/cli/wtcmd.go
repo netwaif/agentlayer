@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -136,11 +137,24 @@ func RunWT(w io.Writer, stateDir string, st *state.Store, tm tmuxx.Tmux, args []
 		if err != nil {
 			return err
 		}
-		n, err := wt.SendComments(stateDir, task, st, tm)
+		agents, _ := st.List()
+		lastVia := ""
+		n, err := wt.SendComments(stateDir, task, st, func(a *state.Agent, text string) error {
+			via, warn, err := DeliverTo(context.Background(), stateDir, agents, a, tm, text)
+			if warn != "" {
+				fmt.Fprintln(w, "  ⚠ "+warn)
+			}
+			lastVia = via
+			return err
+		})
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "코멘트 %d건을 에이전트에게 보냈습니다.\n", n)
+		note := ""
+		if lastVia != "" && lastVia != "tmux" {
+			note = " (" + lastVia + ")"
+		}
+		fmt.Fprintf(w, "코멘트 %d건을 에이전트에게 보냈습니다.%s\n", n, note)
 		return nil
 
 	case "accept-prompts": // 내부용 — wt new가 분리 실행하는 기동 질문 감시자

@@ -2,6 +2,7 @@ package wt
 
 import (
 	"bytes"
+	"github.com/netwaif/agentlayer/internal/state"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,5 +79,31 @@ func TestReviewRoundTrip(t *testing.T) {
 	inst := BuildInstruction("t", comments)
 	if !strings.Contains(inst, "2건") || !strings.Contains(inst, "상수로") || strings.Contains(inst, "\n") {
 		t.Errorf("지시 문단은 한 줄: %q", inst)
+	}
+}
+
+// wt send는 pane에 직접 치지 않고 주입된 전송기(cli의 채널·큐·tmux 폴백 공통 경로)로 보낸다 — 전송 규칙을 한 곳으로(2026-09-30).
+func TestSendCommentsUsesInjectedSender(t *testing.T) {
+	stateDir := t.TempDir()
+	wtPath := filepath.Join(t.TempDir(), "wt")
+	if err := SaveMeta(stateDir, &Meta{Task: "t", Path: wtPath, Agent: "claude"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(ReviewPath(stateDir, "t")), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ReviewPath(stateDir, "t"), []byte("+foo\n#> 이름 바꿔\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := state.NewStore(stateDir)
+	_ = st.Save(&state.Agent{ID: "claude-9", Kind: "claude", CWD: wtPath, State: state.StateIdle, Tmux: state.TmuxRef{Session: "w", PaneID: "%9"}})
+	var gotAgent *state.Agent
+	var gotText string
+	n, err := SendComments(stateDir, "t", st, func(a *state.Agent, text string) error { gotAgent, gotText = a, text; return nil })
+	if err != nil || n != 1 {
+		t.Fatalf("n=%d err=%v", n, err)
+	}
+	if gotAgent == nil || gotAgent.Tmux.PaneID != "%9" || !strings.Contains(gotText, "이름 바꿔") {
+		t.Errorf("전송기에 대상 에이전트와 지시가 가야 함: %+v %q", gotAgent, gotText)
 	}
 }

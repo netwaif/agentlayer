@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/netwaif/agentlayer/internal/state"
-	"github.com/netwaif/agentlayer/internal/tmuxx"
 )
 
 // 코멘트 마커. diff의 어느 줄 아래든 이 접두사로 코멘트를 적으면
@@ -92,9 +91,9 @@ func BuildInstruction(task string, comments []Comment) string {
 	return b.String()
 }
 
-// SendComments는 태스크 에이전트의 pane에 지시를 입력한다.
-// pane은 상태 저장소에서 worktree 경로(cwd)로 찾는다.
-func SendComments(stateDir, task string, st *state.Store, tm tmuxx.Tmux) (int, error) {
+// SendComments는 태스크 에이전트에게 코멘트 지시를 보낸다. 대상은 상태 저장소에서 worktree 경로(cwd)로 찾고,
+// 실제 전송은 주입된 send가 한다 — cli가 채널·큐·tmux 폴백의 공통 규칙(DeliverTo)을 넘긴다. 이 패키지는 pane에 직접 치지 않는다.
+func SendComments(stateDir, task string, st *state.Store, send func(*state.Agent, string) error) (int, error) {
 	m, err := LoadMeta(stateDir, task)
 	if err != nil {
 		return 0, err
@@ -120,7 +119,7 @@ func SendComments(stateDir, task string, st *state.Store, tm tmuxx.Tmux) (int, e
 	if target == nil {
 		return 0, fmt.Errorf("worktree %s에서 실행 중인 에이전트를 못 찾았습니다", m.Path)
 	}
-	if err := tm.SendText(target.Tmux.PaneID, BuildInstruction(task, comments)); err != nil {
+	if err := send(target, BuildInstruction(task, comments)); err != nil {
 		return 0, err
 	}
 	return len(comments), nil

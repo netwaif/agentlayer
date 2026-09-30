@@ -155,6 +155,14 @@ func CanBypassGate(a *state.Agent, cfg *config.Config, d Delivery, message strin
 	return canCodexQueue(a, cfg) || canClaudeChannel(a, cfg, d, message)
 }
 
+// DeliverTo는 send 밖의 경로(browser pick·shot, wt review)가 쓰는 공통 진입점 — 전송 규칙은 한 가지다:
+// 코덱스는 큐, 채널 서버가 뜬 Claude는 채널이 정본이고 tmux 키 입력은 어디서나 폴백이다(2026-09-30 사용자 결정).
+// 관문(작업 중 거부)은 두지 않는다 — 이 경로들은 예전에도 상태와 무관하게 pane에 쳤다. agents는 발신 세션 이름을 찾는 데만 쓴다(nil 가능).
+func DeliverTo(ctx context.Context, stateDir string, agents []*state.Agent, a *state.Agent, tm TextSender, message string) (via, warn string, err error) {
+	d := Delivery{StateDir: stateDir, From: senderName(agents)}
+	return deliver(ctx, a, config.Load(), tm, message, true, d)
+}
+
 // deliver는 에이전트 하나에 메시지를 넣는다. 코덱스는 큐, 채널 서버가 뜬 Claude는 채널을 먼저 쓰고,
 // 실패하면 tmux 키 입력으로 되돌아간다. via는 "queue"·"channel"·"tmux". warn은 되돌아갔을 때의 사유(없으면 "").
 // tmuxOK가 false면(작업 중인데 --force 없음) 실패 시 tmux로 되돌아가지 않고 오류를 낸다.

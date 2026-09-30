@@ -150,3 +150,17 @@ func TestResolveCodexThread(t *testing.T) {
 		t.Errorf("같은 폴더에 다른 코덱스가 살아 있으면 찾지 않는다: %q", got)
 	}
 }
+
+// DeliverTo — send 외의 경로(browser pick·shot, wt review)도 같은 규칙: 채널·큐가 없으면 tmux로 되돌아가고 via로 알린다.
+func TestDeliverToFallsBackToTmux(t *testing.T) {
+	stateDir := t.TempDir()
+	a := &state.Agent{ID: "claude-1", Kind: "claude", State: state.StateIdle, Tmux: state.TmuxRef{Session: "s", PaneID: "%5"}}
+	f := &fakeSender{}
+	via, warn, err := DeliverTo(context.Background(), stateDir, nil, a, f, "안녕")
+	if err != nil || via != "tmux" || warn != "" {
+		t.Fatalf("채널 서버 없음 → tmux: via=%q warn=%q err=%v", via, warn, err)
+	}
+	if f.pane != "%5" || f.text != "안녕" {
+		t.Errorf("tmux 폴백 입력: %+v", f)
+	}
+}

@@ -209,7 +209,22 @@ func browserPick(out io.Writer, args []string) error {
 		return fmt.Errorf("등록된 에이전트가 없습니다 (agentlayer status 확인)")
 	}
 	tm := tmuxx.Tmux{}
-	send := func(paneID, text string) error { return tm.SendText(paneID, text) }
+	// 전송은 send와 같은 규칙(채널·큐 정본, tmux 폴백). pane ID로 에이전트를 되찾고, 못 찾으면 예전대로 pane에 친다.
+	send := func(paneID, text string) error {
+		for _, a := range agents {
+			if a.Tmux.PaneID == paneID {
+				via, warn, err := DeliverTo(context.Background(), state.DefaultDir(), agents, a, tm, text)
+				if warn != "" {
+					fmt.Fprintln(out, "  ⚠ "+warn)
+				}
+				if err == nil && via != "tmux" {
+					fmt.Fprintf(out, "  (%s)\n", via)
+				}
+				return err
+			}
+		}
+		return tm.SendText(paneID, text)
+	}
 	// 터미널 esc/q/Ctrl-C로도 돌아갈 수 있게 — 관제탑 b 키에서 들어온 사용자가
 	// 브라우저를 안 건드리고 취소할 길이 이것뿐이다.
 	if f, ok := out.(*os.File); ok && term.IsTerminal(f.Fd()) {
@@ -421,10 +436,18 @@ func sendToAgent(out io.Writer, in io.Reader, page *rod.Page, agentID string, ma
 	if err != nil {
 		return err
 	}
-	if err := (tmuxx.Tmux{}).SendText(target.Tmux.PaneID, makeLine(info.URL)); err != nil {
+	via, warn, err := DeliverTo(context.Background(), state.DefaultDir(), agents, target, tmuxx.Tmux{}, makeLine(info.URL))
+	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "→ %s에게 전송\n", target.ID)
+	if warn != "" {
+		fmt.Fprintln(out, "  ⚠ "+warn)
+	}
+	note := ""
+	if via != "tmux" {
+		note = " (" + via + ")"
+	}
+	fmt.Fprintf(out, "→ %s에게 전송%s\n", target.ID, note)
 	return nil
 }
 

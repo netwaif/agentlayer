@@ -202,6 +202,8 @@ agentlayer task done VIDEO-07
   플래그 없이 뜬 세션은 채널 알림을 버리므로, 그런 세션에는 지시가 tmux 입력으로 간다. 총괄 수신함(`channel serve <inbox>`)도 같다.
   총괄 모드 서버도 tmux pane 안이면 자기 pane 수신함을 함께 쥔다(1.11.2+) — 총괄 메인과 총괄 폴더의 스레드 세션(folder-bot `t<6자리>` 창)에도
   `send`가 채널로 들어간다. 회사 수신함은 여전히 총괄 세션 하나만 쥐고, 나머지는 잠금이 풀릴 때까지 기다린다.
+  `browser pick`·`browser shot --send`·`wt send`도 같은 규칙으로 보낸다(1.11.3+) — 채널·큐가 정본, tmux 키 입력은 어디서나 폴백이며
+  폴백으로 갔을 때는 사유를 ⚠로 찍는다.
 
 ### 원격 직원 (호스팅어 Hermes 등)
 
