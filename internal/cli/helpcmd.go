@@ -31,6 +31,9 @@ func helpText(goos string) string {
   close-all      전 세션에 "세션 마감" 전달  (플래그는 wake-all과 동일)
   broadcast <메시지>  전 세션에 임의 메시지 전달
   send <세션[:창]> <메시지|->  세션 하나에 지시 전달 (idle·DONE만; --force로 강제, '-'는 stdin 본문)
+                 대상이 없으면: 코덱스 세션 ID(UUID·앞자리)면 codex queue 직송 [--cwd], 'inbox wait' 이름이면 그 수신함,
+                 업무 등록 없는 원격이면 직송 [--file <경로>]...
+  inbox wait     이 세션 앞으로 오는 편지 한 통을 기다려 stdout으로 (앱 세션용)  [--name 이름] [--timeout 30m]
   task assign|list|done|watch|message  업무↔세션 등록·상주 수신·편지 — 등록된 세션의 DONE·WAIT·ERR 전이가 hook에서 <inbox>/pending/ 에 자동 보고됨. message는 직원이 총괄에게 먼저 보내는 편지(MESSAGE)
   channel serve <inbox>  총괄 수신함을 Claude Code 채널(MCP 알림)로 전달 — Monitor 폴링 대체. 'agentlayer channel --help'
   remote add|list|check|rm  원격 직원(호스팅어 Hermes 등) 등록 — 등록 뒤에는 task assign·send를 로컬 직원과 똑같이 쓴다

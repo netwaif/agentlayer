@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -48,6 +49,9 @@ var (
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "agentlayer:", err)
+		if errors.Is(err, cli.ErrInboxTimeout) {
+			os.Exit(2) // inbox wait: 기간 안에 편지 없음 — 오류(1)와 구분
+		}
 		os.Exit(1)
 	}
 }
@@ -102,6 +106,11 @@ func run(args []string) error {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		return cli.RunTask(ctx, os.Stdout, st, state.DefaultDir(), args[1:], time.Now())
+	case "inbox":
+		// 상태 저장소를 건드리지 않는다(주소록·수신함만). 신호가 오면 ctx가 취소되고 주소록 항목이 지워진다.
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return cli.RunInboxWait(ctx, os.Stdout, os.Stderr, state.DefaultDir(), args[1:], time.Now)
 	case "channel":
 		st, err := storeWithSync()
 		if err != nil {
