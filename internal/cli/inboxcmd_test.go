@@ -246,3 +246,71 @@ func TestInboxUsageAndArgs(t *testing.T) {
 		t.Error("이름 검증")
 	}
 }
+
+// 연결 모드(inbox open): 고유 주소 ID 발급·별칭, 대기가 꺼진 사이에 온 편지는 큐에 남고 다음 wait가 집는다, 주소는 close까지 유지.
+func TestInboxOpenKeepQueuesLettersAcrossWaits(t *testing.T) {
+	stubSession(t, 5150, map[int]bool{5150: true})
+	stateDir := t.TempDir()
+	ctx := context.Background()
+	var out, errb bytes.Buffer
+	if err := RunInboxWait(ctx, &out, &errb, stateDir, []string{"open", "--name", "pair"}, tnow); err != nil {
+		t.Fatalf("open: %v %s", err, errb.String())
+	}
+	id := strings.TrimSpace(out.String())
+	if !strings.HasPrefix(id, "al-") || len(id) != 9 {
+		t.Fatalf("고유 주소 ID 기대(al-6자): %q", id)
+	}
+	byID, found, _ := LoadAddress(stateDir, id)
+	byName, found2, _ := LoadAddress(stateDir, "pair")
+	if !found || !found2 || byID.ID != id || byName.ID != id || !byID.Keep || byID.PID != 5150 {
+		t.Fatalf("주소록 id·별칭 둘 다 keep으로 있어야 함: %+v / %+v", byID, byName)
+	}
+	// 같은 세션이 다시 open → 같은 ID(멱등)
+	out.Reset()
+	if err := RunInboxWait(ctx, &out, &errb, stateDir, []string{"open", "--name", "pair"}, tnow); err != nil || strings.TrimSpace(out.String()) != id {
+		t.Fatalf("open 재실행은 같은 ID: %q err=%v", out.String(), err)
+	}
+	// 대기가 꺼진 상태에서 send → 회수하지 않고 큐에 남긴다
+	st, _ := state.NewStore(stateDir)
+	var sout bytes.Buffer
+	if err := RunSend(ctx, &sout, nil, st, stateDir, &fakeSender{}, []string{"--json", id, "첫 편지"}); err != nil {
+		t.Fatalf("send(대기 없음): %v", err)
+	}
+	var res map[string]any
+	_ = json.Unmarshal(sout.Bytes(), &res)
+	if res["via"] != "inbox" || res["sent"] != true {
+		t.Errorf("JSON: %s", sout.String())
+	}
+	if m, _ := filepath.Glob(filepath.Join(byID.Inbox, "pending", "*.json")); len(m) != 1 {
+		t.Fatalf("편지가 pending에 남아야 함: %v", m)
+	}
+	// 다음 wait가 그 편지를 집는다(purge 안 함), 끝나도 주소는 남는다
+	out.Reset()
+	if err := RunInboxWait(ctx, &out, &errb, stateDir, []string{"wait", "--name", "pair", "--interval", "10ms", "--timeout", "3s"}, tnow); err != nil {
+		t.Fatalf("wait: %v %s", err, errb.String())
+	}
+	if !strings.Contains(out.String(), "첫 편지") {
+		t.Errorf("큐에 있던 편지를 받아야 함: %q", out.String())
+	}
+	if _, found, _ := LoadAddress(stateDir, id); !found {
+		t.Fatal("keep 주소는 wait가 끝나도 남아야 함")
+	}
+	// 두 번째 편지도 같은 흐름
+	if err := RunSend(ctx, &sout, nil, st, stateDir, &fakeSender{}, []string{id, "둘째 편지"}); err != nil {
+		t.Fatalf("send 2: %v", err)
+	}
+	out.Reset()
+	if err := RunInboxWait(ctx, &out, &errb, stateDir, []string{"wait", "--name", "pair", "--interval", "10ms", "--timeout", "3s"}, tnow); err != nil || !strings.Contains(out.String(), "둘째 편지") {
+		t.Fatalf("wait 2: %v %q", err, out.String())
+	}
+	// close → id·별칭 모두 삭제
+	if err := RunInboxWait(ctx, &out, &errb, stateDir, []string{"close", "--name", "pair"}, tnow); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if _, f1, _ := LoadAddress(stateDir, id); f1 {
+		t.Error("close 뒤 id 주소가 남음")
+	}
+	if _, f2, _ := LoadAddress(stateDir, "pair"); f2 {
+		t.Error("close 뒤 별칭이 남음")
+	}
+}

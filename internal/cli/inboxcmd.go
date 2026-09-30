@@ -25,16 +25,27 @@ const InboxUsage = `사용법:
   agentlayer inbox wait [--name <이름>] [--timeout <기간, 기본 30m>]
     이 세션 앞으로 오는 편지 한 통을 기다린다(Claude 세션이 Bash로 백그라운드 실행). 편지가 오면
     "from: <보낸이>" 한 줄 + 빈 줄 + 본문을 stdout에 찍고 0으로 끝난다. 기간을 넘기면 stderr에 "답 없음"을 찍고 2로 끝난다.
-    이름 기본값은 폴더명(겹치면 폴더명-<pid 끝 4자리>). 보내는 쪽: agentlayer send <이름> <메시지>`
+    이름 기본값은 폴더명(겹치면 폴더명-<pid 끝 4자리>). 보내는 쪽: agentlayer send <이름> <메시지>
+  agentlayer inbox open [--name <별칭>]
+    연결 모드. 이 세션의 고유 주소 ID(al-6자)를 발급해 stdout에 찍고 바로 끝난다. 상대에게는 이 ID를 알려 준다.
+    이후 wait는 주소를 유지하고(끝나도 안 지움), 대기가 꺼진 사이에 온 편지도 큐에 남겨 다음 wait가 집는다. 다시 open하면 같은 ID.
+  agentlayer inbox close [--name <별칭>]
+    연결 모드를 끝낸다(주소 ID·별칭 삭제).`
 
-// Address — 주소록 항목. `inbox wait`가 살아 있는 동안만 존재한다(끝나면 지운다).
+// Address — 주소록 항목. 기본은 `inbox wait`가 살아 있는 동안만 존재한다(끝나면 지운다).
+// 연결 모드(`inbox open`)면 Keep=true: 고유 ID(al-6자)와 별칭 두 파일로 저장되고, close까지 남는다.
 type Address struct {
 	Name         string    `json:"name"`
-	PID          int       `json:"pid"` // 세션(claude) 프로세스 PID — send가 생사를 본다
+	ID           string    `json:"id,omitempty"`   // 연결 모드의 고유 주소(al-xxxxxx). 상대에게 알려 주는 값
+	Keep         bool      `json:"keep,omitempty"` // 연결 모드: wait가 끝나도 주소 유지, 편지는 큐에 보관
+	PID          int       `json:"pid"`            // 세션(claude) 프로세스 PID — send가 생사를 본다
 	CWD          string    `json:"cwd"`
 	Inbox        string    `json:"inbox"`
 	RegisteredAt time.Time `json:"registered_at"`
 }
+
+// newAddressID — 고유 주소 ID. 사람이 옮겨 적기 쉽게 6자(16진).
+func newAddressID() string { return "al-" + task.NewID()[:6] }
 
 // AddressesDir — 주소록 폴더.
 func AddressesDir(stateDir string) string { return filepath.Join(stateDir, "addresses") }
@@ -72,6 +83,7 @@ func LoadAddress(stateDir, name string) (*Address, bool, error) {
 	return &a, true, nil
 }
 
+// saveAddress — 별칭 파일에 쓰고, 연결 모드(ID 있음)면 ID 파일에도 같은 내용을 쓴다.
 func saveAddress(stateDir string, a Address) error {
 	if err := os.MkdirAll(AddressesDir(stateDir), 0o700); err != nil {
 		return err
@@ -80,14 +92,31 @@ func saveAddress(stateDir string, a Address) error {
 	if err != nil {
 		return err
 	}
-	tmp := addressPath(stateDir, a.Name) + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
+	keys := []string{a.Name}
+	if a.ID != "" {
+		keys = append(keys, a.ID)
 	}
-	return os.Rename(tmp, addressPath(stateDir, a.Name))
+	for _, k := range keys {
+		tmp := addressPath(stateDir, k) + ".tmp"
+		if err := os.WriteFile(tmp, b, 0o600); err != nil {
+			return err
+		}
+		if err := os.Rename(tmp, addressPath(stateDir, k)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func deleteAddress(stateDir, name string) { _ = os.Remove(addressPath(stateDir, name)) }
+
+// deleteAddressAll — 별칭과 ID 파일을 함께 지운다(연결 모드 close·죽은 세션 정리).
+func deleteAddressAll(stateDir string, a *Address) {
+	deleteAddress(stateDir, a.Name)
+	if a.ID != "" {
+		deleteAddress(stateDir, a.ID)
+	}
+}
 
 // SessionPID — 이 프로세스를 띄운 Claude 세션의 PID: 부모 사슬을 올라가 인자에 claude가 있는 첫 조상(가장 가까운 것).
 // Bash 도구 안이면 agentlayer ← bash ← claude 순이라 두 단계 위다. 못 찾으면 0.
@@ -121,11 +150,12 @@ var (
 // ErrInboxTimeout — 기간 안에 편지가 없었다. main이 종료 코드 2로 바꾼다.
 var ErrInboxTimeout = errors.New("답 없음")
 
-// RunInboxWait — `agentlayer inbox wait`. now·interval은 테스트 주입점.
+// RunInboxWait — `agentlayer inbox wait|open|close`. now·interval은 테스트 주입점.
 func RunInboxWait(ctx context.Context, stdout, stderr io.Writer, stateDir string, args []string, now func() time.Time) error {
-	if len(args) < 1 || args[0] != "wait" {
+	if len(args) < 1 || (args[0] != "wait" && args[0] != "open" && args[0] != "close") {
 		return errors.New(InboxUsage)
 	}
+	sub := args[0]
 	name, timeout, interval := "", 30*time.Minute, 200*time.Millisecond
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
@@ -169,22 +199,64 @@ func RunInboxWait(ctx context.Context, stdout, stderr io.Writer, stateDir string
 	if !validAddressName(name) {
 		return fmt.Errorf("이름 형식 오류: %q", name)
 	}
-	// 이름 충돌: 다른 산 세션이 같은 이름을 쓰고 있으면 pid 끝 4자리를 붙인다. 죽은 항목은 덮어쓴다.
-	if old, found, err := LoadAddress(stateDir, name); err == nil && found && old.PID != pid && pidAliveFn(old.PID) {
-		name = fmt.Sprintf("%s-%04d", name, pid%10000)
+	if strings.HasPrefix(name, "al-") {
+		return fmt.Errorf("이름은 al-로 시작할 수 없습니다(고유 주소 ID 접두): %q", name)
 	}
 	inbox := AddressInbox(stateDir, pid)
-	if err := os.MkdirAll(filepath.Join(inbox, "pending"), 0o700); err != nil {
-		return err
+	// 연결 모드의 기존 주소: 이 세션(pid)이 같은 별칭으로 open해 둔 것.
+	kept, keptFound, _ := LoadAddress(stateDir, name)
+	if keptFound && !(kept.Keep && kept.PID == pid) {
+		kept, keptFound = nil, false
 	}
-	if n := purgeStale(inbox); n > 0 {
-		logf("기동 전부터 있던 편지 %d건을 quarantine으로 치움(옛 세션 앞으로 온 것)", n)
+	switch sub {
+	case "close":
+		if !keptFound {
+			// 별칭이 없어도 죽은 항목·다른 세션 항목은 건드리지 않는다
+			return fmt.Errorf("이 세션의 연결 주소 %q가 없습니다", name)
+		}
+		deleteAddressAll(stateDir, kept)
+		logf("연결 종료: %s(%s)", kept.ID, name)
+		return nil
+	case "open":
+		if keptFound {
+			fmt.Fprintln(stdout, kept.ID) // 멱등 — 같은 ID
+			return nil
+		}
+		if old, found, err := LoadAddress(stateDir, name); err == nil && found && old.PID != pid && pidAliveFn(old.PID) {
+			name = fmt.Sprintf("%s-%04d", name, pid%10000)
+		}
+		if err := os.MkdirAll(filepath.Join(inbox, "pending"), 0o700); err != nil {
+			return err
+		}
+		a := Address{Name: name, ID: newAddressID(), Keep: true, PID: pid, CWD: cwd, Inbox: inbox, RegisteredAt: now()}
+		if err := saveAddress(stateDir, a); err != nil {
+			return err
+		}
+		logf("연결 시작: 주소 %s(별칭 %s), pid %d, 수신함 %s — 상대는 agentlayer send %s <메시지>", a.ID, name, pid, inbox, a.ID)
+		fmt.Fprintln(stdout, a.ID)
+		return nil
 	}
-	if err := saveAddress(stateDir, Address{Name: name, PID: pid, CWD: cwd, Inbox: inbox, RegisteredAt: now()}); err != nil {
-		return err
+	if keptFound {
+		// 연결 모드의 wait: 주소를 유지하고, 대기가 꺼진 사이에 온 편지(pending)를 치우지 않는다.
+		name, inbox = kept.Name, kept.Inbox
+		logf("대기 시작(연결 %s): 별칭 %s, pid %d, 최대 %s", kept.ID, name, pid, timeout)
+	} else {
+		// 이름 충돌: 다른 산 세션이 같은 이름을 쓰고 있으면 pid 끝 4자리를 붙인다. 죽은 항목은 덮어쓴다.
+		if old, found, err := LoadAddress(stateDir, name); err == nil && found && old.PID != pid && pidAliveFn(old.PID) {
+			name = fmt.Sprintf("%s-%04d", name, pid%10000)
+		}
+		if err := os.MkdirAll(filepath.Join(inbox, "pending"), 0o700); err != nil {
+			return err
+		}
+		if n := purgeStale(inbox); n > 0 {
+			logf("기동 전부터 있던 편지 %d건을 quarantine으로 치움(옛 세션 앞으로 온 것)", n)
+		}
+		if err := saveAddress(stateDir, Address{Name: name, PID: pid, CWD: cwd, Inbox: inbox, RegisteredAt: now()}); err != nil {
+			return err
+		}
+		defer deleteAddress(stateDir, name) // 정상·타임아웃·SIGINT/SIGTERM(ctx 취소) 모두 여기서 지운다
+		logf("대기 시작: 이름 %s, pid %d, 수신함 %s, 최대 %s", name, pid, inbox, timeout)
 	}
-	defer deleteAddress(stateDir, name) // 정상·타임아웃·SIGINT/SIGTERM(ctx 취소) 모두 여기서 지운다
-	logf("대기 시작: 이름 %s, pid %d, 수신함 %s, 최대 %s", name, pid, inbox, timeout)
 	wctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	var got *task.Report
@@ -206,8 +278,22 @@ func RunInboxWait(ctx context.Context, stdout, stderr io.Writer, stateDir string
 // 편지를 넣고 받는 쪽이 집어 갈 때까지 기다린다(못 집어 가면 회수하고 오류). 죽었으면 항목을 지우고 오류.
 func sendToAddress(w io.Writer, stateDir string, addr *Address, from, message string, o SendOptions) error {
 	if !pidAliveFn(addr.PID) {
-		deleteAddress(stateDir, addr.Name)
+		deleteAddressAll(stateDir, addr)
 		return fmt.Errorf("%s: 세션(pid %d)이 죽어 주소록에서 지웠습니다 — 받는 쪽에서 'agentlayer inbox wait' 다시 실행", addr.Name, addr.PID)
+	}
+	label := addr.Name
+	if addr.Keep {
+		// 연결 모드: 대기가 꺼져 있어도 편지를 회수하지 않고 큐(pending)에 남긴다 — 다음 wait가 집는다.
+		label = addr.ID
+		if _, err := task.WriteReport(DirectiveReport(addr.Inbox, from, "", message, time.Now())); err != nil {
+			return fmt.Errorf("%s 전송 실패: %w", label, err)
+		}
+		if o.JSON {
+			return json.NewEncoder(w).Encode(map[string]any{"session": label, "name": addr.Name, "window": "", "pane": "", "pid": addr.PID,
+				"state": "", "sent": true, "via": "inbox"})
+		}
+		fmt.Fprintf(w, "전송 완료 → %s(%s, pid %d) [연결 큐] (inbox)\n", label, addr.Name, addr.PID)
+		return nil
 	}
 	if err := SendViaChannel(addr.Inbox, from, "", message, time.Now()); err != nil {
 		if errors.Is(err, errNotConsumed) {
