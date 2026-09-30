@@ -226,6 +226,10 @@ agentlayer send hermes-qa --file 스펙.md "이 스펙대로"   # 업무 등록 
   끝난다. `--timeout`(기본 30m)을 넘기면 stderr에 "답 없음(기간)"을 찍고 2로 끝난다. 정상·타임아웃·SIGINT/SIGTERM 모두 주소록
   항목을 지운다. 상태 저장소(agents/)에는 넣지 않으므로 status·TUI에는 보이지 않는다.
 - **`inbox open`·`close` — 연결 모드(1.12.0+)**: 두 세션이 여러 번 오갈 때 쓴다. `inbox open --name <별칭>`이 고유 주소 ID(`al-6자`)를 stdout에 찍고 끝나며, 상대에게는 그 ID를 알려 준다(`agentlayer send al-xxxxxx …`). 이후 `inbox wait --name <별칭>`은 편지 한 통을 받고 끝나도 주소를 지우지 않고, 대기가 꺼진 사이에 온 편지도 회수하지 않고 큐(pending)에 남겨 다음 wait가 집는다 — 받는 쪽은 편지를 처리한 뒤 곧바로 다시 wait를 켜면 대화가 이어진다. 다시 open하면 같은 ID(멱등). `inbox close --name <별칭>`으로 끝낸다. 연결 모드가 아닌 `inbox wait`(open 없이)는 예전 그대로다(끝나면 주소 삭제, 옛 편지 치움).
+- **`send --from <이름>` — 발신자 명시**: 편지·채널 알림의 `from`(받는 쪽 `inbox wait`의 `from:` 줄, 채널 `meta.from`)에 그 값을
+  쓴다(`--from=값`도 됨, 주소록 이름과 같은 제한). 없으면 tmux 안은 세션명, tmux 밖은 부모 프로세스가 코덱스면 `codex`, claude면
+  그 세션이 `inbox open`으로 등록한 별칭(없으면 `claude`), 그 밖은 `user`. 업무 등록 없는 원격 직송은 `--from`을 명시했을 때만
+  본문 첫 줄에 `보낸이: <이름>`을 붙인다.
 - **`send <이름>` — 주소록으로 보내기**: tmux 세션 이름(`ResolveTarget`)에 없을 때만 주소록을 본다. 항목이 있고 그 PID가 살아
   있으면 채널 전송과 같은 방식으로 편지를 넣고 받는 쪽이 3초 안에 집어 가야 성공(`via=inbox`, JSON도 같다). 집어 가지 않으면
   회수하고 오류, PID가 죽었으면 항목을 지우고 오류. tmux 세션 이름이 같으면 tmux가 우선이다.

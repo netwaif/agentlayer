@@ -30,7 +30,7 @@ func helpText(goos string) string {
   wake-all       전 세션에 "이어서하자" 전달  [--yes] [--except 이름,..] [--watch] [--timeout 10m]
   close-all      전 세션에 "세션 마감" 전달  (플래그는 wake-all과 동일)
   broadcast <메시지>  전 세션에 임의 메시지 전달
-  send <세션[:창]> <메시지|->  세션 하나에 지시 전달 (idle·DONE만; --force로 강제, '-'는 stdin 본문)
+  send <세션[:창]> <메시지|->  세션 하나에 지시 전달 (idle·DONE만; --force로 강제, '-'는 stdin 본문, --from <이름>으로 발신자 명시)
                  대상이 없으면: 코덱스 세션 ID(UUID·앞자리)면 codex queue 직송 [--cwd], 'inbox wait' 이름이면 그 수신함,
                  업무 등록 없는 원격이면 직송 [--file <경로>]...
   inbox wait     이 세션 앞으로 오는 편지 한 통을 기다려 stdout으로 (앱 세션용)  [--name 이름] [--timeout 30m]
