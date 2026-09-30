@@ -15,6 +15,7 @@ import (
 	"github.com/netwaif/agentlayer/internal/remote"
 	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
+	"github.com/netwaif/agentlayer/internal/usage"
 )
 
 // TextSender는 pane에 지시를 넣는 최소 인터페이스 — tmuxx.Tmux가 만족하고 테스트는 페이크.
@@ -24,6 +25,8 @@ type TextSender interface {
 
 // ResolveTarget은 "<세션>" 또는 "<세션>:<창이름>"을 산 pane 하나로 해석한다.
 // 창 이름은 folder-bot 스레드 창(t+6자리)을 가리키는 용도. 후보가 둘 이상이면 창 명시를 요구한다.
+// tmux 세션 이름에 없고 창 지정도 없으면 훅이 남긴 세션 ID의 앞자리 접두(8자 이상)로도 찾는다 — 산 레코드 우선,
+// 둘 이상이면 후보를 보이고 거부. 기록이 없는 코덱스 세션 ID는 여기서 못 찾고 RunSend가 큐로 바로 보낸다(sendCodexDirect).
 func ResolveTarget(agents []*state.Agent, spec string) (*state.Agent, error) {
 	session, window := spec, ""
 	if i := strings.LastIndex(spec, ":"); i > 0 {
@@ -39,6 +42,16 @@ func ResolveTarget(agents []*state.Agent, spec string) (*state.Agent, error) {
 		}
 		found = append(found, a)
 	}
+	if len(found) == 0 && window == "" && LooksLikeSessionID(spec) {
+		found = matchBySessionID(agents, spec)
+		if len(found) > 1 {
+			names := make([]string, 0, len(found))
+			for _, a := range found {
+				names = append(names, fmt.Sprintf("%s(%s, 세션 %s)", a.Tmux.Session, a.Tmux.PaneID, a.SessionID))
+			}
+			return nil, fmt.Errorf("세션 ID %q에 맞는 세션이 둘 이상입니다 — 더 긴 ID를 쓰세요: %s", spec, strings.Join(names, ", "))
+		}
+	}
 	switch len(found) {
 	case 0:
 		return nil, fmt.Errorf("세션 %q을 찾지 못했습니다 ('agentlayer status'로 이름 확인)", spec)
@@ -50,6 +63,50 @@ func ResolveTarget(agents []*state.Agent, spec string) (*state.Agent, error) {
 		names = append(names, fmt.Sprintf("%s:%s(%s)", a.Tmux.Session, a.Tmux.WindowName, a.Tmux.PaneID))
 	}
 	return nil, fmt.Errorf("세션 %q에 pane이 둘 이상입니다 — 창을 명시하세요: %s", session, strings.Join(names, ", "))
+}
+
+// matchBySessionID — 레코드의 세션 ID가 spec으로 시작하는 것. 산 레코드가 하나라도 있으면 죽은 것은 뺀다.
+func matchBySessionID(agents []*state.Agent, spec string) []*state.Agent {
+	var live, dead []*state.Agent
+	for _, a := range agents {
+		if a.SessionID == "" || !strings.HasPrefix(a.SessionID, spec) {
+			continue
+		}
+		if a.State == state.StateDead {
+			dead = append(dead, a)
+		} else {
+			live = append(live, a)
+		}
+	}
+	if len(live) > 0 {
+		return live
+	}
+	return dead
+}
+
+// minSessionIDPrefix — 세션 ID 접두로 대상을 찾을 때 요구하는 최소 길이(UUID 첫 묶음). 짧은 접두가 우연히 맞는 일을 막는다.
+const minSessionIDPrefix = 8
+
+// LooksLikeSessionID — UUID(8-4-4-4-12, 16진수) 전체이거나 그 앞자리 접두(8자 이상)인가. 세션 이름과 구별하는 기준이라
+// 대소문자 구분 없이 16진수·하이픈만 허용한다.
+func LooksLikeSessionID(s string) bool {
+	if len(s) < minSessionIDPrefix || len(s) > 36 {
+		return false
+	}
+	const shape = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+	for i, r := range s {
+		if shape[i] == '-' {
+			if r != '-' {
+				return false
+			}
+			continue
+		}
+		isHex := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
+		if !isHex {
+			return false
+		}
+	}
+	return true
 }
 
 // SendGate — idle·DONE만 보낸다. WORK는 현재 턴 뒤에 처리되고 WAIT(승인창)는 입력이 승인창을
@@ -77,9 +134,11 @@ func SendGate(s state.AgentState, force bool) (bool, string) {
 
 type SendOptions struct {
 	Force, JSON bool
+	// CWD — 기록 없는 코덱스 세션에 큐로 보낼 때의 작업 폴더(`codex queue`를 그 폴더에서 실행). 비면 rollout에서 찾는다.
+	CWD string
 }
 
-// ParseSendFlags는 --force·--json만 받고 나머지를 위치 인자로 돌려준다.
+// ParseSendFlags는 --force·--json·--cwd만 받고 나머지를 위치 인자로 돌려준다.
 func ParseSendFlags(args []string) (SendOptions, []string, error) {
 	var o SendOptions
 	i := 0
@@ -89,7 +148,17 @@ func ParseSendFlags(args []string) (SendOptions, []string, error) {
 			o.Force = true
 		case "--json":
 			o.JSON = true
+		case "--cwd":
+			if i+1 >= len(args) {
+				return o, nil, errors.New("--cwd 뒤에 폴더가 필요합니다")
+			}
+			o.CWD = args[i+1]
+			i++
 		default:
+			if strings.HasPrefix(args[i], "--cwd=") {
+				o.CWD = strings.TrimPrefix(args[i], "--cwd=")
+				continue
+			}
 			if strings.HasPrefix(args[i], "--") {
 				return o, nil, fmt.Errorf("알 수 없는 플래그: %s", args[i])
 			}
@@ -157,7 +226,7 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 		return err
 	}
 	if len(rest) < 2 {
-		return errors.New("사용법: agentlayer send [--force] [--json] <세션[:창]> <메시지> (여러 줄은 '-'로 stdin)")
+		return errors.New("사용법: agentlayer send [--force] [--json] [--cwd <폴더>] <세션[:창]|코덱스 세션 ID> <메시지> (여러 줄은 '-'로 stdin)")
 	}
 	message := strings.Join(rest[1:], " ")
 	if message == "-" {
@@ -187,6 +256,10 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 	}
 	a, err := ResolveTarget(agents, rest[0])
 	if err != nil {
+		// 기록이 없는 코덱스 세션(데스크톱 앱 — 훅도 tmux도 없다)은 세션 ID 형식이면 큐로 바로 보낸다.
+		if LooksLikeSessionID(rest[0]) {
+			return sendCodexDirect(ctx, w, rest[0], o, message)
+		}
 		return err
 	}
 	cfg := config.Load()
@@ -256,5 +329,42 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 		note = " (채널)" + note
 	}
 	fmt.Fprintf(w, "전송 완료 → %s %s [%s]%s\n", a.Tmux.Session, a.Tmux.PaneID, a.State, note)
+	return nil
+}
+
+// sendCodexDirect — 상태 저장소에 기록이 없는 코덱스 세션에 세션 ID만으로 `codex queue --thread <ID>`를 보낸다.
+// 코덱스 데스크톱 앱 세션은 훅·tmux가 없어 레코드가 생기지 않지만 rollout(~/.codex/sessions)은 남기므로, 접두만 받았으면
+// 거기서 전체 ID와 작업 폴더를 찾는다. 전체 UUID면 rollout이 없어도 그대로 보낸다(작업 폴더는 --cwd 또는 rollout, 없으면 빈 값).
+// 상태를 모르니 관문(작업 중·승인 대기)은 없다 — 큐는 현재 턴 뒤에 처리되고, 승인창이 떠 있으면 그 뒤에 처리된다.
+// tmux 폴백은 없다: 큐가 실패하면 오류로 끝난다.
+func sendCodexDirect(ctx context.Context, w io.Writer, spec string, o SendOptions, message string) error {
+	cfg := config.Load()
+	if !cfg.CodexQueueEnabled() {
+		return fmt.Errorf("코덱스 세션 %s: 기록이 없는 세션은 codex queue로만 보낼 수 있는데 설정(codex_queue)이 꺼져 있습니다", spec)
+	}
+	id, cwd := "", o.CWD
+	full := len(spec) == 36
+	rid, rcwd, err := usage.CodexSessionByPrefix(codexSessionsRootFn(), spec)
+	switch {
+	case err == nil:
+		id = rid
+		if cwd == "" {
+			cwd = rcwd
+		}
+	case full && errors.Is(err, usage.ErrCodexSessionNotFound):
+		id = spec // rollout이 없어도(다른 계정 폴더·아직 안 쓰임) 전체 ID면 큐에 맡긴다
+	case errors.Is(err, usage.ErrCodexSessionNotFound):
+		return fmt.Errorf("코덱스 세션 %q을 rollout에서 찾지 못했습니다 — 전체 세션 ID를 쓰거나 'agentlayer status'로 이름 확인", spec)
+	default:
+		return err
+	}
+	if qerr := codexQueueFn(ctx, id, cwd, message); qerr != nil {
+		return fmt.Errorf("코덱스 세션 %s 전송 실패(codex queue, 폴백 없음): %w", id, qerr)
+	}
+	if o.JSON {
+		return json.NewEncoder(w).Encode(map[string]any{"session": id, "window": "", "pane": "", "session_id": id,
+			"kind": "codex", "cwd": cwd, "recorded": false, "state": "", "sent": true, "via": "queue"})
+	}
+	fmt.Fprintf(w, "전송 완료 → codex %s [기록 없음] (codex queue)\n", id)
 	return nil
 }
