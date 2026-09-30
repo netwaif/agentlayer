@@ -191,13 +191,6 @@ agentlayer task done VIDEO-07
   지금 프로세스가 뜬 뒤에 만들어졌을 때만 쓴다. 큐가 실패하면 사유를 알리고 tmux 입력으로 되돌아간다.
   출력 끝의 `(codex queue)`, `--json`의 `"via"`가 실제 경로다. 끄려면 설정에 `"codex_queue": false`.
   Claude·Gemini는 예전대로 tmux 입력이다.
-  **코덱스 앱 세션은 세션 ID로 바로 보낸다**: 코덱스 데스크톱 앱에서 연 세션은 훅도 tmux도 없어 `status`에 없지만,
-  `agentlayer send <세션 ID> <메시지>`처럼 세션 ID(UUID 전체 또는 앞자리 8자 이상)를 대상으로 주면 `codex queue --thread <ID>`로
-  바로 들어간다. 앞자리만 주면 rollout 폴더(`~/.codex/sessions`)에서 전체 ID와 작업 폴더를 찾고, 둘 이상 맞으면 후보를 보이고 거부한다.
-  작업 폴더는 `--cwd <폴더>`로 줄 수 있다(없으면 rollout의 cwd). 성공하면 `(codex queue)`·`"via":"queue"`, 실패하면 오류로 끝난다
-  (tmux 폴백 없음). 상태를 모르니 작업 중·승인 대기 관문은 없다. 훅이 세션 ID를 남긴 tmux 코덱스도 같은 방법으로 찾을 수 있다.
-  Claude 데스크톱 앱 세션은 채널·세션 간 메시지를 받지 못해(2026-09-30 실측) 관제·전송 대상이 아니다 — 앱에서는 tmux 세션을
-  `--remote-control`로 본다(`docs/superpowers/plans/2026-09-30-desktop-session-address.md`).
 
 - **채널 서버가 뜬 Claude 세션에는 채널로 보낸다(1.11.0+)**: 직원 폴더에 `claude mcp add -s local agentlayer -- agentlayer channel serve --self`를
   등록하고 세션을 `--dangerously-load-development-channels server:agentlayer`로 띄우면, `send`가 tmux 키 입력 대신 그 세션 전용
@@ -211,6 +204,40 @@ agentlayer task done VIDEO-07
   `send`가 채널로 들어간다. 회사 수신함은 여전히 총괄 세션 하나만 쥐고, 나머지는 잠금이 풀릴 때까지 기다린다.
   `browser pick`·`browser shot --send`·`wt send`도 같은 규칙으로 보낸다(1.11.3+) — 채널·큐가 정본, tmux 키 입력은 어디서나 폴백이며
   폴백으로 갔을 때는 사유를 ⚠로 찍는다.
+
+### 앱 세션에서 받기·이름으로 보내기·코덱스 세션 ID 직송·원격 직송
+
+데스크톱 앱(Claude Code Desktop)에서 새로 연 Claude 세션은 채널도 세션 간 메시지도 받지 못한다(2026-09-30 실측) — 앱 안의
+Claude는 tmux 세션을 `--remote-control`로 보는 창으로 쓰고, 앱 세션 자체에 무언가를 넣어야 할 때는 아래 네 경로를 쓴다.
+**기존 입력의 결과는 바뀌지 않는다** — 전부 예전 해석(tmux 세션 이름·원격 이름)이 실패한 뒤에만 타는 분기다.
+
+```bash
+agentlayer inbox wait --name 기획서 --timeout 30m &     # (앱 세션이 Bash로) 편지 한 통을 기다린다
+agentlayer send 기획서 "초안 검토해줘"                    # 그 수신함으로 → 기다리던 쪽 stdout에 from:/본문 (via=inbox)
+agentlayer send 0199a1b2 "테스트 돌려줘"                 # 기록 없는 코덱스 세션 ID(앞자리)로 codex queue 직송 (via=queue)
+agentlayer send hermes-qa --file 스펙.md "이 스펙대로"   # 업무 등록 없는 원격에 본문+첨부 직송
+```
+
+- **`inbox wait` — 메시지 받을 준비**: Claude 세션이 Bash로 백그라운드 실행한다. 부모 프로세스 사슬에서 claude 프로세스를 찾아
+  그 PID를 세션 주소로 삼고, 주소록 `~/.local/state/agentlayer/addresses/<이름>.json`(name·pid·cwd·inbox·registered_at)에
+  자기를 적는다. `--name` 없으면 폴더명(다른 산 세션과 겹치면 `<폴더명>-<pid 끝 4자리>`). 수신함은
+  `~/.local/state/agentlayer/inboxes/a<pid>/`이고 편지 구조는 채널 지시(SEND)와 같다. 시작할 때 이미 pending에 있던 편지는
+  옛 세션 앞으로 온 것이라 quarantine으로 치운다. 편지 한 통이 오면 stdout에 `from: <보낸이>` 한 줄, 빈 줄, 본문을 찍고 0으로
+  끝난다. `--timeout`(기본 30m)을 넘기면 stderr에 "답 없음(기간)"을 찍고 2로 끝난다. 정상·타임아웃·SIGINT/SIGTERM 모두 주소록
+  항목을 지운다. 상태 저장소(agents/)에는 넣지 않으므로 status·TUI에는 보이지 않는다.
+- **`send <이름>` — 주소록으로 보내기**: tmux 세션 이름(`ResolveTarget`)에 없을 때만 주소록을 본다. 항목이 있고 그 PID가 살아
+  있으면 채널 전송과 같은 방식으로 편지를 넣고 받는 쪽이 3초 안에 집어 가야 성공(`via=inbox`, JSON도 같다). 집어 가지 않으면
+  회수하고 오류, PID가 죽었으면 항목을 지우고 오류. tmux 세션 이름이 같으면 tmux가 우선이다.
+- **`send <코덱스 세션 ID>` — 코덱스 앱 세션 직송**: 코덱스 데스크톱 앱 세션은 훅도 tmux도 없어 `status`에 없지만 rollout
+  (`~/.codex/sessions`)은 남긴다. 대상이 UUID 전체나 앞자리 8자 이상이면 `codex queue --thread <ID>`로 바로 보낸다. 앞자리만
+  주면 rollout에서 전체 ID와 작업 폴더를 찾고, 둘 이상 맞으면 후보를 보이고 거부한다. 작업 폴더는 `--cwd <폴더>`가 rollout보다
+  우선. 성공하면 `(codex queue)`·`"via":"queue"`, 실패하면 오류(tmux 폴백 없음). 상태를 모르니 작업 중·승인 대기 관문은 없다.
+  설정 `"codex_queue": false`면 이 경로도 없다.
+- **`send <원격> [--file <경로>]...` — 업무 등록 없는 원격 직송**: 원격(`remotes/<이름>.json`)에 업무(task) 등록이 없으면
+  예전에는 "먼저 task assign" 오류였다. 이제는 그 경우에만 어댑터의 Dispatch로 카드 하나(임시 업무ID `MSG-<8자>`, 제목은 본문
+  첫 줄)를 만들어 보낸다. `--file`은 hermes 원격에서만 — 카드 작업 폴더 아래 `from-company/`에 올리고 본문 끝에 경로를 적는다.
+  업무 등록은 만들지 않으므로 `task watch` 추적은 없고 답은 원격 편지함으로 온다. 업무가 등록된 원격은 기존 경로 그대로이고,
+  그 경로와 tmux·채널·큐·주소록 경로에 `--file`을 주면 오류다.
 
 ### 원격 직원 (호스팅어 Hermes 등)
 
