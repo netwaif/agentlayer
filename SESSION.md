@@ -20,7 +20,7 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-0. **실기 확인(사용자)**: 「해커스 1차시」 스레드에 이미지 한 장 → `~/ai-folder/company/.discord-state/thread-route.log`에 `via=channel`. 안 찍히면 그 로그의 send stderr부터 본다. (2026-09-30 해소: 비서실장 plist 플래그+재시작(사용자 승인 뒤 실행, 백업 `com.soonho.claude-discord.plist.bak-20260930`), 세 레포 푸시, v1.11.3 goreleaser 게시, 플러그인 0.1.25 갱신.) 남은 구상: ④ `send --from <이름>` ⑤ Claude 데스크톱 앱 경로(9/28 조사: 채널 불가·소켓 경로 필요).
+0. **실기 확인(사용자)**: 「해커스 1차시」 스레드에 이미지 한 장 → `~/ai-folder/company/.discord-state/thread-route.log`에 `via=channel`. 안 찍히면 그 로그의 send stderr부터 본다. (2026-09-30 해소: 비서실장 plist 플래그+재시작(사용자 승인 뒤 실행, 백업 `com.soonho.claude-discord.plist.bak-20260930`), 세 레포 푸시, v1.11.3 goreleaser 게시, 플러그인 0.1.25 갱신.) 남은 구상: ④ `send --from <이름>` ⑤ **데스크톱 앱 세션(사용자 구상 2026-09-30, 클라우드 세션에 위임 예정)**: 앱 안의 Claude Code는 CLI와 같은 런타임(설정·플러그인·훅·MCP 공유)이고, 봇들은 `--remote-control`로 앱에 미러됨. 막힌 곳은 agentlayer 주소 체계가 tmux pane에 묶인 것 — 훅이 tmux 밖 세션을 기록하지 않음(`internal/hookcmd/claude.go:32`), `send <tmux 세션[:창]>`·`PaneInbox(p<pane>)` 전부 pane 기준. 할 일: (a) 훅이 tmux 없이도 세션 ID로 기록 (b) 수신함·`send` 대상을 세션 ID/이름으로도 (c) 폴백 규칙 유지(pane 있으면 tmux, 없으면 채널만) → 그 뒤 맥에서 앱 세션의 채널 수신(플래그 없이) 확인 → 웹 관제탑(로컬 HTTP, browser pick 등 터미널 전용 제외). agy는 비대화형 호출만.
 **아래 "미착수"는 2026-09-29에 사용자가 "하나씩 모두 해"라고 지시했는데 하지 않았고 보고에서도 빠뜨렸던 항목이다. 끝난 것으로 읽지 말 것.**
 
 1. **미착수 — 에이전트 브라우저 사소 9건**: 다른 탭 배너 제목이 이동 전 제목으로 남음 / new_page 직후 그 탭에 미러 없음 / 버튼 클릭 즉각 피드백 없음 / 휠 스크롤은 방패가 못 막음 / hangwatch Ping 최악 ~7.5s·Relaunch Connect 무제한 / 늦게 성사된 연결 고루틴 누수(mcp-serve) / 프록시 여럿 ack 경쟁 / 클라이언트 줄 JSON 4회 파싱 / trim이 마커 뒤 전부 자름. 상세는 결정 기록 2026-09-22(3차).
