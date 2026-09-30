@@ -143,9 +143,12 @@ func Status(w io.Writer, st *state.Store, jsonOut bool, now time.Time, wired map
 	return nil
 }
 
-// SessionLabel은 SESSION 열 문구 — 세션 이름에 봇 스레드 배지("(스레드 1)")를 붙인다.
-// status·TUI가 같은 문구를 쓴다. 카드는 굵은 이름 뒤에 같은 배지를 따로 붙인다.
+// SessionLabel은 SESSION 열 문구 — 세션 이름에 봇 스레드 배지("(스레드 1)")를 붙인다. tmux 밖 세션은 `-n` 이름이나
+// 세션 ID 앞 8자리 뒤에 "(app)"을 붙인다. status·TUI가 같은 문구를 쓴다. 카드는 굵은 이름 뒤에 같은 배지를 따로 붙인다.
 func SessionLabel(a *state.Agent) string {
+	if a.Detached() {
+		return a.Label() + " (app)"
+	}
 	if b := a.ThreadBadge(); b != "" {
 		return a.Tmux.Session + " (" + b + ")"
 	}

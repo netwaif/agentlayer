@@ -591,7 +591,7 @@ func (m Model) viewBody() string {
 		sel := m.selected()
 		title := "미리보기"
 		if sel != nil {
-			title = sel.Tmux.Session + " 미리보기"
+			title = sel.Label() + " 미리보기"
 		}
 		width := m.width
 		if width < 20 {

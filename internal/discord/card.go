@@ -202,7 +202,9 @@ func agentsContainer(d CardData, now time.Time) map[string]any {
 			word += "?" // WORK인데 갱신이 끊김 — hook 유실 의심 (TUI의 WORK?와 동일)
 		}
 		line := stateEmoji[a.State]
-		if a.Tmux.Session != "" {
+		if a.Detached() {
+			line += " **" + a.Label() + "** (app)"
+		} else if a.Tmux.Session != "" {
 			line += " **" + a.Tmux.Session + "**"
 			if b := a.ThreadBadge(); b != "" {
 				line += " (" + b + ")"

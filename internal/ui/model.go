@@ -342,6 +342,7 @@ func (m Model) refreshCmd() tea.Cmd {
 		if panes, err := tm.ListPanes(); err == nil {
 			_ = scan.Sync(st, panes, now)
 		}
+		_ = scan.SyncDetached(st, now) // tmux 밖(앱) 세션은 프로세스 표로 생사를 본다
 		agents, err := loadAgents(st)
 		if err != nil {
 			return refreshMsg{agents: nil, now: now}
@@ -359,7 +360,7 @@ func (m Model) refreshCmd() tea.Cmd {
 // previewCmd는 선택 pane의 화면 꼬리를 가져온다 (표시 전용).
 func (m Model) previewCmd() tea.Cmd {
 	a := m.selected()
-	if a == nil || a.State == state.StateDead {
+	if a == nil || a.State == state.StateDead || a.Detached() { // tmux 밖 세션은 잡을 화면이 없다
 		return func() tea.Msg { return previewMsg{} }
 	}
 	tm, pane, lines := m.tm, a.Tmux.PaneID, m.previewHeight()
@@ -752,6 +753,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				_ = m.store.MarkRead(a.ID, time.Now())
+				if a.Detached() {
+					m.notice = fmt.Sprintf("%s은(는) tmux 밖(app) 세션입니다 — 이동할 pane이 없습니다. 지시는 'agentlayer send %s …'", a.Label(), a.Label())
+					return m, m.refreshCmd()
+				}
 				if !m.insideTmux {
 					return m, m.attachCmd(a)
 				}

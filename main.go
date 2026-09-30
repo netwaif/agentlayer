@@ -148,6 +148,7 @@ func storeWithSync() (*state.Store, error) {
 	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
 		_ = scan.Sync(st, panes, time.Now())
 	}
+	_ = scan.SyncDetached(st, time.Now()) // tmux 밖(앱) 세션은 프로세스 표로 생사를 본다
 	return st, nil
 }
 
@@ -239,6 +240,9 @@ func runStatus(args []string) error {
 			return err
 		}
 	}
+	if err := scan.SyncDetached(st, now); err != nil { // tmux 밖(앱) 세션은 프로세스 표로 생사를 본다
+		return err
+	}
 	wired := map[string]string{}
 	if !*jsonOut {
 		if agents, err := st.List(); err == nil {
@@ -284,6 +288,9 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 		if err := scan.Sync(st, panes, now); err != nil {
 			return err
 		}
+	}
+	if err := scan.SyncDetached(st, now); err != nil { // tmux 밖(앱) 세션은 프로세스 표로 생사를 본다
+		return err
 	}
 	agents, err := st.List()
 	if err != nil {
@@ -593,6 +600,7 @@ func runInfo(args []string) error {
 	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
 		_ = scan.Sync(st, panes, now)
 	}
+	_ = scan.SyncDetached(st, now)
 	agents, err := st.List()
 	if err != nil {
 		return err
@@ -650,6 +658,9 @@ func runAll(cmd string, args []string) error {
 			return err
 		}
 	}
+	if err := scan.SyncDetached(st, now); err != nil { // tmux 밖(앱) 세션은 프로세스 표로 생사를 본다
+		return err
+	}
 	return cli.RunAll(os.Stdout, st, tmuxx.Tmux{}, message, o, cmd != "broadcast", now)
 }
 
@@ -663,6 +674,7 @@ func runResume(args []string) error {
 	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
 		_ = scan.Sync(st, panes, time.Now())
 	}
+	_ = scan.SyncDetached(st, time.Now())
 	agents, err := st.List()
 	if err != nil {
 		return err
@@ -723,6 +735,7 @@ func runRestore(args []string) error {
 	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
 		_ = scan.Sync(st, panes, time.Now())
 	}
+	_ = scan.SyncDetached(st, time.Now())
 	return cli.RunRestore(os.Stdout, st, tmuxx.Tmux{}, args)
 }
 

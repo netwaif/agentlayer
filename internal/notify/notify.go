@@ -44,7 +44,7 @@ func notifiable(to state.AgentState) bool {
 }
 
 func title(a *state.Agent, to state.AgentState) string {
-	name := a.Tmux.Session
+	name := a.Label()
 	if name == "" {
 		name = a.Kind
 	}
