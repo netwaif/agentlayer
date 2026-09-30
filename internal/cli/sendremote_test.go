@@ -168,11 +168,21 @@ func TestSendRemoteGate(t *testing.T) {
 	}
 }
 
-func TestSendRemoteRequiresAssignment(t *testing.T) {
+// 업무 등록이 없는 원격: 예전에는 "task assign" 안내로 오류였고, 지금은 직송(sendRemoteDirect)이다 — 의도한 동작 변경(2026-09-30).
+// 어댑터를 못 열면(ssh 없음 등) 여전히 오류로 끝나고 업무 등록은 만들지 않는다.
+func TestSendRemoteWithoutAssignmentGoesDirect(t *testing.T) {
 	st, stateDir := newStore(t)
 	remote.Save(stateDir, remote.Remote{Name: "hermes-qa", Kind: "hermes", SSH: "h", Profile: "p", WorkspaceRoot: "/w"})
-	err := RunSend(context.Background(), &bytes.Buffer{}, nil, st, stateDir, nil, []string{"hermes-qa", "지시"})
-	if err == nil || !strings.Contains(err.Error(), "task assign") {
-		t.Errorf("등록 없으면 task assign 안내: %v", err)
+	ad := &scriptedAdapter{handle: "card-d"}
+	stubRemoteAdapter(t, ad)
+	var out bytes.Buffer
+	if err := RunSend(context.Background(), &out, nil, st, stateDir, nil, []string{"hermes-qa", "지시"}); err != nil {
+		t.Fatalf("등록 없으면 직송: %v", err)
+	}
+	if len(ad.dispatched) != 1 || !strings.Contains(out.String(), "업무 등록 없음") {
+		t.Errorf("직송 흔적: %v %s", ad.dispatched, out.String())
+	}
+	if _, has, _ := task.Load(stateDir, task.RemoteAgentID("hermes-qa")); has {
+		t.Error("직송은 업무 등록을 만들지 않는다")
 	}
 }
