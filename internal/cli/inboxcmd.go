@@ -12,7 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/netwaif/agentlayer/internal/remote"
 	"github.com/netwaif/agentlayer/internal/scan"
+	"github.com/netwaif/agentlayer/internal/state"
 	"github.com/netwaif/agentlayer/internal/task"
 )
 
@@ -26,6 +28,9 @@ const InboxUsage = `사용법:
     이 세션 앞으로 오는 편지 한 통을 기다린다(Claude 세션이 Bash로 백그라운드 실행). 편지가 오면
     "from: <보낸이>" 한 줄 + 빈 줄 + 본문을 stdout에 찍고 0으로 끝난다. 기간을 넘기면 stderr에 "답 없음"을 찍고 2로 끝난다.
     이름 기본값은 폴더명(겹치면 폴더명-<pid 끝 4자리>). 보내는 쪽: agentlayer send <이름> <메시지>
+    --remote <원격이름>[:<카드>] (여러 번): 원격(헤르메스) 카드가 끝나거나 질문하면 그 결과도 편지처럼 내준다("from: <원격이름>").
+    --mailbox: --remote로 지정한 원격의 편지함(먼저 보내온 편지)도 본다. 총괄(AI 회사)이 같은 편지함을 쓰면 켜지 말 것(경합).
+    --remote-interval <기간, 기본 5s>
   agentlayer inbox open [--name <별칭>]
     연결 모드. 이 세션의 고유 주소 ID(al-6자)를 발급해 stdout에 찍고 바로 끝난다. 상대에게는 이 ID를 알려 준다.
     이후 wait는 주소를 유지하고(끝나도 안 지움), 대기가 꺼진 사이에 온 편지도 큐에 남겨 다음 wait가 집는다. 다시 open하면 같은 ID.
@@ -157,8 +162,28 @@ func RunInboxWait(ctx context.Context, stdout, stderr io.Writer, stateDir string
 	}
 	sub := args[0]
 	name, timeout, interval := "", 30*time.Minute, 200*time.Millisecond
+	var remoteSpecs []string
+	remoteEvery, mailbox := 5*time.Second, false
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
+		case "--mailbox":
+			mailbox = true
+			continue
+		case "--remote", "--remote-interval":
+			if i+1 >= len(args) {
+				return fmt.Errorf("%s 뒤에 값이 필요합니다", args[i])
+			}
+			if args[i] == "--remote" {
+				remoteSpecs = append(remoteSpecs, args[i+1])
+			} else {
+				d, err := time.ParseDuration(args[i+1])
+				if err != nil || d <= 0 {
+					return fmt.Errorf("--remote-interval 형식 오류: %q", args[i+1])
+				}
+				remoteEvery = d
+			}
+			i++
+			continue
 		case "--name", "--timeout", "--interval":
 			if i+1 >= len(args) {
 				return fmt.Errorf("%s 뒤에 값이 필요합니다", args[i])
@@ -186,6 +211,31 @@ func RunInboxWait(ctx context.Context, stdout, stderr io.Writer, stateDir string
 		}
 	}
 	logf := func(f string, a ...any) { fmt.Fprintf(stderr, "agentlayer inbox: "+f+"\n", a...) }
+	// 원격 카드 감시(헤르메스 양방향): 등록·연결은 기다리기 전에 검사해 오타를 바로 알린다.
+	var remotes []*remoteWatch
+	if sub == "wait" {
+		for _, spec := range remoteSpecs {
+			rname, handle := spec, ""
+			if i := strings.IndexByte(spec, ':'); i > 0 {
+				rname, handle = spec[:i], spec[i+1:]
+			}
+			r, ok, err := remote.Load(stateDir, rname)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("원격 %q 등록 없음 ('agentlayer remote list')", rname)
+			}
+			ad, err := OpenRemote(*r, stateDir)
+			if err != nil {
+				return fmt.Errorf("원격 %s 연결 실패: %w", rname, err)
+			}
+			if handle == "" && !mailbox {
+				return fmt.Errorf("--remote %s: 카드(:<핸들>)나 --mailbox 중 하나는 있어야 합니다", rname)
+			}
+			remotes = append(remotes, &remoteWatch{name: rname, handle: remote.Handle(handle), ad: ad, mailbox: mailbox})
+		}
+	}
 	cwd, _ := os.Getwd()
 	pid := sessionPIDFn()
 	if pid <= 0 {
@@ -259,10 +309,38 @@ func RunInboxWait(ctx context.Context, stdout, stderr io.Writer, stateDir string
 	}
 	wctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	// 로컬 수신함(편지 한 통)과 원격 카드(각 하나)가 각각 최대 한 건씩 내놓는다. 먼저 온 것을 찍고 나머지 버퍼도 비워 찍는다(잃지 않게).
+	results := make(chan *task.Report, 1+len(remotes))
+	watchDone := make(chan error, 1)
+	go func() {
+		watchDone <- task.Watch(wctx, inbox, interval, true, func(r *task.Report) { results <- r })
+	}()
+	for _, rw := range remotes {
+		go rw.run(wctx, remoteEvery, results, logf)
+	}
 	var got *task.Report
-	err := task.Watch(wctx, inbox, interval, true, func(r *task.Report) { got = r })
+	var err error
+	select {
+	case got = <-results:
+		cancel()
+		<-watchDone
+	case err = <-watchDone:
+		select {
+		case got = <-results:
+		default:
+		}
+	}
 	if got != nil {
 		fmt.Fprintf(stdout, "from: %s\n\n%s\n", got.From, got.Task)
+		for {
+			select {
+			case more := <-results:
+				fmt.Fprintf(stdout, "\nfrom: %s\n\n%s\n", more.From, more.Task)
+				continue
+			default:
+			}
+			break
+		}
 		return nil
 	}
 	if errors.Is(err, context.DeadlineExceeded) || (err == nil && wctx.Err() != nil && ctx.Err() == nil) {
@@ -307,4 +385,73 @@ func sendToAddress(w io.Writer, stateDir string, addr *Address, from, message st
 	}
 	fmt.Fprintf(w, "전송 완료 → %s (pid %d) [inbox wait] (inbox)\n", addr.Name, addr.PID)
 	return nil
+}
+
+// remoteWatch — `inbox wait --remote <이름>[:<카드>]`. 카드가 끝나면(DONE) 요약, 질문하면(WAITING) 물음, 실패면(ERROR) 사유를
+// 편지 한 통으로 내놓고 끝난다. --mailbox면 그 원격이 먼저 보내온 편지(Mailbox)도 본다 — Mailbox()가 돌려준 편지는 수신 확인되므로
+// 총괄(AI 회사)이 같은 편지함을 쓰는 환경에서는 켜지 말 것. ssh·로컬 어댑터 구분 없이 같은 인터페이스다.
+type remoteWatch struct {
+	name    string
+	handle  remote.Handle
+	ad      remote.Adapter
+	mailbox bool
+}
+
+func (rw *remoteWatch) run(ctx context.Context, every time.Duration, results chan<- *task.Report, logf func(string, ...any)) {
+	emit := func(from, text string) {
+		select {
+		case results <- &task.Report{Version: 1, ID: task.NewID(), Session: rw.name, Kind: "remote", From: from, To: DirectiveEvent, Task: text, At: time.Now()}:
+		case <-ctx.Done():
+		}
+	}
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		if rw.handle != "" {
+			s, err := rw.ad.Poll(ctx, rw.handle)
+			if err != nil {
+				if ctx.Err() != nil {
+					return
+				}
+				logf("원격 %s 카드 %s 조회 실패: %v", rw.name, rw.handle, err)
+			} else {
+				switch s.State {
+				case state.StateDoneUnread, state.StateIdle:
+					text := strings.TrimSpace(s.Summary)
+					if text == "" {
+						text = "(결과 없음 — 카드 " + string(rw.handle) + " 완료)"
+					}
+					emit(rw.name, text)
+					return
+				case state.StateWaiting:
+					emit(rw.name, "[WAITING] "+strings.TrimSpace(s.Ask))
+					return
+				case state.StateError, state.StateDead:
+					emit(rw.name, "[ERROR] "+strings.TrimSpace(s.Error))
+					return
+				}
+			}
+		}
+		if rw.mailbox {
+			letters, err := rw.ad.Mailbox(ctx)
+			if err != nil && ctx.Err() == nil {
+				logf("원격 %s 편지함 조회 실패: %v", rw.name, err)
+			}
+			for _, l := range letters {
+				from := rw.name
+				if l.From != "" {
+					from = rw.name + "/" + l.From
+				}
+				emit(from, l.Text)
+			}
+			if len(letters) > 0 {
+				return
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }

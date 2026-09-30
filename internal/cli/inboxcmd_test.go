@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/netwaif/agentlayer/internal/remote"
 	"os"
 	"path/filepath"
 	"strings"
@@ -312,5 +313,39 @@ func TestInboxOpenKeepQueuesLettersAcrossWaits(t *testing.T) {
 	}
 	if _, f2, _ := LoadAddress(stateDir, "pair"); f2 {
 		t.Error("close 뒤 별칭이 남음")
+	}
+}
+
+// --remote <이름>:<카드>: 원격 카드가 끝나면(또는 질문하면) 그 결과를 편지처럼 내준다 — 헤르메스 양방향(ssh·로컬 무관).
+func TestInboxWaitPollsRemoteHandle(t *testing.T) {
+	stubSession(t, 6161, map[int]bool{6161: true})
+	stateDir := t.TempDir()
+	if err := remote.Save(stateDir, remote.Remote{Name: "hermes-qa", Kind: "hermes", SSH: "h", Profile: "p", WorkspaceRoot: "/w"}); err != nil {
+		t.Fatal(err)
+	}
+	ad := &scriptedAdapter{handle: "card-9", status: remote.Status{State: state.StateDoneUnread, Summary: "DONE: #기술검증팀 — 12:00"}}
+	stubRemoteAdapter(t, ad)
+	var out, errb bytes.Buffer
+	err := RunInboxWait(context.Background(), &out, &errb, stateDir, []string{"wait", "--name", "rq", "--interval", "10ms", "--timeout", "3s",
+		"--remote", "hermes-qa:card-9", "--remote-interval", "20ms"}, tnow)
+	if err != nil {
+		t.Fatalf("wait: %v %s", err, errb.String())
+	}
+	if !strings.HasPrefix(out.String(), "from: hermes-qa\n") || !strings.Contains(out.String(), "DONE: #기술검증팀") {
+		t.Errorf("원격 카드 결과를 편지 형식으로: %q", out.String())
+	}
+	// 질문(WAITING)도 그대로 전달한다
+	ad.status = remote.Status{State: state.StateWaiting, Ask: "파일을 덮어쓸까요?"}
+	out.Reset()
+	if err := RunInboxWait(context.Background(), &out, &errb, stateDir, []string{"wait", "--name", "rq", "--interval", "10ms", "--timeout", "3s",
+		"--remote", "hermes-qa:card-9", "--remote-interval", "20ms"}, tnow); err != nil {
+		t.Fatalf("wait(ask): %v", err)
+	}
+	if !strings.Contains(out.String(), "[WAITING]") || !strings.Contains(out.String(), "덮어쓸까요") {
+		t.Errorf("질문 전달: %q", out.String())
+	}
+	// 등록 안 된 원격은 즉시 오류
+	if err := RunInboxWait(context.Background(), &out, &errb, stateDir, []string{"wait", "--remote", "nope:c1"}, tnow); err == nil || !strings.Contains(err.Error(), "nope") {
+		t.Errorf("모르는 원격: %v", err)
 	}
 }
