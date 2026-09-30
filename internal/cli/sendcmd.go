@@ -77,9 +77,13 @@ func SendGate(s state.AgentState, force bool) (bool, string) {
 
 type SendOptions struct {
 	Force, JSON bool
+	// CWD — 기록 없는 코덱스 세션에 큐로 보낼 때의 작업 폴더(sendCodexDirect). 비면 rollout에서 찾는다.
+	CWD string
+	// Files — 업무 등록 없는 원격 직송(sendRemoteDirect)에 붙일 첨부 파일. 다른 경로에 주면 오류.
+	Files []string
 }
 
-// ParseSendFlags는 --force·--json만 받고 나머지를 위치 인자로 돌려준다.
+// ParseSendFlags는 --force·--json·--cwd·--file만 받고 나머지를 위치 인자로 돌려준다.
 func ParseSendFlags(args []string) (SendOptions, []string, error) {
 	var o SendOptions
 	i := 0
@@ -89,7 +93,25 @@ func ParseSendFlags(args []string) (SendOptions, []string, error) {
 			o.Force = true
 		case "--json":
 			o.JSON = true
+		case "--cwd", "--file":
+			if i+1 >= len(args) {
+				return o, nil, fmt.Errorf("%s 뒤에 경로가 필요합니다", args[i])
+			}
+			if args[i] == "--cwd" {
+				o.CWD = args[i+1]
+			} else {
+				o.Files = append(o.Files, args[i+1])
+			}
+			i++
 		default:
+			if strings.HasPrefix(args[i], "--cwd=") {
+				o.CWD = strings.TrimPrefix(args[i], "--cwd=")
+				continue
+			}
+			if strings.HasPrefix(args[i], "--file=") {
+				o.Files = append(o.Files, strings.TrimPrefix(args[i], "--file="))
+				continue
+			}
 			if strings.HasPrefix(args[i], "--") {
 				return o, nil, fmt.Errorf("알 수 없는 플래그: %s", args[i])
 			}
@@ -98,6 +120,9 @@ func ParseSendFlags(args []string) (SendOptions, []string, error) {
 	}
 	return o, nil, nil
 }
+
+// errNoFileHere — --file은 업무 등록 없는 원격 직송에서만 받는다. 다른 경로(tmux·채널·큐·업무 등록된 원격)는 첨부를 나를 길이 없다.
+var errNoFileHere = errors.New("--file은 업무 등록이 없는 원격(remotes/<이름>.json) 직송에서만 쓸 수 있습니다")
 
 // maxMessageBytes는 send 본문 상한(64KiB) — 훅·터미널 붙여넣기를 넘는
 // 비정상 입력이 pane을 오래 막지 않게 막는다.
@@ -157,7 +182,7 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 		return err
 	}
 	if len(rest) < 2 {
-		return errors.New("사용법: agentlayer send [--force] [--json] <세션[:창]> <메시지> (여러 줄은 '-'로 stdin)")
+		return errors.New("사용법: agentlayer send [--force] [--json] [--cwd <폴더>] [--file <경로>]... <세션[:창]|이름|코덱스 세션 ID|원격> <메시지> (여러 줄은 '-'로 stdin)")
 	}
 	message := strings.Join(rest[1:], " ")
 	if message == "-" {
@@ -179,6 +204,13 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 	}
 	// 원격 직원(remotes/<이름>.json)이면 어댑터 경로 — 이름 규칙(':' 없음)에 안 맞는 "<세션>:<창>"은 그대로 기존 경로.
 	if r, ok, err := remote.Load(stateDir, rest[0]); err == nil && ok {
+		// 업무 등록이 없으면 예전에는 오류였다 — 그 경우에만 직송(sendRemoteDirect). 등록이 있으면 기존 경로 그대로.
+		if _, has, lerr := task.Load(stateDir, task.RemoteAgentID(r.Name)); lerr == nil && !has {
+			return sendRemoteDirect(ctx, w, stateDir, r, message, o, time.Now())
+		}
+		if len(o.Files) > 0 {
+			return errNoFileHere
+		}
 		return sendRemote(ctx, w, st, stateDir, r, message, o, time.Now())
 	}
 	agents, err := st.List()
@@ -187,7 +219,25 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 	}
 	a, err := ResolveTarget(agents, rest[0])
 	if err != nil {
+		// 기존 해석이 실패한 뒤에만 타는 분기 — 예전에는 전부 오류였던 입력이다.
+		// (1) 세션 ID 형식이면 기록 없는 코덱스 세션(데스크톱 앱)으로 보고 큐로 직송.
+		if LooksLikeSessionID(rest[0]) {
+			if len(o.Files) > 0 {
+				return errNoFileHere
+			}
+			return sendCodexDirect(ctx, w, rest[0], o, message)
+		}
+		// (2) `inbox wait`가 등록한 주소록 이름이면 그 수신함에 편지를 넣는다.
+		if addr, found, aerr := LoadAddress(stateDir, rest[0]); aerr == nil && found {
+			if len(o.Files) > 0 {
+				return errNoFileHere
+			}
+			return sendToAddress(w, stateDir, addr, senderName(agents), message, o)
+		}
 		return err
+	}
+	if len(o.Files) > 0 {
+		return errNoFileHere
 	}
 	cfg := config.Load()
 	// 훅이 세션 ID를 못 남긴 코덱스는 rollout에서 찾아 채운다(전송에만 쓰고 저장하지 않는다).

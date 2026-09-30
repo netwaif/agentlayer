@@ -2,6 +2,8 @@ package usage
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -441,4 +443,52 @@ func CodexSessionSince(root, workdir string, since time.Time) string {
 		return id[1]
 	}
 	return ""
+}
+
+var codexCwdRe = regexp.MustCompile(`"cwd":"([^"]+)"`)
+
+// ErrCodexSessionNotFound — rollout 폴더에 그 접두로 시작하는 세션이 없다.
+var ErrCodexSessionNotFound = errors.New("rollout에 그 세션이 없음")
+
+// CodexSessionByPrefix는 rollout 폴더에서 session_id가 prefix로 시작하는 세션을 찾아 (전체 ID, cwd)를 돌려준다.
+// 코덱스 데스크톱 앱 세션처럼 훅·tmux 기록이 없는 세션에 `send <세션 ID 앞자리>`로 보낼 때 쓴다 — 큐(`codex queue --thread`)는
+// 전체 ID가 필요하고 작업 폴더도 알아야 한다. 최근 400개(codexRolloutsByRecency)만 본다. 둘 이상 맞으면 후보를 담은 오류.
+func CodexSessionByPrefix(root, prefix string) (string, string, error) {
+	if prefix == "" {
+		return "", "", ErrCodexSessionNotFound
+	}
+	type hit struct{ id, cwd string }
+	var hits []hit
+	seen := map[string]bool{}
+	for _, path := range codexRolloutsByRecency(root) {
+		f, err := os.Open(path)
+		if err != nil {
+			continue
+		}
+		head := make([]byte, 4096)
+		n, _ := f.Read(head)
+		f.Close()
+		h := string(head[:n])
+		id := codexSessionIDRe.FindStringSubmatch(h)
+		if id == nil || !strings.HasPrefix(id[1], prefix) || seen[id[1]] {
+			continue
+		}
+		seen[id[1]] = true
+		cwd := ""
+		if m := codexCwdRe.FindStringSubmatch(h); m != nil {
+			cwd = m[1]
+		}
+		hits = append(hits, hit{id[1], cwd})
+	}
+	switch len(hits) {
+	case 0:
+		return "", "", ErrCodexSessionNotFound
+	case 1:
+		return hits[0].id, hits[0].cwd, nil
+	}
+	ids := make([]string, 0, len(hits))
+	for _, h := range hits {
+		ids = append(ids, h.id)
+	}
+	return "", "", fmt.Errorf("%q로 시작하는 코덱스 세션이 둘 이상입니다 — 더 긴 ID를 쓰세요: %s", prefix, strings.Join(ids, ", "))
 }
