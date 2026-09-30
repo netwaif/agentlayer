@@ -276,3 +276,60 @@ func TestRunChannelPassiveWithoutFlag(t *testing.T) {
 	inw.Close()
 	<-done
 }
+
+// 총괄 모드(serve <inbox>)로 뜬 서버도 tmux pane 안이면 자기 pane 수신함을 함께 쥔다 — 총괄 메인·총괄 스레드 세션에도
+// `send`가 채널로 들어가게(2026-09-30: 스레드 첨부가 tmux 붙여넣기에서 접힌 채 제출되지 않던 문제의 구조적 해법).
+func TestRunChannelInboxModeAlsoServesPaneInbox(t *testing.T) {
+	dir := t.TempDir()
+	st, _ := state.NewStore(dir)
+	inbox := filepath.Join(t.TempDir(), "inbox")
+	t.Setenv("TMUX_PANE", "%77")
+	inr, inw := io.Pipe()
+	outr, outw := io.Pipe()
+	var errb bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		done <- RunChannel(context.Background(), inr, outw, &errb, st, dir, "1.11.2", []string{"serve", inbox, "--interval", "10ms"})
+		outw.Close()
+	}()
+	go inw.Write([]byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}` + "\n"))
+	br := bufio.NewReader(outr)
+	first, _ := br.ReadString('\n')
+	if !strings.Contains(first, "편지") || !strings.Contains(first, `event=\"SEND\"`) {
+		t.Fatalf("총괄 모드 지침에 편지·SEND 지시 설명이 함께 있어야 함: %s", first)
+	}
+	pane := PaneInbox(dir, "%77")
+	deadline := time.Now().Add(3 * time.Second)
+	for !ChannelLive(pane) {
+		if time.Now().After(deadline) {
+			t.Fatalf("pane 수신함을 쥐지 않음: %s\n%s", pane, errb.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := SendViaChannel(pane, "company-bot", "", "스레드 원문", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	line, err := br.ReadString('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	_ = json.Unmarshal([]byte(line), &m)
+	if m["method"] != "notifications/claude/channel" {
+		t.Fatalf("알림 기대: %s", line)
+	}
+	params := m["params"].(map[string]any)
+	meta := params["meta"].(map[string]any)
+	if meta["event"] != "SEND" || meta["from"] != "company-bot" || params["content"] != "스레드 원문" {
+		t.Errorf("지시 알림: %v", params)
+	}
+	// 회사 수신함도 여전히 본다
+	id := strings.Repeat("e", 32)
+	pendingLetter(t, inbox, id)
+	line, _ = br.ReadString('\n')
+	if !strings.Contains(line, id) {
+		t.Errorf("회사 수신함 편지도 전달돼야 함: %s", line)
+	}
+	inw.Close()
+	<-done
+}

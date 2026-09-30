@@ -36,7 +36,8 @@ const channelInstructions = `<channel source="agentlayer">로 오는 메시지�
 // selfInstructions는 직원 세션(--self)의 initialize 응답에 실린다.
 const selfInstructions = `<channel source="agentlayer" event="SEND">로 오는 메시지는 총괄(또는 사용자)이 agentlayer send로 보낸 지시다. ` +
 	`content가 지시 본문 그대로이며, 사용자가 입력창에 직접 친 것과 똑같이 받아 수행한다. meta.from이 보낸 세션, meta.task가 업무ID(있을 때). ` +
-	`이 채널로 회신하지 않는다 — 결과는 평소 규칙대로 보고한다.`
+	`이 채널로 회신하지 않는다 — 결과는 평소 규칙대로 보고한다. ` +
+	`content 안에 <channel source="plugin:discord:discord"> 태그가 들어 있으면 메인 봇이 넘긴 디스코드 스레드 메시지다 — 그 태그의 글을 스레드 사용자의 말로 처리한다.`
 
 // DirectiveEvent — 직원 수신함에 떨어지는 지시의 to 값.
 const DirectiveEvent = "SEND"
@@ -240,8 +241,11 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 	}
 	inbox, interval := args[1], 200*time.Millisecond
 	self := inbox == "--self"
+	// pane 수신함 — 직원(--self)은 이것만, 총괄(serve <inbox>)도 tmux pane 안이면 함께 쥔다. 총괄 메인·총괄 스레드 세션에도
+	// `send`가 채널로 들어가게(tmux 붙여넣기는 이미지 경로가 든 여러 줄에서 접힌 채 제출되지 않는다, 2026-09-30).
+	pane := PaneInbox(stateDir, os.Getenv("TMUX_PANE"))
 	if self {
-		inbox = PaneInbox(stateDir, os.Getenv("TMUX_PANE"))
+		inbox = pane
 	}
 	for i := 2; i < len(args); i++ {
 		switch args[i] {
@@ -293,6 +297,8 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 	instructions := channelInstructions
 	if self {
 		instructions = selfInstructions
+	} else if pane != "" {
+		instructions = channelInstructions + " " + selfInstructions
 	}
 	srv := channel.New(stdin, stdout, version, instructions)
 	srv.Log = func(m string) { logf("%s", m) }
@@ -314,7 +320,24 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 	// 띄워 initialize까지 하고 바로 죽인다(2026-09-29 실측: initialize→initialized→tools/list 뒤 1초 안에 종료).
 	// 그 짧은 인스턴스가 pending을 집으면 편지가 received/로 옮겨진 채 아무에게도 전달되지 않는다.
 	// 그래서 (1) initialize 뒤 channelSettle 동안 살아남은 뒤에만, (2) 수신함 잠금을 쥔 하나만 감시를 시작한다.
-	werr := make(chan error, 1)
+	werr := make(chan error, 2)
+	// watchDirectives — pane 수신함 하나를 쥐고 지시(SEND)를 알림으로 흘린다. 감시가 끝나면 werr로 알린다.
+	watchDirectives := func(box string) {
+		unlock, ok := acquireInboxLock(wctx, box, logf)
+		if !ok {
+			return
+		}
+		defer unlock()
+		logf("수신함 감시 시작: %s", box)
+		if n := purgeStale(box); n > 0 {
+			logf("기동 전부터 있던 지시 %d건을 quarantine으로 치움(옛 세션 앞으로 온 것)", n)
+		}
+		werr <- task.Watch(wctx, box, interval, false, func(r *task.Report) {
+			if r.To == DirectiveEvent {
+				srv.Notify(DirectiveNotification(r))
+			}
+		})
+	}
 	go func() {
 		select {
 		case <-srv.Initialized():
@@ -326,23 +349,24 @@ func RunChannel(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, 
 		case <-wctx.Done():
 			return
 		}
+		if self {
+			watchDirectives(abs)
+			return
+		}
+		if pane != "" {
+			if err := os.MkdirAll(pane, 0o700); err != nil {
+				logf("pane 수신함 만들기 실패(%s): %v — 지시는 tmux 입력으로 온다", pane, err)
+			} else {
+				go watchDirectives(pane)
+			}
+		}
+		// 회사 수신함은 총괄 세션 하나만 쥔다 — 다른 서버(총괄 스레드 세션 등)는 잠금이 풀릴 때까지 기다린다.
 		unlock, ok := acquireInboxLock(wctx, abs, logf)
 		if !ok {
 			return
 		}
 		defer unlock()
 		logf("수신함 감시 시작: %s", abs)
-		if self {
-			if n := purgeStale(abs); n > 0 {
-				logf("기동 전부터 있던 지시 %d건을 quarantine으로 치움(옛 세션 앞으로 온 것)", n)
-			}
-			werr <- task.Watch(wctx, abs, interval, false, func(r *task.Report) {
-				if r.To == DirectiveEvent {
-					srv.Notify(DirectiveNotification(r))
-				}
-			})
-			return
-		}
 		// 원격 직원 폴링은 taskWatch와 같은 방식 — 전이가 inbox 파일로 떨어져 아래 Watch가 같은 길로 흘린다.
 		go func() {
 			_ = task.RunRemotePolling(wctx, stateDir, abs, opener, func(s string) { logf("remote: %s", s) }, time.Now)
