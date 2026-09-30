@@ -1,8 +1,10 @@
 package usage
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -199,5 +201,29 @@ func TestCodexSessionSince(t *testing.T) {
 	}
 	if got := CodexSessionSince(root, "/w/none", base); got != "" {
 		t.Errorf("기록 없음: %q", got)
+	}
+}
+
+// 기록 없는 코덱스 세션(데스크톱 앱)은 rollout에서 세션 ID 접두로 전체 ID·작업 폴더를 찾는다.
+func TestCodexSessionByPrefix(t *testing.T) {
+	root := t.TempDir()
+	base := time.Date(2026, 9, 29, 14, 0, 0, 0, time.UTC)
+	writeRollout(t, root, "rollout-a.jsonl", "0199a1b2-1111-4c1e-9f1a-000000000001", "/w/a", "2026-09-29T13:00:00.000Z", base)
+	writeRollout(t, root, "rollout-b.jsonl", "0199a1b2-2222-4c1e-9f1a-000000000002", "/w/b", "2026-09-29T13:10:00.000Z", base.Add(time.Minute))
+	writeRollout(t, root, "rollout-c.jsonl", "ffff0000-3333-4c1e-9f1a-000000000003", "/w/c", "2026-09-29T13:20:00.000Z", base.Add(2*time.Minute))
+	if id, cwd, err := CodexSessionByPrefix(root, "ffff0000"); err != nil || id != "ffff0000-3333-4c1e-9f1a-000000000003" || cwd != "/w/c" {
+		t.Errorf("접두 하나: %q %q %v", id, cwd, err)
+	}
+	if id, _, err := CodexSessionByPrefix(root, "0199a1b2-2222"); err != nil || id != "0199a1b2-2222-4c1e-9f1a-000000000002" {
+		t.Errorf("긴 접두: %q %v", id, err)
+	}
+	if _, _, err := CodexSessionByPrefix(root, "0199a1b2"); err == nil || !strings.Contains(err.Error(), "둘 이상") || !strings.Contains(err.Error(), "0199a1b2-1111") {
+		t.Errorf("모호하면 후보를 담은 오류: %v", err)
+	}
+	if _, _, err := CodexSessionByPrefix(root, "deadbeef"); !errors.Is(err, ErrCodexSessionNotFound) {
+		t.Errorf("없으면 ErrCodexSessionNotFound: %v", err)
+	}
+	if _, _, err := CodexSessionByPrefix(root, ""); !errors.Is(err, ErrCodexSessionNotFound) {
+		t.Errorf("빈 접두: %v", err)
 	}
 }
