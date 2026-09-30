@@ -15,13 +15,12 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-09-30 14:40 체크포인트** — 전송 규칙 통일 완료: 채널(Claude)·큐(코덱스)가 정본, tmux 키 입력은 어디서나 폴백(⚠ 사유 표시). agentlayer **v1.11.3**(e10fad8: `DeliverTo`로 browser pick·shot·wt send 통일; v1.11.2 fd36de5: 총괄 모드 서버 pane 수신함 겸용)·folder-bot **0.1.25**(9e79687: 스레드 원문 `agentlayer send`)·discord-multiagent f5fc37b(bot-up 확인창 통과). 이 맥 설치·총괄 메인/스레드 재기동 완료. **미푸시 셋 다**. 비서실장 봇(claude-discord)만 plist 플래그 추가·재시작이 분류기에 막혀 **사용자 몫**. agy는 대안 없음(tmux만).
+**2026-09-30 14:50 체크포인트** — 전송 규칙 통일 완료·전부 게시: 채널(Claude)·큐(코덱스)가 정본, tmux 키 입력은 어디서나 폴백(⚠ 사유). agentlayer **v1.11.3**(e10fad8, GitHub 릴리즈+brew cask 게시)·folder-bot **0.1.25**(9e79687, 태그 푸시·이 맥 플러그인 0.1.25)·discord-multiagent f5fc37b(origin/main). 봇 적용: 총괄 메인·스레드·비서실장(plist 플래그, pane %3 수신함) 전부 채널 수신 확인. 남은 실기: 「해커스 1차시」 스레드에 이미지 전송 → `thread-route.log`에 `via=channel`.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-0. **사용자 몫(2026-09-30 분류기 차단)**: 비서실장 봇 plist `~/Library/LaunchAgents/com.soonho.claude-discord.plist` 19행 exec 문자열 끝에 ` --dangerously-load-development-channels server:agentlayer` 추가 → `botstart.py start claude-discord --restart` → `~/.local/state/agentlayer/inboxes/p<pane>/.channel.lock` 잠금 확인. 그리고 세 레포 푸시(agentlayer v1.11.2·v1.11.3, folder-bot v0.1.25, discord-multiagent). 실기: 「해커스 1차시」 스레드에 이미지 전송 → `company/.discord-state/thread-route.log`에 `via=channel`.
-   2026-09-30 해소: ① 총괄 send(채널, 스레드 창 있으면 `company-bot:2.1.285`처럼 창 명시) ③ browser pick·wt review(DeliverTo). 남은 구상: ④ `send --from <이름>` ⑤ Claude 데스크톱 앱 경로(9/28 조사: 채널 불가·소켓 경로 필요).
+0. **실기 확인(사용자)**: 「해커스 1차시」 스레드에 이미지 한 장 → `~/ai-folder/company/.discord-state/thread-route.log`에 `via=channel`. 안 찍히면 그 로그의 send stderr부터 본다. (2026-09-30 해소: 비서실장 plist 플래그+재시작(사용자 승인 뒤 실행, 백업 `com.soonho.claude-discord.plist.bak-20260930`), 세 레포 푸시, v1.11.3 goreleaser 게시, 플러그인 0.1.25 갱신.) 남은 구상: ④ `send --from <이름>` ⑤ Claude 데스크톱 앱 경로(9/28 조사: 채널 불가·소켓 경로 필요).
 **아래 "미착수"는 2026-09-29에 사용자가 "하나씩 모두 해"라고 지시했는데 하지 않았고 보고에서도 빠뜨렸던 항목이다. 끝난 것으로 읽지 말 것.**
 
 1. **미착수 — 에이전트 브라우저 사소 9건**: 다른 탭 배너 제목이 이동 전 제목으로 남음 / new_page 직후 그 탭에 미러 없음 / 버튼 클릭 즉각 피드백 없음 / 휠 스크롤은 방패가 못 막음 / hangwatch Ping 최악 ~7.5s·Relaunch Connect 무제한 / 늦게 성사된 연결 고루틴 누수(mcp-serve) / 프록시 여럿 ack 경쟁 / 클라이언트 줄 JSON 4회 파싱 / trim이 마커 뒤 전부 자름. 상세는 결정 기록 2026-09-22(3차).
@@ -535,3 +534,4 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 - 2026-09-30(v1.11.2 fd36de5): `internal/cli/channelcmd.go`(RunChannel pane 수신함 겸용·`watchDirectives`·지침 합침, `selfInstructions` 디스코드 문장), `internal/cli/channelcmd_test.go`(`TestRunChannelInboxModeAlsoServesPaneInbox`), `README.md`(채널 절 1.11.2 문단). 설치: `go build -ldflags "-X main.version=1.11.2 …"` → `~/.local/bin/agentlayer`.
 - 2026-09-30(folder-bot v0.1.25 9e79687, `~/VSCodeWorkspace/folder-bot`): `plugins/folder-bot/skills/configure-bot/assets/bot-thread-route.sh`(SESSION 추출·`send_via_agentlayer`·deliver 폴백), `tests/test_bot_thread_route_send.sh`(신규), `docs/thread-live-view.md`, `README.md`, `plugin.json`·`marketplace.json` 0.1.25. 설치본 `~/.local/bin/bot-thread-route` 직접 갱신(마켓플레이스 클론 `~/.claude/plugins/marketplaces/folder-bot`은 아직 0.1.24 — 푸시 뒤 플러그인 업데이트 필요).
 - 2026-09-30(v1.11.3 e10fad8): `internal/cli/codexqueue.go`(`DeliverTo`), `internal/cli/codexqueue_test.go`(`TestDeliverToFallsBackToTmux`), `internal/cli/browsercmd.go`(pick send 클로저·shot), `internal/cli/wtcmd.go`(send 케이스, context import), `internal/wt/review.go`(`SendComments` 전송기 주입), `internal/wt/review_test.go`(`TestSendCommentsUsesInjectedSender`), `README.md`. discord-multiagent(`~/ai-folder/dev/discord-multiagent`) f5fc37b: `scripts/bot-up.sh` 확인창 통과 블록.
+- 2026-09-30(게시): agentlayer v1.11.3 `goreleaser release --clean --release-notes`(태그 체크아웃 상태에서, `export GITHUB_TOKEN=$(gh auth token)` 분리) → 자산 4종+checksums, cask 갱신. folder-bot `claude plugin marketplace update folder-bot && claude plugin update folder-bot` → 캐시 0.1.25. discord-multiagent는 로컬 브랜치 `release-snapshot`이라 `git push origin HEAD:main`. `~/Library/LaunchAgents/com.soonho.claude-discord.plist`(exec 문자열에 `--dangerously-load-development-channels server:agentlayer`).
