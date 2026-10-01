@@ -110,6 +110,9 @@ func run(args []string) error {
 		// 상태 저장소를 건드리지 않는다(주소록·수신함만). 신호가 오면 ctx가 취소되고 주소록 항목이 지워진다.
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+		if len(args) > 1 && args[1] == "reply" {
+			return cli.RunInboxReply(ctx, os.Stdout, os.Stdin, state.DefaultDir(), args[2:])
+		}
 		return cli.RunInboxWait(ctx, os.Stdout, os.Stderr, state.DefaultDir(), args[1:], time.Now)
 	case "channel":
 		st, err := storeWithSync()
