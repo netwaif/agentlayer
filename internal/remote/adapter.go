@@ -50,6 +50,12 @@ type DispatchRequest struct {
 	Attempt string
 }
 
+// AppMailboxer — Claude 앱 세션 앞 편지함(담당자 AppMailbox)을 가진 어댑터(지금은 Hermes). 선택 인터페이스라
+// 기존 Adapter 구현(exec 등)은 바꾸지 않는다. `inbox wait --remote <이름> --app-mailbox`가 쓴다.
+type AppMailboxer interface {
+	AppMailbox(ctx context.Context) ([]Letter, error)
+}
+
 // Adapter는 send·task watch·task done이 실행기에 대해 아는 전부다.
 type Adapter interface {
 	Dispatch(ctx context.Context, req DispatchRequest) (Handle, error)

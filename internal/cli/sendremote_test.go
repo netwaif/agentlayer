@@ -26,6 +26,9 @@ type scriptedAdapter struct {
 	resumed     []string
 	attempts    []string
 	handle      string
+	letters     []remote.Letter // Mailbox(회사 편지함)
+	answered    []string        // Answer: "카드|답|파일들"
+	answerErr   error
 }
 
 func (s *scriptedAdapter) Dispatch(_ context.Context, r remote.DispatchRequest) (remote.Handle, error) {

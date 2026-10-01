@@ -30,7 +30,11 @@ const InboxUsage = `사용법:
     이름 기본값은 폴더명(겹치면 폴더명-<pid 끝 4자리>). 보내는 쪽: agentlayer send <이름> <메시지>
     --remote <원격이름>[:<카드>] (여러 번): 원격(헤르메스) 카드가 끝나거나 질문하면 그 결과도 편지처럼 내준다("from: <원격이름>").
     --mailbox: --remote로 지정한 원격의 편지함(먼저 보내온 편지)도 본다. 총괄(AI 회사)이 같은 편지함을 쓰면 켜지 말 것(경합).
+    --app-mailbox: 그 원격의 Claude 앞 편지함(담당자 claude-app, 서버의 claude-letter가 보낸 것)을 본다. 받은 편지는
+      "from: <원격>/<보낸이>" 다음 줄에 "letter: <원격>:<카드ID>"가 붙는다 — 답은 inbox reply로.
     --remote-interval <기간, 기본 5s>
+  agentlayer inbox reply <원격>:<카드ID> [--file <경로>]... <답|->
+    --app-mailbox로 받은 편지 카드를 답으로 닫는다(첨부는 서버 첨부 폴더에 올려 카드에 붙인다). 회사 수신함을 거치지 않는다.
   agentlayer inbox open [--name <별칭>]
     연결 모드. 이 세션의 고유 주소 ID(al-6자)를 발급해 stdout에 찍고 바로 끝난다. 상대에게는 이 ID를 알려 준다.
     이후 wait는 주소를 유지하고(끝나도 안 지움), 대기가 꺼진 사이에 온 편지도 큐에 남겨 다음 wait가 집는다. 다시 open하면 같은 ID.
@@ -163,11 +167,14 @@ func RunInboxWait(ctx context.Context, stdout, stderr io.Writer, stateDir string
 	sub := args[0]
 	name, timeout, interval := "", 30*time.Minute, 200*time.Millisecond
 	var remoteSpecs []string
-	remoteEvery, mailbox := 5*time.Second, false
+	remoteEvery, mailbox, appMailbox := 5*time.Second, false, false
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "--mailbox":
 			mailbox = true
+			continue
+		case "--app-mailbox":
+			appMailbox = true
 			continue
 		case "--remote", "--remote-interval":
 			if i+1 >= len(args) {
@@ -230,10 +237,15 @@ func RunInboxWait(ctx context.Context, stdout, stderr io.Writer, stateDir string
 			if err != nil {
 				return fmt.Errorf("원격 %s 연결 실패: %w", rname, err)
 			}
-			if handle == "" && !mailbox {
-				return fmt.Errorf("--remote %s: 카드(:<핸들>)나 --mailbox 중 하나는 있어야 합니다", rname)
+			if handle == "" && !mailbox && !appMailbox {
+				return fmt.Errorf("--remote %s: 카드(:<핸들>)나 --mailbox, --app-mailbox 중 하나는 있어야 합니다", rname)
 			}
-			remotes = append(remotes, &remoteWatch{name: rname, handle: remote.Handle(handle), ad: ad, mailbox: mailbox})
+			if appMailbox {
+				if _, ok := ad.(remote.AppMailboxer); !ok {
+					return fmt.Errorf("--remote %s(%s): 이 원격 종류에는 Claude 앞 편지함(--app-mailbox)이 없습니다", rname, r.Kind)
+				}
+			}
+			remotes = append(remotes, &remoteWatch{name: rname, handle: remote.Handle(handle), ad: ad, mailbox: mailbox, appMailbox: appMailbox})
 		}
 	}
 	cwd, _ := os.Getwd()
@@ -331,11 +343,11 @@ func RunInboxWait(ctx context.Context, stdout, stderr io.Writer, stateDir string
 		}
 	}
 	if got != nil {
-		fmt.Fprintf(stdout, "from: %s\n\n%s\n", got.From, got.Task)
+		printLetter(stdout, got, false)
 		for {
 			select {
 			case more := <-results:
-				fmt.Fprintf(stdout, "\nfrom: %s\n\n%s\n", more.From, more.Task)
+				printLetter(stdout, more, true)
 				continue
 			default:
 			}
@@ -350,6 +362,19 @@ func RunInboxWait(ctx context.Context, stdout, stderr io.Writer, stateDir string
 		return errors.New("중단됨(신호) — 주소록 항목을 지웠습니다")
 	}
 	return err
+}
+
+// printLetter — 편지 한 통의 stdout 형식. "from:" 한 줄 + 빈 줄 + 본문(예전 그대로). Claude 앞 편지함(--app-mailbox)으로 받은
+// 편지만 Letter(카드ID)가 있어 "letter: <원격>:<카드ID>" 줄이 from 다음에 붙는다 — inbox reply의 대상이다.
+func printLetter(w io.Writer, r *task.Report, more bool) {
+	if more {
+		fmt.Fprintln(w)
+	}
+	fmt.Fprintf(w, "from: %s\n", r.From)
+	if r.Letter != "" {
+		fmt.Fprintf(w, "letter: %s:%s\n", r.Session, r.Letter)
+	}
+	fmt.Fprintf(w, "\n%s\n", r.Task)
 }
 
 // sendToAddress — `send <이름>`의 주소록 분기(ResolveTarget이 실패한 뒤에만). PID가 살아 있으면 SendViaChannel과 같은 방식으로
@@ -391,19 +416,21 @@ func sendToAddress(w io.Writer, stateDir string, addr *Address, from, message st
 // 편지 한 통으로 내놓고 끝난다. --mailbox면 그 원격이 먼저 보내온 편지(Mailbox)도 본다 — Mailbox()가 돌려준 편지는 수신 확인되므로
 // 총괄(AI 회사)이 같은 편지함을 쓰는 환경에서는 켜지 말 것. ssh·로컬 어댑터 구분 없이 같은 인터페이스다.
 type remoteWatch struct {
-	name    string
-	handle  remote.Handle
-	ad      remote.Adapter
-	mailbox bool
+	name       string
+	handle     remote.Handle
+	ad         remote.Adapter
+	mailbox    bool
+	appMailbox bool // Claude 앞 편지함(담당자 claude-app) — 편지에 카드ID(Letter)를 실어 inbox reply로 답하게 한다
 }
 
 func (rw *remoteWatch) run(ctx context.Context, every time.Duration, results chan<- *task.Report, logf func(string, ...any)) {
-	emit := func(from, text string) {
+	emitLetter := func(from, text, letter string) {
 		select {
-		case results <- &task.Report{Version: 1, ID: task.NewID(), Session: rw.name, Kind: "remote", From: from, To: DirectiveEvent, Task: text, At: time.Now()}:
+		case results <- &task.Report{Version: 1, ID: task.NewID(), Session: rw.name, Kind: "remote", From: from, To: DirectiveEvent, Task: text, Letter: letter, At: time.Now()}:
 		case <-ctx.Done():
 		}
 	}
+	emit := func(from, text string) { emitLetter(from, text, "") }
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
@@ -446,6 +473,24 @@ func (rw *remoteWatch) run(ctx context.Context, every time.Duration, results cha
 			}
 			if len(letters) > 0 {
 				return
+			}
+		}
+		if rw.appMailbox {
+			if am, ok := rw.ad.(remote.AppMailboxer); ok {
+				letters, err := am.AppMailbox(ctx)
+				if err != nil && ctx.Err() == nil {
+					logf("원격 %s Claude 편지함 조회 실패: %v", rw.name, err)
+				}
+				for _, l := range letters {
+					from := rw.name
+					if l.From != "" {
+						from = rw.name + "/" + l.From
+					}
+					emitLetter(from, l.Text, l.ID)
+				}
+				if len(letters) > 0 {
+					return
+				}
 			}
 		}
 		select {
