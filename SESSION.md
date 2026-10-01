@@ -15,13 +15,15 @@ Orca를 설치하는 대신 그 핵심 기능(상태 추적·알림·worktree·D
 ## 현재 상태
 <!-- 덮어쓰기. 항상 짧게 — 지금 어디까지 왔는지 스냅샷만 -->
 
-**2026-10-01 00:10 마감** — 9/30 23:00 마감 뒤 컴퓨터가 다운돼 재시작. 이 레포는 변경 없음(main fb668c9 기준 문서만). 재부팅 복구: 봇 13개 LaunchAgent 자동 기동 → 죽은 4개 botstart로 기동 → 11개 Claude 봇을 재부팅 전 세션 ID로 `--resume` 교체(마감 못 한 어젯밤 맥락 복구) → 총괄 스레드 t871647 `bot-thread ensure`로 복원. 모델은 사용자가 Opus 5.5로 정리. 개발 상태는 9/30 23:00 마감 그대로: agentlayer v1.12.0 릴리즈, baton 전 방향 실기 통과, 클라우드에 `send --from` 지시 보냄(승인 대기 가능). 사용자 몫: 스킬 문구 확정·`netwaif/baton` 공개.
+**2026-10-02 새벽 마감** — agentlayer **v1.12.2** 게시(v1.12.1 `send --from`, v1.12.2 `claude-letter`·`inbox wait --app-mailbox`·`inbox reply`), 이 맥 설치본도 v1.12.2. baton 0.2.0(저장소 비공개)으로 앱 세션 실기 전 방향 통과: 코덱스 앱, 디스코드 코덱스 봇(`codex-live`), 헤르메스, 디스코드→헤르메스→Claude. 공개 범위 기준 확정(정본은 knot `wiki/visibility-policy.md`, 이 저장소는 공개 유지). baton 영상 시연 설계를 총괄에게 인계. restore 봇 선택 기동은 클라우드 세션에 지시해 PR 대기 중(마감 시점 PR 없음). main `8e76cd7` + 이 마감 커밋, 작업 트리 깨끗.
 
 ## 다음 단계
 <!-- 덮어쓰기. 첫 항목 = 다음 세션이 바로 집어들 일 -->
 
-0. **baton — 남은 순서(코드는 클라우드 세션에 위임, 여기서는 설치·실기·기록만)**: ① 클라우드 PR `send-from` 오면 pull·패키지별 테스트·설치·코덱스 앱에서 from 값 실기 ② 스킬 문구 확정(사용자, `~/VSCodeWorkspace/baton/plugins/baton/skills/baton/SKILL.md` — 설치 단계 OS 분기: 맥 brew / 리눅스·WSL 릴리즈 tar 문구 추가 필요) ③ `gh repo create netwaif/baton --public --source . --push`(사용자 확인) → 앱에서 `/plugin marketplace add netwaif/baton` 설치 실기 ④ 디스코드→헤르메스→Claude 실기: VPS에 baton용 편지함 분리(`remote add … --mailbox <이름>` 별도 등록 또는 프로필) 뒤 `inbox wait --remote <이름> --mailbox` ⑤ 윈도우 WSL2 확인(구현은 순수 Go, 미테스트: 앱·코덱스 앱이 WSL 안 바이너리를 부르는지) ⑥ 시연 대본·매뉴얼(agentlayer v1.12 절, baton). 정본: `docs/superpowers/specs/2026-09-30-app-handoff-design.md`, 스킬 초안 `docs/superpowers/plans/2026-09-30-handoff-skill-draft.md`, 클라우드 지시문 원문 `docs/superpowers/plans/2026-09-30-cloud-prompt-{desktop-sessions,send-from}.md`.
-   남은 구상: ④' `send --from <이름>`(tmux 밖에서 보내면 user로 찍힘). 시험용 폴더 `~/ai-folder/dev/app-session-test`(채널 서버 local 등록만) 정리는 사용자 몫.
+0. **restore 봇 선택 기동(PR 대기)**: 브랜치 `restore-bot-picker` PR이 오면 diff 검토 → `gofmt`·`go build ./...`·`go vet` → 패키지별 `go test ./internal/cli -count=1`·`./internal/wiring -count=1` → 격리 상태(`AGENTLAYER_STATE_DIR`) 확인 → **병합은 사용자 승인 뒤** `gh pr merge <N> --squash`·`git pull --ff-only`·`make install`. 그다음 봇별 자동 기동 끄기 — 자동으로 남길 것은 `company-bot`(총괄)·`claude-discord`(비서실장)·`collab-bot`(사업운영 매니저) 셋. Claude 폴더 봇은 `~/.config/folder-bot/bots.json`의 `autostart`(끄면 `<세션>.tmux-cmd` 사이드카), 코덱스·agy 브리지 봇은 plist `com.codex-discord.{daemon,tui,gemini,gemini-tui,textreview,textreview-tui}`(지금 전부 RunAtLoad=true, 데몬은 KeepAlive=true라 끄는 방법 먼저 확인). 이후 `agentlayer restore` 체크리스트 실기 → 릴리즈(v1.13.0). PR이 안 오면 claude.ai의 클라우드 세션 `데스크톱 앱 세션 주소 체계 확장`에 승인 대기가 떠 있는지 사용자에게 확인 요청. 정본: `docs/superpowers/specs/2026-10-02-restore-bot-picker-design.md`, 지시문 `docs/superpowers/plans/2026-10-02-cloud-prompt-restore-bot-picker.md`.
+   **baton 영상**: 총괄이 진행(인계 문서 `~/ai-folder/company/참고자료/BATON-VIDEO-시연설계.md`, 확정 컷 5개). 이 세션 몫은 요청 오면 컷 4·컷 5 리허설 지원, 컷 1 메뉴 이름 화면 대조. baton 저장소 공개 전환은 사용자가 "뒤로 미룸"(게시 전 결정).
+   **뒤로 미룬 것**: ai-company 멤버 배포(문의 올 때 — 압축 파일 + 앱 "플러그인 업로드", 형식 미검증) / 윈도우 확인(윈도우 앱의 WSL 세션은 플러그인 미지원이라는 문서 기술, 기기 필요) / 사소: `inbox open --name X` 뒤 `inbox close`는 `--name X` 필요.
+   **지킬 것**: 이 저장소는 공개다 — 푸시·릴리즈·클라우드 지시 전에 knot `wiki/visibility-policy.md`로 판정하고, SESSION.md·커밋·PR에 사업 내용을 적지 않는다.
 
 **아래 "미착수"는 2026-09-29에 사용자가 "하나씩 모두 해"라고 지시했는데 하지 않았고 보고에서도 빠뜨렸던 항목이다. 끝난 것으로 읽지 말 것.**
 
