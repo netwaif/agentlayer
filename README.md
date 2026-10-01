@@ -226,6 +226,12 @@ agentlayer send hermes-qa --file 스펙.md "이 스펙대로"   # 업무 등록 
   끝난다. `--timeout`(기본 30m)을 넘기면 stderr에 "답 없음(기간)"을 찍고 2로 끝난다. 정상·타임아웃·SIGINT/SIGTERM 모두 주소록
   항목을 지운다. 상태 저장소(agents/)에는 넣지 않으므로 status·TUI에는 보이지 않는다.
 - **`inbox open`·`close` — 연결 모드(1.12.0+)**: 두 세션이 여러 번 오갈 때 쓴다. `inbox open --name <별칭>`이 고유 주소 ID(`al-6자`)를 stdout에 찍고 끝나며, 상대에게는 그 ID를 알려 준다(`agentlayer send al-xxxxxx …`). 이후 `inbox wait --name <별칭>`은 편지 한 통을 받고 끝나도 주소를 지우지 않고, 대기가 꺼진 사이에 온 편지도 회수하지 않고 큐(pending)에 남겨 다음 wait가 집는다 — 받는 쪽은 편지를 처리한 뒤 곧바로 다시 wait를 켜면 대화가 이어진다. 다시 open하면 같은 ID(멱등). `inbox close --name <별칭>`으로 끝낸다. 연결 모드가 아닌 `inbox wait`(open 없이)는 예전 그대로다(끝나면 주소 삭제, 옛 편지 치움).
+- **`inbox wait --remote <원격> --app-mailbox`·`inbox reply` — 디스코드→헤르메스→Claude 앱 세션(1.12.2+)**: 서버에 깔린
+  `claude-letter "제목" "본문"`(스킬 `claude-letter`, 담당자 `claude-app`)이 만든 편지 카드를 앱 세션이 받는다. 출력은
+  `from: <원격>/<보낸이>` 다음 줄에 `letter: <원격>:<카드ID>`, 빈 줄, 본문. 답은 `agentlayer inbox reply <원격>:<카드ID> [--file <경로>]... <답|->`
+  — 어댑터 `Answer`로 카드를 답으로 닫고(첨부는 서버 첨부 폴더에 올려 카드에 붙임) 회사 수신함을 거치지 않는다. 헤르메스가
+  그 대화를 구독해 두었으므로 디스코드에 `✔ … done — <답 첫 줄>` 알림이 뜬다. 회사 편지함(`--mailbox`, 담당자 `company-manager`)과
+  담당자가 달라 총괄 폴링과 경합하지 않는다. 기존 `--mailbox`·카드 결과 출력은 그대로다.
 - **`send --from <이름>` — 발신자 명시(1.12.1+)**: 편지·채널 알림의 `from`(받는 쪽 `inbox wait`의 `from:` 줄, 채널 `meta.from`)에 그 값을
   쓴다(`--from=값`도 됨, 주소록 이름과 같은 제한). 없으면 tmux 안은 세션명, tmux 밖은 부모 프로세스가 코덱스면 `codex`, claude면
   그 세션이 `inbox open`으로 등록한 별칭(없으면 `claude`), 그 밖은 `user`. 업무 등록 없는 원격 직송은 `--from`을 명시했을 때만
@@ -281,6 +287,8 @@ agentlayer task reply t_da1d7ac4 --attach 결과물/a.zip "파일 보냅니다" 
 
 편지 준비물(1.10.4+): `remote add`가 원격에 `~/.local/bin/company-letter`와 스킬
 `$HERMES_HOME/skills/autonomous-ai-agents/company-letter/SKILL.md`를 깐다(정본 `internal/remote/hermesside/`).
+1.12.2+는 Claude 앱 세션용 `claude-letter`(담당자 고정 `claude-app`)와 스킬 `claude-letter`를 나란히 더 깐다 — 디스코드에서
+"Claude에게 … 전해 줘"가 이 스킬에 걸린다. 받는 쪽은 `inbox wait --remote <이름> --app-mailbox`, 답은 `inbox reply`(앱 세션 절 참고).
 편지함 담당자 기본값은 `company-manager`다. 1.10.3까지 등록한 원격은 등록 파일에 `imac-manager`가 적혀 있어 그대로 돌고,
 `remote setup`도 그 이름으로 깐다 — 이름을 바꾸려면 `--mailbox company-manager`로 다시 `add`한다(옛 `imac-letter`는 지워도 된다).
 

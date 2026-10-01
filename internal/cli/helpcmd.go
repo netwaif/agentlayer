@@ -35,6 +35,8 @@ func helpText(goos string) string {
                  업무 등록 없는 원격이면 직송 [--file <경로>]...
   inbox wait     이 세션 앞으로 오는 편지 한 통을 기다려 stdout으로 (앱 세션용)  [--name 이름] [--timeout 30m]
   inbox open|close  연결 모드 — 고유 주소 ID(al-6자) 발급·유지(대기 사이에 온 편지는 큐에 보관) / 종료  [--name 별칭]
+                 wait --remote <원격> --app-mailbox: 서버 claude-letter가 Claude 앞으로 보낸 편지를 받는다(letter: <원격>:<카드ID> 줄)
+  inbox reply <원격>:<카드ID> [--file <경로>]... <답|->  그 편지 카드를 답으로 닫는다(디스코드 알림은 헤르메스 쪽 구독)
   task assign|list|done|watch|message  업무↔세션 등록·상주 수신·편지 — 등록된 세션의 DONE·WAIT·ERR 전이가 hook에서 <inbox>/pending/ 에 자동 보고됨. message는 직원이 총괄에게 먼저 보내는 편지(MESSAGE)
   channel serve <inbox>  총괄 수신함을 Claude Code 채널(MCP 알림)로 전달 — Monitor 폴링 대체. 'agentlayer channel --help'
   remote add|list|check|rm  원격 직원(호스팅어 Hermes 등) 등록 — 등록 뒤에는 task assign·send를 로컬 직원과 똑같이 쓴다
