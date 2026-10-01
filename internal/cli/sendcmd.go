@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/netwaif/agentlayer/internal/scan"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -81,6 +83,8 @@ type SendOptions struct {
 	CWD string
 	// Files — 업무 등록 없는 원격 직송(sendRemoteDirect)에 붙일 첨부 파일. 다른 경로에 주면 오류.
 	Files []string
+	// From — 발신자 이름을 명시(--from). 비면 senderName이 정한다(tmux 세션명 → 코덱스/별칭/claude → "user").
+	From string
 }
 
 // ParseSendFlags는 --force·--json·--cwd·--file만 받고 나머지를 위치 인자로 돌려준다.
@@ -93,19 +97,32 @@ func ParseSendFlags(args []string) (SendOptions, []string, error) {
 			o.Force = true
 		case "--json":
 			o.JSON = true
-		case "--cwd", "--file":
+		case "--cwd", "--file", "--from":
 			if i+1 >= len(args) {
-				return o, nil, fmt.Errorf("%s 뒤에 경로가 필요합니다", args[i])
+				return o, nil, fmt.Errorf("%s 뒤에 값이 필요합니다", args[i])
 			}
-			if args[i] == "--cwd" {
+			switch args[i] {
+			case "--cwd":
 				o.CWD = args[i+1]
-			} else {
+			case "--file":
 				o.Files = append(o.Files, args[i+1])
+			default:
+				o.From = args[i+1]
+				if !validAddressName(o.From) {
+					return o, nil, errBadFrom(o.From)
+				}
 			}
 			i++
 		default:
 			if strings.HasPrefix(args[i], "--cwd=") {
 				o.CWD = strings.TrimPrefix(args[i], "--cwd=")
+				continue
+			}
+			if strings.HasPrefix(args[i], "--from=") {
+				o.From = strings.TrimPrefix(args[i], "--from=")
+				if !validAddressName(o.From) {
+					return o, nil, errBadFrom(o.From)
+				}
 				continue
 			}
 			if strings.HasPrefix(args[i], "--file=") {
@@ -121,8 +138,21 @@ func ParseSendFlags(args []string) (SendOptions, []string, error) {
 	return o, nil, nil
 }
 
+// errBadFrom — --from 값은 주소록 이름과 같은 제한(경로 문자·숨김 접두 금지, 128자 이내).
+func errBadFrom(v string) error {
+	return fmt.Errorf("--from 형식 오류: %q (경로 문자·숨김 접두 금지, 128자 이내)", v)
+}
+
 // errNoFileHere — --file은 업무 등록 없는 원격 직송에서만 받는다. 다른 경로(tmux·채널·큐·업무 등록된 원격)는 첨부를 나를 길이 없다.
 var errNoFileHere = errors.New("--file은 업무 등록이 없는 원격(remotes/<이름>.json) 직송에서만 쓸 수 있습니다")
+
+// sendFrom — 이번 전송의 발신자 이름: --from이 있으면 그 값, 없으면 senderNameIn.
+func sendFrom(o SendOptions, agents []*state.Agent, stateDir string) string {
+	if o.From != "" {
+		return o.From
+	}
+	return senderNameIn(agents, stateDir)
+}
 
 // maxMessageBytes는 send 본문 상한(64KiB) — 훅·터미널 붙여넣기를 넘는
 // 비정상 입력이 pane을 오래 막지 않게 막는다.
@@ -161,8 +191,13 @@ func LogExcerpt(msg string) string {
 	return fmt.Sprintf("%s (%d자)", flat, n)
 }
 
-// senderName은 이 명령을 부른 세션의 이름(자기 pane의 에이전트 레코드). 못 찾으면 "user".
-func senderName(agents []*state.Agent) string {
+// senderName은 이 명령을 부른 세션의 이름. tmux 안이면 자기 pane의 에이전트 레코드(세션명), 못 찾으면 "user"(예전 그대로).
+// tmux 밖(코덱스 데스크톱 앱·앱 Claude 세션 등)이면 예전에는 늘 "user"였다 — 이제 부모 사슬의 에이전트 프로세스로 정한다:
+// 코덱스면 "codex", claude면 그 세션이 `inbox open`으로 등록한 별칭(주소록에서 pid 역조회), 없으면 "claude". 그 밖은 "user".
+func senderName(agents []*state.Agent) string { return senderNameIn(agents, "") }
+
+// senderNameIn — stateDir은 별칭 역조회용(비면 역조회 없이 "claude").
+func senderNameIn(agents []*state.Agent, stateDir string) string {
 	pane := os.Getenv("TMUX_PANE")
 	if pane != "" {
 		for _, a := range agents {
@@ -170,8 +205,62 @@ func senderName(agents []*state.Agent) string {
 				return a.Tmux.Session
 			}
 		}
+		return "user"
+	}
+	kind, pid := senderProcessFn()
+	switch kind {
+	case "codex":
+		return "codex"
+	case "claude":
+		if alias := aliasByPID(stateDir, pid); alias != "" {
+			return alias
+		}
+		return "claude"
 	}
 	return "user"
+}
+
+// senderProcessFn — 부모 사슬에서 가장 가까운 에이전트 프로세스(종류·PID). 없으면 ("", 0). 테스트가 바꿔 끼운다.
+var senderProcessFn = func() (string, int) {
+	pt := scan.LoadProcTable()
+	for p, depth := os.Getppid(), 0; p > 1 && depth < 8; depth++ {
+		e, ok := pt[p]
+		if !ok || e.PPID == p {
+			return "", 0
+		}
+		if k := scan.KindFromArgs(e.Args); k != "" {
+			return k, p
+		}
+		p = e.PPID
+	}
+	return "", 0
+}
+
+// aliasByPID — 주소록에서 pid로 역조회한 별칭(`inbox open --name`의 이름). 별칭 파일과 ID(al-…) 파일이 같은 내용이라
+// 별칭 쪽을 우선하고, 별칭이 없으면 ID를 돌려준다. 없으면 빈 값.
+func aliasByPID(stateDir string, pid int) string {
+	if stateDir == "" || pid <= 0 {
+		return ""
+	}
+	files, _ := filepath.Glob(filepath.Join(AddressesDir(stateDir), "*.json"))
+	id := ""
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		var a Address
+		if json.Unmarshal(b, &a) != nil || a.PID != pid {
+			continue
+		}
+		key := strings.TrimSuffix(filepath.Base(f), ".json")
+		if key == a.ID {
+			id = a.ID
+			continue
+		}
+		return key
+	}
+	return id
 }
 
 // RunSend: agentlayer send [--force] [--json] <세션[:창]> <메시지…|->
@@ -232,7 +321,7 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 			if len(o.Files) > 0 {
 				return errNoFileHere
 			}
-			return sendToAddress(w, stateDir, addr, senderName(agents), message, o)
+			return sendToAddress(w, stateDir, addr, sendFrom(o, agents, stateDir), message, o)
 		}
 		return err
 	}
@@ -247,7 +336,7 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 		a = &c
 	}
 	ok, reason := SendGate(a.State, o.Force)
-	d := Delivery{StateDir: stateDir, From: senderName(agents)}
+	d := Delivery{StateDir: stateDir, From: sendFrom(o, agents, stateDir)}
 	if as, found, _ := task.Load(stateDir, a.ID); found && as.Session == a.Tmux.Session && as.Pane == a.Tmux.PaneID {
 		d.TaskID = as.TaskID
 	}

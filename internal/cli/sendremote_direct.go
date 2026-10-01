@@ -25,6 +25,10 @@ func sendRemoteDirect(ctx context.Context, w io.Writer, stateDir string, r *remo
 		return err
 	}
 	taskID := "MSG-" + strings.ToUpper(task.NewID()[:8])
+	if o.From != "" {
+		// 카드에는 from 자리가 없다 — --from을 명시했을 때만 본문 첫 줄로 남긴다(명시 없는 기존 입력은 그대로).
+		message = "보낸이: " + o.From + "\n" + message
+	}
 	var uploaded []string
 	if len(o.Files) > 0 {
 		h, ok := ad.(*remote.Hermes)
