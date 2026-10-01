@@ -311,6 +311,17 @@ func (h *Hermes) Mailbox(ctx context.Context) ([]Letter, error) {
 	if h.MailboxAssignee == "" {
 		return nil, nil
 	}
+	return h.mailboxFor(ctx, h.MailboxAssignee)
+}
+
+// AppMailbox는 Claude 앱 세션 앞(담당자 AppMailbox="claude-app") 편지를 받는다 — claim 방식은 Mailbox와 같다.
+// `inbox wait --remote <이름> --app-mailbox`가 쓴다. 회사 편지함(MailboxAssignee)과는 담당자가 달라 서로 건드리지 않는다.
+func (h *Hermes) AppMailbox(ctx context.Context) ([]Letter, error) {
+	return h.mailboxFor(ctx, AppMailbox)
+}
+
+// mailboxFor — assignee 앞 todo·ready 카드를 claim(24시간)하고 편지로 돌려준다.
+func (h *Hermes) mailboxFor(ctx context.Context, assignee string) ([]Letter, error) {
 	out, err := h.run(ctx, TimeoutQuery, h.kanban("list", "--json")...)
 	if err != nil {
 		return nil, err
@@ -321,7 +332,7 @@ func (h *Hermes) Mailbox(ctx context.Context) ([]Letter, error) {
 	}
 	var letters []Letter
 	for _, it := range items {
-		if it.Assignee != h.MailboxAssignee || (it.Status != "todo" && it.Status != "ready") {
+		if it.Assignee != assignee || (it.Status != "todo" && it.Status != "ready") {
 			continue
 		}
 		// 수신 확인 = claim(24시간)만. 닫지 않는다 — 총괄의 답장(Answer)이 카드를 닫으며, 보낸 쪽이 구독해 두었으면

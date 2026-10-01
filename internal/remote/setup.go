@@ -15,10 +15,22 @@ var (
 	letterScript string
 	//go:embed hermesside/SKILL.md
 	letterSkill string
+	// Claude 앱 세션용 한 벌 — 담당자는 고정값 AppMailbox. 회사용과 나란히 깔린다(claude-letter 설계, 2026-10-01).
+	//go:embed hermesside/claude-letter.sh
+	appLetterScript string
+	//go:embed hermesside/claude-letter/SKILL.md
+	appLetterSkill string
 )
 
-// LetterCommand는 원격에 깔리는 편지 명령 이름.
+// LetterCommand는 원격에 깔리는 편지 명령 이름(회사 총괄 앞).
 const LetterCommand = "company-letter"
+
+// AppLetterCommand는 Claude 앱 세션 앞 편지 명령 이름. AppMailbox는 그 담당자(고정값) — 회사 편지함과 분리돼
+// 총괄의 원격 폴링(task.PollRemotesOnce)과 경합하지 않는다.
+const (
+	AppLetterCommand = "claude-letter"
+	AppMailbox       = "claude-app"
+)
 
 // Installer는 원격에 준비물을 까는 어댑터(지금은 Hermes). 돌려주는 값은 깐 경로 목록.
 type Installer interface {
@@ -51,6 +63,11 @@ func (h *Hermes) Setup(ctx context.Context) ([]string, error) {
 			renderSide(letterScript, mailbox, attach)},
 		{`d="${HERMES_HOME:-$HOME/.hermes}/skills/autonomous-ai-agents/` + LetterCommand + `"; mkdir -p "$d" && cat > "$d/SKILL.md" && echo "$d/SKILL.md"`,
 			renderSide(letterSkill, mailbox, attach)},
+		// Claude 앱 세션용 — 회사용 두 파일 뒤에 같은 방식으로. 회사용 렌더 결과는 그대로다.
+		{`d="$HOME/.local/bin"; mkdir -p "$d" && cat > "$d/` + AppLetterCommand + `" && chmod 755 "$d/` + AppLetterCommand + `" && echo "$d/` + AppLetterCommand + `"`,
+			renderSide(appLetterScript, AppMailbox, attach)},
+		{`d="${HERMES_HOME:-$HOME/.hermes}/skills/autonomous-ai-agents/` + AppLetterCommand + `"; mkdir -p "$d" && cat > "$d/SKILL.md" && echo "$d/SKILL.md"`,
+			renderSide(appLetterSkill, AppMailbox, attach)},
 	}
 	var paths []string
 	for _, s := range steps {

@@ -18,10 +18,11 @@ func TestHermesSetupInstallsLetterFiles(t *testing.T) {
 	h.MailboxAssignee = "company-manager"
 	h.AttachRoot = "/opt/data/ai-company/참고자료/from-company"
 	paths, err := h.Setup(context.Background())
-	if err != nil || len(paths) != 2 || !strings.HasSuffix(paths[0], "/company-letter") {
+	// 1.12.2+: 회사용 둘 뒤에 Claude 앱 세션용 claude-letter 둘이 더 깔린다(applet_test.go). 회사용 내용·순서는 그대로.
+	if err != nil || len(paths) != 4 || !strings.HasSuffix(paths[0], "/company-letter") {
 		t.Fatalf("paths=%v err=%v", paths, err)
 	}
-	if len(f.Calls) != 2 || f.Calls[0][0] != "sh" || f.Calls[0][1] != "-c" {
+	if len(f.Calls) != 4 || f.Calls[0][0] != "sh" || f.Calls[0][1] != "-c" {
 		t.Fatalf("calls: %v", f.Calls)
 	}
 	script, skill := f.Stdins[0], f.Stdins[1]
