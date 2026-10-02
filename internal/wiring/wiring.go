@@ -90,6 +90,9 @@ type Paths struct {
 	LaunchAgentsDir string   // ~/Library/LaunchAgents (macOS)
 	SystemdUserDir  string   // ~/.config/systemd/user (리눅스)
 	BridgeRoots     []string // codex-discord 브리지 루트 후보
+	// SidecarDir — 자동 기동을 끈 folder-bot이 기동 명령을 남기는 곳(~/.config/folder-bot/<세션>.tmux-cmd).
+	// 비면 BotsJSON의 폴더를 쓴다.
+	SidecarDir string
 }
 
 func DefaultPaths() Paths {
@@ -99,6 +102,7 @@ func DefaultPaths() Paths {
 	}
 	return Paths{
 		BotsJSON:        filepath.Join(home, ".config", "folder-bot", "bots.json"),
+		SidecarDir:      filepath.Join(home, ".config", "folder-bot"),
 		LaunchAgentsDir: filepath.Join(home, "Library", "LaunchAgents"),
 		SystemdUserDir:  filepath.Join(home, ".config", "systemd", "user"),
 		BridgeRoots: []string{
@@ -243,10 +247,12 @@ func Collect(p Paths, folder, session string, labels map[string]string) Info {
 	return info
 }
 
-// unitText는 구동 유닛 하나의 라벨과 매칭용 본문.
+// unitText는 구동 유닛 하나의 라벨과 매칭용 본문. autostart는 부팅(로그인) 때 저절로 뜨는지 —
+// plist는 RunAtLoad(또는 KeepAlive) true, systemd는 default.target.wants 심볼릭 링크(enable).
 type unitText struct {
-	label string
-	text  string
+	label     string
+	text      string
+	autostart bool
 }
 
 // unitTexts는 구동 유닛(macOS plist, 리눅스 systemd 사용자 유닛)을 모두 읽는다.
@@ -265,7 +271,7 @@ func unitTexts(p Paths) []unitText {
 			if err != nil {
 				continue
 			}
-			out = append(out, unitText{strings.TrimSuffix(e.Name(), ".plist"), string(b)})
+			out = append(out, unitText{strings.TrimSuffix(e.Name(), ".plist"), string(b), plistAutostart(string(b))})
 		}
 	}
 	if entries, err := os.ReadDir(p.SystemdUserDir); err == nil {
@@ -286,10 +292,32 @@ func unitTexts(p Paths) []unitText {
 					}
 				}
 			}
-			out = append(out, unitText{strings.TrimSuffix(e.Name(), ".service"), text})
+			label := strings.TrimSuffix(e.Name(), ".service")
+			out = append(out, unitText{label, text, systemdEnabled(p.SystemdUserDir, e.Name())})
 		}
 	}
 	return out
+}
+
+// plistAutostart — launchd가 로그인 때 띄우는가: RunAtLoad true 또는 KeepAlive true. 키가 없으면 launchd 기본값대로 false.
+func plistAutostart(text string) bool {
+	return plistBool(text, "RunAtLoad") || plistBool(text, "KeepAlive")
+}
+
+// plistBool — <key>name</key> 바로 다음 값이 <true/>인가(사전형 KeepAlive도 true로 본다).
+func plistBool(text, name string) bool {
+	i := strings.Index(text, "<key>"+name+"</key>")
+	if i < 0 {
+		return false
+	}
+	rest := strings.TrimSpace(text[i+len("<key>"+name+"</key>"):])
+	return strings.HasPrefix(rest, "<true/>") || strings.HasPrefix(rest, "<dict>")
+}
+
+// systemdEnabled — `systemctl --user enable`이 만드는 default.target.wants/<유닛> 링크가 있는가.
+func systemdEnabled(dir, unit string) bool {
+	_, err := os.Lstat(filepath.Join(dir, "default.target.wants", unit))
+	return err == nil
 }
 
 // upShRe는 systemd 유닛 ExecStart가 부르는 <stem>.up.sh의 stem을 뽑는다.

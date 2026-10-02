@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -25,10 +26,11 @@ type RestoreItem struct {
 	Cmd        string // pane에 입력할 기동 명령
 }
 
-// RestorePlan은 복원 계획 전체와 건너뛴 사유들.
+// RestorePlan은 복원 계획 전체와 건너뛴 사유들. Bots는 체크리스트의 "꺼져 있는 봇" 묶음(자동 기동이 꺼져 있고 안 떠 있는 봇).
 type RestorePlan struct {
 	Items   []RestoreItem
 	Skipped []string
+	Bots    []wiring.OffBot
 }
 
 // RestoreEnv는 계획이 참조하는 바깥 현실(tmux·launchd) 조회 주입점. nil 함수는
@@ -37,6 +39,12 @@ type RestoreEnv struct {
 	SessionExists func(session string) bool      // tmux 세션 존재
 	PaneAt        func(session, cwd string) bool // 그 세션에 같은 폴더의 pane(명령 불문)이 있음
 	LaunchAgents  func(session string) []string  // 이 세션을 tmux로 띄우는 구동 유닛 라벨들(plist·systemd)
+	// 꺼져 있는 봇(체크리스트의 봇 묶음) — 조회와 띄우기. nil이면 봇 묶음이 없다(예전 동작).
+	OffBots      func() []wiring.OffBot
+	StartSession func(session, command string) error // 사이드카형: tmux new-session -d -s <세션> <명령>
+	// 유닛형: launchctl kickstart / systemctl --user. sessionUnit은 tmux 세션을 띄우는 유닛(TUI·폴더 봇)인지 — 데몬 유닛이면 false.
+	StartUnit   func(label string, sessionUnit bool) error
+	UnitRunning func(label string) bool // 브리지 데몬 유닛이 이미 돌고 있는가(돌면 기동 생략)
 }
 
 // RestoreOpts는 계획 옵션. Explicit는 사용자가 ID로 지목한 경우 — 정책상
@@ -60,6 +68,15 @@ func PlanRestore(agents []*state.Agent, env RestoreEnv, opts RestoreOpts) Restor
 	if launchAgents == nil {
 		launchAgents = func(string) []string { return nil }
 	}
+	var plan RestorePlan
+	botOf := map[string]wiring.OffBot{}
+	// ID 지정 복원은 봇 묶음도 봇 관할 제외도 쓰지 않는다 — 유닛 파일을 훑는 탐지를 부르지 않는다.
+	if env.OffBots != nil && !opts.Explicit {
+		plan.Bots = env.OffBots()
+		for _, b := range plan.Bots {
+			botOf[b.Session] = b
+		}
+	}
 	resume := opts.Resume
 	sorted := append([]*state.Agent{}, agents...)
 	sort.Slice(sorted, func(i, j int) bool {
@@ -72,7 +89,6 @@ func PlanRestore(agents []*state.Agent, env RestoreEnv, opts RestoreOpts) Restor
 		}
 		return a.ID < b.ID
 	})
-	var plan RestorePlan
 	seenWindow := map[string]bool{} // "세션:window" — 분할 pane 중복 제거
 	sessionPlanned := map[string]bool{}
 	for _, a := range sorted {
@@ -97,6 +113,14 @@ func PlanRestore(agents []*state.Agent, env RestoreEnv, opts RestoreOpts) Restor
 		if paneAt(a.Tmux.Session, a.CWD) {
 			plan.Skipped = append(plan.Skipped,
 				a.ID+": 같은 자리에 pane 있음(세션 "+a.Tmux.Session+", "+ShortenHome(a.CWD)+") — 이미 떠 있거나 기동 중, 중복 방지")
+			continue
+		}
+		// 꺼져 있는 봇의 세션(메인 pane·스레드 창) — 일반 복원이 봇 세션에 채널 플래그 없는 창을 만들지 않게
+		// (2026-09-03 사고). 봇은 체크리스트의 봇 묶음에서 띄운다. 아래 구동 유닛 검사보다 먼저 본다: 자동 기동을 끈
+		// 유닛형 봇도 유닛 검사에 걸리는데, 그 사유("부팅 시 자동 기동")는 이 봇에 거짓이다. ID 명시면 계획에 봇이 없어 강제된다.
+		if b, ok := botOf[a.Tmux.Session]; ok {
+			plan.Skipped = append(plan.Skipped,
+				a.ID+": 봇 관할("+b.Method()+") — 체크리스트의 봇 묶음에서 띄움 (restore "+a.ID+"로 강제)")
 			continue
 		}
 		// launchd가 tmux 세션째 살리는 봇은 restore 대상이 아니다 — 먼저 세션을
@@ -178,8 +202,25 @@ func RunRestore(w io.Writer, st *state.Store, tm tmuxx.Tmux, args []string) erro
 	resume := fs.Bool("resume", false, "대화까지 부활 (claude --resume 등) — 부푼 컨텍스트도 그대로 재적재됨")
 	dryRun := fs.Bool("dry-run", false, "실행 없이 계획만 출력")
 	yes := fs.Bool("yes", false, "체크리스트 없이 계획 전부 실행 (스크립트용)")
+	botsFlag := fs.String("bots", "", "꺼져 있는 봇 중 이 세션들만 띄운다(쉼표 구분, 체크리스트 없음)")
+	noBots := fs.Bool("no-bots", false, "체크리스트에서 꺼져 있는 봇 묶음을 숨긴다")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	env := restoreEnvFn(tm)
+	// --bots: 그 봇만 띄우고 끝낸다(체크리스트·죽은 세션 복원 없음). 플래그가 "주어졌는가"로 판정한다 —
+	// 값으로 판정하면 빈 값(스크립트의 빈 변수)이 전체 복원으로 빠진다.
+	botsSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "bots" {
+			botsSet = true
+		}
+	})
+	if botsSet {
+		if *noBots {
+			return errors.New("--bots와 --no-bots는 같이 쓸 수 없습니다")
+		}
+		return runRestoreBotsOnly(w, st.Dir, env, *botsFlag, *dryRun)
 	}
 	agents, err := st.List()
 	if err != nil {
@@ -190,19 +231,27 @@ func RunRestore(w io.Writer, st *state.Store, tm tmuxx.Tmux, args []string) erro
 	if explicit {
 		agents, idSkipped = FilterByIDs(agents, fs.Args())
 	}
-	plan := PlanRestore(agents, restoreEnv(tm), RestoreOpts{Resume: *resume, Explicit: explicit})
+	plan := PlanRestore(agents, env, RestoreOpts{Resume: *resume, Explicit: explicit})
+	if explicit || *noBots {
+		// ID 지정 복원은 예전 그대로(봇 묶음 없음). --no-bots는 묶음만 숨긴다 — 봇 세션의 죽은 레코드를
+		// 일반 복원에서 빼는 보호(PlanRestore)는 그대로 둔다.
+		plan.Bots = nil
+	}
 	for _, s := range idSkipped {
 		fmt.Fprintln(w, "  건너뜀:", s)
 	}
 	for _, s := range plan.Skipped {
 		fmt.Fprintln(w, "  건너뜀:", s)
 	}
-	if len(plan.Items) == 0 {
-		fmt.Fprintln(w, "복원할 죽은 세션이 없습니다.")
-		return nil
-	}
 	// 터미널에서 인자 없이 쳤으면 체크리스트로 고른다. ID 명시·--yes·파이프면 그대로.
 	interactive := !*dryRun && !explicit && !*yes && restoreIsTerminal()
+	if len(plan.Items) == 0 && (len(plan.Bots) == 0 || !(interactive || *dryRun)) {
+		fmt.Fprintln(w, "복원할 죽은 세션이 없습니다.")
+		if len(plan.Bots) > 0 && *yes {
+			fmt.Fprintf(w, "  꺼져 있는 봇 %d개는 --yes로 띄우지 않습니다 (agentlayer restore --bots <세션,…> 또는 체크리스트)\n", len(plan.Bots))
+		}
+		return nil
+	}
 	if !interactive {
 		for _, it := range plan.Items {
 			verb := "window 추가"
@@ -213,20 +262,48 @@ func RunRestore(w io.Writer, st *state.Store, tm tmuxx.Tmux, args []string) erro
 		}
 	}
 	if *dryRun {
-		fmt.Fprintln(w, "(dry-run — 실행 안 함) 일부만 살리려면: agentlayer restore <id> [<id> ...]")
+		if len(plan.Items) > 0 {
+			fmt.Fprintln(w, "(dry-run — 실행 안 함) 일부만 살리려면: agentlayer restore <id> [<id> ...]")
+		}
+		printOffBots(w, plan.Bots, "(dry-run) 꺼져 있는 봇 — 체크리스트에서 고르거나 --bots <세션,…>로 띄운다:")
 		return nil
 	}
+	var pickedBots []wiring.OffBot
 	if interactive {
-		picked, ok := runRestorePicker(plan.Items)
-		if !ok {
-			fmt.Fprintln(w, "취소 — 복원하지 않았습니다.")
-			return nil
+		if len(plan.Bots) == 0 {
+			picked, ok := runRestorePicker(plan.Items)
+			if !ok {
+				fmt.Fprintln(w, "취소 — 복원하지 않았습니다.")
+				return nil
+			}
+			if len(picked) == 0 {
+				fmt.Fprintln(w, "고른 세션이 없어 복원하지 않았습니다.")
+				return nil
+			}
+			plan.Items = picked
+		} else {
+			remembered := loadRestoreBots(st.Dir)
+			picked, bots, ok := runRestorePickerWithBots(plan.Items, plan.Bots, remembered)
+			if !ok {
+				fmt.Fprintln(w, "취소 — 복원하지 않았습니다.")
+				return nil
+			}
+			// 다음 체크리스트의 기본 체크 — enter로 확정한 선택이면 전부 푼 것도 기억한다(취소만 기억을 안 바꾼다).
+			rememberRestoreBots(st.Dir, plan.Bots, bots)
+			if len(picked) == 0 && len(bots) == 0 {
+				fmt.Fprintln(w, "고른 세션이 없어 복원하지 않았습니다.")
+				return nil
+			}
+			plan.Items, pickedBots = picked, bots
 		}
-		if len(picked) == 0 {
-			fmt.Fprintln(w, "고른 세션이 없어 복원하지 않았습니다.")
-			return nil
-		}
-		plan.Items = picked
+	} else if len(plan.Bots) > 0 && *yes {
+		fmt.Fprintf(w, "  꺼져 있는 봇 %d개는 --yes로 띄우지 않습니다 (agentlayer restore --bots <세션,…> 또는 체크리스트)\n", len(plan.Bots))
+	}
+	if len(pickedBots) > 0 {
+		launchOffBots(w, env, pickedBots)
+	}
+	if len(plan.Items) == 0 {
+		return nil
 	}
 	for _, it := range plan.Items {
 		var pane string
@@ -254,8 +331,14 @@ func RunRestore(w io.Writer, st *state.Store, tm tmuxx.Tmux, args []string) erro
 	return nil
 }
 
-// restoreEnv는 실제 tmux·launchd를 읽는 RestoreEnv. pane 목록은 한 번만 읽는다.
-func restoreEnv(tm tmuxx.Tmux) RestoreEnv {
+// restoreEnvFn — 테스트가 바꿔 끼운다.
+var restoreEnvFn = restoreEnv
+
+// restoreEnv는 실제 tmux·launchd를 읽는 RestoreEnv(이 사용자의 홈 기준).
+func restoreEnv(tm tmuxx.Tmux) RestoreEnv { return restoreEnvAt(tm, wiring.DefaultPaths()) }
+
+// restoreEnvAt은 주어진 경로의 유닛·사이드카를 읽는 RestoreEnv. pane 목록은 한 번만 읽는다.
+func restoreEnvAt(tm tmuxx.Tmux, paths wiring.Paths) RestoreEnv {
 	// 경로는 심볼릭 링크를 푼 뒤 비교 — macOS는 /var/…를 /private/var/…로 돌려준다.
 	canon := func(p string) string {
 		if r, err := filepath.EvalSymlinks(p); err == nil {
@@ -269,11 +352,14 @@ func restoreEnv(tm tmuxx.Tmux) RestoreEnv {
 			occupied[p.Session+"|"+canon(p.Path)] = true
 		}
 	}
-	paths := wiring.DefaultPaths()
 	return RestoreEnv{
 		SessionExists: tm.HasSession,
 		PaneAt:        func(session, cwd string) bool { return occupied[session+"|"+canon(cwd)] },
 		LaunchAgents:  func(session string) []string { return wiring.TmuxSessionAgents(paths, session) },
+		OffBots:       func() []wiring.OffBot { return wiring.OffBots(paths, tm.HasSession) },
+		StartSession:  tm.NewDetachedSession,
+		StartUnit:     startUnit,
+		UnitRunning:   unitRunning,
 	}
 }
 

@@ -27,6 +27,7 @@ func helpText(goos string) string {
   init           hook·tmux 바인딩·스킬 설치 (멱등)  [--dry-run]
   resume [id]    죽은 세션의 대화를 새 window에서 재개 (비상 복구용)
   restore        죽은 세션 배치 부활 — 체크리스트로 골라 실행  [--resume 대화째] [--yes 전부] [--dry-run] [id ...]  (자동 기동 봇 제외)
+                 체크리스트 아래 "꺼져 있는 봇"(자동 기동 꺼진 봇, 엔진 불문)을 골라 띄운다  [--bots 세션,세션 그 봇만] [--no-bots 숨김]
   wake-all       전 세션에 "이어서하자" 전달  [--yes] [--except 이름,..] [--watch] [--timeout 10m]
   close-all      전 세션에 "세션 마감" 전달  (플래그는 wake-all과 동일)
   broadcast <메시지>  전 세션에 임의 메시지 전달

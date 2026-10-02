@@ -268,6 +268,12 @@ func (t Tmux) NewSession(name, dir string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// NewDetachedSession은 셸 명령 하나로 분리 세션을 만든다 — folder-bot 사이드카(<세션>.tmux-cmd)의 bot-restart와 같은 형태.
+func (t Tmux) NewDetachedSession(name, command string) error {
+	_, err := t.run("new-session", "-d", "-s", name, command)
+	return err
+}
+
 // NewWindowIn은 지정 세션에 window를 만들고 pane ID를 돌려준다.
 func (t Tmux) NewWindowIn(session, name, dir string) (string, error) {
 	out, err := t.run("new-window", "-t", session+":", "-n", name, "-c", dir, "-P", "-F", "#{pane_id}")

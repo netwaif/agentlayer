@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -11,12 +12,24 @@ import (
 
 	"github.com/netwaif/agentlayer/internal/remote"
 	"github.com/netwaif/agentlayer/internal/state"
+	"github.com/netwaif/agentlayer/internal/tmuxx"
+	"github.com/netwaif/agentlayer/internal/wiring"
 )
 
 // 테스트 프로세스는 Claude 세션 안에서 돌 수도 있다(조상에 claude). 기본값은 "에이전트 조상 없음"으로 고정하고,
 // 발신자 판정을 보는 테스트만 stubSender로 끼운다.
 func TestMain(m *testing.M) {
 	senderProcessFn = func() (string, int) { return "", 0 }
+	// restore 테스트의 기본 환경은 실제 홈의 유닛·사이드카를 읽지 않고, 실제 유닛을 띄우지도 않는다.
+	// 봇 묶음을 보는 테스트만 stubRestoreEnv로 끼운다.
+	restoreEnvFn = func(tm tmuxx.Tmux) RestoreEnv {
+		env := restoreEnvAt(tm, wiring.Paths{})
+		env.StartUnit = func(label string, _ bool) error {
+			return errors.New("테스트에서 실제 유닛 기동 금지: " + label)
+		}
+		env.UnitRunning = func(string) bool { return false }
+		return env
+	}
 	os.Exit(m.Run())
 }
 
