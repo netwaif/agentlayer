@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/netwaif/agentlayer/internal/wiring"
@@ -42,12 +43,25 @@ func loadRestoreBots(stateDir string) map[string]bool {
 	return out
 }
 
-// saveRestoreBots — 이번 선택을 기억한다(실패는 무시 — 기억은 편의일 뿐).
-func saveRestoreBots(stateDir string, bots []wiring.OffBot) {
-	m := restoreBotsMemory{Sessions: []string{}}
-	for _, b := range bots {
-		m.Sessions = append(m.Sessions, b.Session)
+// rememberRestoreBots — 이번 선택을 기억한다(실패는 무시 — 기억은 편의일 뿐). 이번에 화면에 나온 봇(shown)만 고친다:
+// 고른 것은 체크, 안 고른 것은 해제. 이미 떠 있어 목록에 없던 봇의 기억은 그대로 둔다.
+func rememberRestoreBots(stateDir string, shown, picked []wiring.OffBot) {
+	mem := loadRestoreBots(stateDir)
+	for _, b := range shown {
+		delete(mem, b.Session)
 	}
+	for _, b := range picked {
+		mem[b.Session] = true
+	}
+	saveRestoreBotNames(stateDir, mem)
+}
+
+func saveRestoreBotNames(stateDir string, mem map[string]bool) {
+	m := restoreBotsMemory{Sessions: []string{}}
+	for s := range mem {
+		m.Sessions = append(m.Sessions, s)
+	}
+	sort.Strings(m.Sessions)
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return
@@ -101,13 +115,15 @@ func launchOffBots(w io.Writer, env RestoreEnv, bots []wiring.OffBot) {
 				err = errors.New("유닛 기동 주입점 없음")
 				break
 			}
+			// 유닛 기동은 막힐 수 있다(리눅스 oneshot TUI 유닛은 tui-up.sh 완주까지) — 먼저 한 줄.
+			fmt.Fprintf(w, "  … 봇 %s 기동 중 (%s)\n", b.Session, b.Method())
 			if b.Daemon != "" && !running(b.Daemon) {
-				if err = env.StartUnit(b.Daemon); err != nil {
+				if err = env.StartUnit(b.Daemon, false); err != nil {
 					err = fmt.Errorf("데몬 유닛 %s: %w", b.Daemon, err)
 					break
 				}
 			}
-			if err = env.StartUnit(b.Unit); err != nil {
+			if err = env.StartUnit(b.Unit, true); err != nil {
 				err = fmt.Errorf("유닛 %s: %w", b.Unit, err)
 			}
 		default:
@@ -126,7 +142,8 @@ func launchOffBots(w io.Writer, env RestoreEnv, bots []wiring.OffBot) {
 }
 
 // runRestoreBotsOnly — `restore --bots <세션,세션>`: 꺼져 있는 봇 중 그 이름들만 띄운다. 체크리스트·죽은 세션 복원은 하지 않는다.
-// 목록에 없는 이름은 오류(아무것도 띄우지 않는다). 선택은 기억한다.
+// 반복 실행해도 된다: 이미 떠 있는 세션 이름은 건너뛰고 나머지를 띄운다. 떠 있지도 않고 목록에도 없는 이름(오타)은
+// 오류이며 아무것도 띄우지 않는다. 이름은 한 번씩만. 고른 이름은 기억에 더한다(체크리스트의 다른 기억은 그대로).
 func runRestoreBotsOnly(w io.Writer, stateDir string, env RestoreEnv, spec string, dryRun bool) error {
 	var all []wiring.OffBot
 	if env.OffBots != nil {
@@ -136,15 +153,23 @@ func runRestoreBotsOnly(w io.Writer, stateDir string, env RestoreEnv, spec strin
 	for _, b := range all {
 		byName[b.Session] = b
 	}
+	exists := env.SessionExists
+	if exists == nil {
+		exists = func(string) bool { return false }
+	}
 	var picked []wiring.OffBot
-	var missing []string
+	var running, missing []string
+	seen := map[string]bool{}
 	for _, name := range strings.Split(spec, ",") {
 		name = strings.TrimSpace(name)
-		if name == "" {
+		if name == "" || seen[name] {
 			continue
 		}
+		seen[name] = true
 		if b, ok := byName[name]; ok {
 			picked = append(picked, b)
+		} else if exists(name) {
+			running = append(running, name)
 		} else {
 			missing = append(missing, name)
 		}
@@ -160,27 +185,43 @@ func runRestoreBotsOnly(w io.Writer, stateDir string, env RestoreEnv, spec strin
 		}
 		return fmt.Errorf("꺼져 있는 봇 목록에 없는 이름: %s — 지금 꺼져 있는 봇: %s", strings.Join(missing, ", "), list)
 	}
-	if len(picked) == 0 {
+	if len(picked) == 0 && len(running) == 0 {
 		return errors.New("--bots에 세션 이름이 없습니다 (예: --bots collab-bot,codex-qa)")
+	}
+	for _, name := range running {
+		fmt.Fprintf(w, "  봇 %s: 세션이 이미 있어 건너뜀\n", name)
 	}
 	if dryRun {
 		printOffBots(w, picked, "(dry-run — 실행 안 함) 띄울 봇:")
 		return nil
 	}
 	launchOffBots(w, env, picked)
-	saveRestoreBots(stateDir, picked)
+	mem := loadRestoreBots(stateDir)
+	for name := range seen {
+		mem[name] = true
+	}
+	saveRestoreBotNames(stateDir, mem)
 	return nil
 }
 
-// startUnit — 유닛형 봇 기동. macOS: launchctl kickstart gui/<uid>/<라벨>. 리눅스: systemctl --user start <유닛>.
-func startUnit(label string) error {
-	var cmd *exec.Cmd
-	if runtime.GOOS == "darwin" {
-		cmd = exec.Command("launchctl", "kickstart", fmt.Sprintf("gui/%d/%s", os.Getuid(), label))
-	} else {
-		cmd = exec.Command("systemctl", "--user", "start", label)
+// unitStartArgv — 유닛 기동 명령. macOS: launchctl kickstart gui/<uid>/<라벨>. 리눅스: systemctl --user.
+// 리눅스의 세션 유닛(TUI·폴더 봇)은 oneshot+RemainAfterExit라 세션만 죽고 유닛이 active(exited)로 남으면 start가
+// 무동작이다 — 세션이 없을 때만 부르므로 restart(folder-bot botctl cmd_start와 같은 판단). 데몬 유닛은 start.
+func unitStartArgv(goos string, uid int, label string, sessionUnit bool) []string {
+	if goos == "darwin" {
+		return []string{"launchctl", "kickstart", fmt.Sprintf("gui/%d/%s", uid, label)}
 	}
-	out, err := cmd.CombinedOutput()
+	verb := "start"
+	if sessionUnit {
+		verb = "restart"
+	}
+	return []string{"systemctl", "--user", verb, label}
+}
+
+// startUnit — 유닛형 봇 기동(unitStartArgv).
+func startUnit(label string, sessionUnit bool) error {
+	argv := unitStartArgv(runtime.GOOS, os.Getuid(), label, sessionUnit)
+	out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
 		if msg == "" {
