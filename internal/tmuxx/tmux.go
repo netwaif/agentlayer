@@ -3,6 +3,7 @@
 package tmuxx
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -102,6 +103,17 @@ func (t Tmux) runIn(stdin io.Reader, args ...string) (string, error) {
 		return "", fmt.Errorf("tmux %s: %w", strings.Join(args, " "), err)
 	}
 	return string(out), nil
+}
+
+// IsNoServer는 tmux 서버가 아예 없을 때의 오류인지 — 소켓 없음("error connecting to …") 또는
+// "no server running". 이때 pane 0개가 진실이라, 부른 쪽은 빈 목록으로 동기화해도 된다.
+func IsNoServer(err error) bool {
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) {
+		return false
+	}
+	msg := string(ee.Stderr)
+	return strings.Contains(msg, "no server running") || strings.Contains(msg, "error connecting to")
 }
 
 // ListPanes는 서버 전체 pane을 반환한다.

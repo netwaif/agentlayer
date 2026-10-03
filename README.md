@@ -53,6 +53,11 @@ sudo apt install -y libnss3 libnspr4 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libas
 Win10도 스토어판 WSL(2.x)이면 WSLg가 있어 브라우저 창이 뜬다. 상세는
 `docs/linux-wsl2-verification.md`.
 
+**WSL2 주의 — 배포판은 wsl.exe 클라이언트가 하나도 안 붙어 있으면 약 1분 안에 내려간다**(Win11 실측
+2026-10-03, `.wslconfig`의 `vmIdleTimeout=-1`로도 못 막음). 그러면 tmux·에이전트·채널 서버가 전부 죽는다.
+Windows 터미널의 Ubuntu 탭을 하나는 열어 두거나(탭이 곧 클라이언트), 봇을 상주시키려면 작업 스케줄러에
+`wsl.exe -d Ubuntu -- sleep infinity`를 로그온 시 실행으로 걸어 둔다.
+
 설정은 한 번:
 
 ```bash

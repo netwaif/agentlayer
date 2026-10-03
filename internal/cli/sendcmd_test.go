@@ -89,9 +89,23 @@ func TestParseSendFlags(t *testing.T) {
 		rest[0] != "bot" || rest[1] != "please" || rest[2] != "--force" || rest[3] != "here" {
 		t.Errorf("첫 위치 인자 뒤 --force는 본문: %+v %v %v", o, rest, err)
 	}
-	if o, rest, err := ParseSendFlags([]string{"--json", "bot", "--force"}); err != nil || !o.JSON || o.Force ||
-		len(rest) != 2 || rest[0] != "bot" || rest[1] != "--force" {
-		t.Errorf("첫 위치 인자 뒤 --force는 본문(플래그 선행): %+v %v %v", o, rest, err)
+	// 대상 뒤·메시지 앞의 플래그는 플래그다(README 예시 `send hermes-qa --file 스펙.md "…"` — Win11 WSL2 실측 2026-10-03에 본문으로 들어갔음)
+	if o, rest, err := ParseSendFlags([]string{"--json", "bot", "--force"}); err != nil || !o.JSON || !o.Force ||
+		len(rest) != 1 || rest[0] != "bot" {
+		t.Errorf("대상 뒤 --force는 플래그: %+v %v %v", o, rest, err)
+	}
+	if o, rest, err := ParseSendFlags([]string{"bot", "--from", "총괄", "ok", "--force"}); err != nil || o.From != "총괄" || o.Force ||
+		len(rest) != 3 || rest[0] != "bot" || rest[1] != "ok" || rest[2] != "--force" {
+		t.Errorf("대상 뒤 --from은 플래그, 메시지 뒤 --force는 본문: %+v %v %v", o, rest, err)
+	}
+	if o, rest, err := ParseSendFlags([]string{"hermes-qa", "--file", "스펙.md", "검토해", "줘"}); err != nil || len(o.Files) != 1 || o.Files[0] != "스펙.md" ||
+		len(rest) != 3 || rest[0] != "hermes-qa" || rest[1] != "검토해" {
+		t.Errorf("README 꼴 `send 원격 --file 경로 메시지`: %+v %v %v", o, rest, err)
+	}
+	for _, h := range [][]string{{"--help"}, {"-h"}, {"bot", "--help"}} {
+		if _, _, err := ParseSendFlags(h); err != errSendUsage {
+			t.Errorf("%v: 사용법 오류여야 함, got %v", h, err)
+		}
 	}
 }
 

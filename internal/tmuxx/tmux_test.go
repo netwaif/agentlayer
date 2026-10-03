@@ -1,6 +1,7 @@
 package tmuxx
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -222,5 +223,22 @@ func TestSendEnterDelayBounds(t *testing.T) {
 	}
 	if d := SendEnterDelay(1_000_000); d != time.Second {
 		t.Errorf("상한 1s: %v", d)
+	}
+}
+
+func TestIsNoServer(t *testing.T) {
+	mk := func(stderr string) error {
+		return fmt.Errorf("tmux list-panes: %w", &exec.ExitError{Stderr: []byte(stderr)})
+	}
+	for _, msg := range []string{"no server running on /tmp/tmux-1000/default\n", "error connecting to /tmp/tmux-1000/default (No such file or directory)\n"} {
+		if !IsNoServer(mk(msg)) {
+			t.Errorf("%q: 서버 없음으로 판정해야 함", msg)
+		}
+	}
+	if IsNoServer(mk("can't find session: x\n")) {
+		t.Error("다른 tmux 오류는 서버 없음이 아님")
+	}
+	if IsNoServer(errors.New("exec: \"tmux\": executable file not found in $PATH")) {
+		t.Error("바이너리 없음은 서버 없음이 아님")
 	}
 }

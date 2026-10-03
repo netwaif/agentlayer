@@ -149,3 +149,28 @@ Ubuntu 24.04.4 server, Node 24.20(nvm), Claude Code 2.1.263, Codex 0.153.4, Gemi
 
 ### 미확인
 - Win10 WSL2 실기(진짜 Discord 토큰으로 봇 응답까지). VM은 가짜 토큰으로 유닛 층만.
+
+## 2026-10-03 — 10차: Win11 WSL2 실기(맥의 VMware Fusion VM `win11-wsl`, v1.13.0) → v1.13.1
+
+환경: Windows 11 + WSL 3.0.1(WSLg 1.0.79) + Ubuntu 26.04.1(systemd on, tmux 3.6 기본 포함) + Claude Code 2.1.287(로그인) · codex-cli 0.160.0 네이티브(미로그인) · agy 1.2.14. 맥에서 `ssh win11-wsl 'wsl -e bash -ls' < 스크립트`로 수행(Opus 5.5 서브에이전트 2회). 원 보고서 = 세션 스크래치 `RESULT-win11-1-install.md`·`RESULT-win11-2-features.md`.
+
+### 되는 것(1차 설치 9/10 · 2차 기능 15/15)
+- install.sh → v1.13.0, init(claude·codex·agy hook·MCP 3종·스킬 2개), 재실행 멱등, TUI, 팝업 `C-b a`, claude idle→WORK→DONE→dead, codex·agy 종류 판정, `restore --dry-run`.
+- `send`(tmux 경로·WORK 거부·`--json` via), `task assign`→DONE 자동 보고→`task watch --once`→`task done`, `task message`, `inbox wait`·이름 send·연결 모드(open/큐/wait/close·`--from`), `channel serve --self`(개발 채널 플래그로 `via: channel`, 없으면 tmux 폴백), 총괄 `channel serve <inbox>` 스모크, wt 전체 사이클(new/list/diff/review/send/merge/clean), board HTML·JSON, `card --out`, remote add/check/rm 깨끗한 오류, codex queue 실패 깨끗한 오류, wake-all/broadcast/close-all, info, browser 디스플레이 선검사.
+
+### WSL2에서만 다른 점
+- **배포판 유휴 종료**: wsl.exe 클라이언트가 하나도 없으면 약 1분 안에 배포판이 내려가 tmux·claude·채널 서버가 전부 죽는다. `.wslconfig` `vmIdleTimeout=-1`로도 동일(실측). 터미널 탭(=클라이언트)을 열어 두거나 `wsl -- sleep infinity` 상주가 필요하다 → README 리눅스 절에 주의 추가. 7차의 "systemctl --user bus 실패"는 이번엔 없음(`bash -ls`에서도 running).
+- ssh 경유 셸에도 WSLg `DISPLAY=:0`·`WAYLAND_DISPLAY`가 있어 디스플레이 없음 경로는 `env -u`로만 탄다. 바이너리 기동 ~0.5초.
+- `claude mcp list`의 chrome-devtools(`agentlayer browser mcp-serve`)가 `Failed to connect`(범위 밖, 기록만).
+
+### 고친 것(v1.13.1) — 전부 WSL2에서 수정본 재검증
+- **init 1회차 GEMINI.md 누락·dry-run 불일치** — GEMINI.md 단계가 `~/.gemini` 유무로 판정하는데 그 폴더를 다음 단계(agy hook)가 만들어 깨끗한 환경에서 2회차에야 들어가고, 뒤 단계는 agy가 만든 폴더를 보고 `gemini` CLI 없이도 Gemini CLI hook을 썼다. `main.go runInit`: Gemini 계열 판정(`hasAgy`·`geminiCLIInstalled`)을 앞에서 한 번에.
+- **tmux 서버가 없으면 `status`가 세션을 dead로 안 바꿈** — 7군데가 `ListPanes() err == nil`일 때만 Sync. `main.go syncPanes` + `tmuxx.IsNoServer`: 서버 없음(소켓 없음·no server running)은 pane 0개로 동기화.
+- **`wt new`를 tmux 밖에서 실행하면 worktree만 남김** — `wt.New`가 window를 못 만들 자리면 아무것도 만들지 않음.
+- **`send <대상> --from X 본문`처럼 대상 뒤 플래그가 본문으로 전송** — `ParseSendFlags`가 메시지 시작 전까지는 어디서든 플래그로 읽음(메시지 뒤는 본문 그대로). `send --help` 추가.
+- **셸에서 `inbox open`하면 즉시 죽는 주소 발급** — Claude 세션 밖이면 거부(`wait`는 그대로).
+
+### 미확인·남은 것
+- 윈도우 앱(Claude 데스크톱)의 WSL 세션 플러그인 지원 — VM에 앱 미설치.
+- `wt clean`이 tmux 창은 남겨 상태·카드 DIR에 ` (deleted)` 접미사(리눅스 /proc cwd) — 기록만.
+- 회사 루트가 README 표준(`<root>/runtime/inbox`)이 아니면 `InferRoot`가 비어 `task message`가 등록 pane 밖에서 실패(설계).

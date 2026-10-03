@@ -90,9 +90,22 @@ type SendOptions struct {
 // ParseSendFlags는 --force·--json·--cwd·--file만 받고 나머지를 위치 인자로 돌려준다.
 func ParseSendFlags(args []string) (SendOptions, []string, error) {
 	var o SendOptions
-	i := 0
-	for ; i < len(args); i++ {
+	var rest []string // rest[0]=대상, rest[1:]=메시지 — 메시지가 시작되면 그 뒤는 플래그처럼 보여도 본문이다
+	setFrom := func(v string) error {
+		if !validAddressName(v) {
+			return errBadFrom(v)
+		}
+		o.From = v
+		return nil
+	}
+	for i := 0; i < len(args); i++ {
+		if len(rest) >= 2 {
+			rest = append(rest, args[i])
+			continue
+		}
 		switch args[i] {
+		case "--help", "-h":
+			return o, nil, errSendUsage
 		case "--force":
 			o.Force = true
 		case "--json":
@@ -107,36 +120,38 @@ func ParseSendFlags(args []string) (SendOptions, []string, error) {
 			case "--file":
 				o.Files = append(o.Files, args[i+1])
 			default:
-				o.From = args[i+1]
-				if !validAddressName(o.From) {
-					return o, nil, errBadFrom(o.From)
+				if err := setFrom(args[i+1]); err != nil {
+					return o, nil, err
 				}
 			}
 			i++
 		default:
-			if strings.HasPrefix(args[i], "--cwd=") {
+			switch {
+			case strings.HasPrefix(args[i], "--cwd="):
 				o.CWD = strings.TrimPrefix(args[i], "--cwd=")
-				continue
-			}
-			if strings.HasPrefix(args[i], "--from=") {
-				o.From = strings.TrimPrefix(args[i], "--from=")
-				if !validAddressName(o.From) {
-					return o, nil, errBadFrom(o.From)
+			case strings.HasPrefix(args[i], "--from="):
+				if err := setFrom(strings.TrimPrefix(args[i], "--from=")); err != nil {
+					return o, nil, err
 				}
-				continue
-			}
-			if strings.HasPrefix(args[i], "--file=") {
+			case strings.HasPrefix(args[i], "--file="):
 				o.Files = append(o.Files, strings.TrimPrefix(args[i], "--file="))
-				continue
-			}
-			if strings.HasPrefix(args[i], "--") {
+			case strings.HasPrefix(args[i], "--"):
 				return o, nil, fmt.Errorf("알 수 없는 플래그: %s", args[i])
+			default:
+				// 대상, 그 다음 메시지 첫 토큰. 대상 뒤에 온 플래그도 플래그다(README 예시
+				// `send hermes-qa --file 스펙.md "…"`가 본문으로 들어가던 것 — Win11 WSL2 실측 2026-10-03).
+				rest = append(rest, args[i])
 			}
-			return o, append([]string{}, args[i:]...), nil
 		}
 	}
-	return o, nil, nil
+	if len(rest) == 0 {
+		return o, nil, nil
+	}
+	return o, rest, nil
 }
+
+// errSendUsage — `send --help`/인자 부족 때의 사용법.
+var errSendUsage = errors.New("사용법: agentlayer send [--force] [--json] [--cwd <폴더>] [--file <경로>]... [--from <이름>] <세션[:창]|이름|코덱스 세션 ID|원격> <메시지> (여러 줄은 '-'로 stdin; 플래그는 대상 뒤에 와도 된다)")
 
 // errBadFrom — --from 값은 주소록 이름과 같은 제한(경로 문자·숨김 접두 금지, 128자 이내).
 func errBadFrom(v string) error {
@@ -271,7 +286,7 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 		return err
 	}
 	if len(rest) < 2 {
-		return errors.New("사용법: agentlayer send [--force] [--json] [--cwd <폴더>] [--file <경로>]... <세션[:창]|이름|코덱스 세션 ID|원격> <메시지> (여러 줄은 '-'로 stdin)")
+		return errSendUsage
 	}
 	message := strings.Join(rest[1:], " ")
 	if message == "-" {

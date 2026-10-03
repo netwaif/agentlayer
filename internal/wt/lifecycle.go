@@ -87,6 +87,11 @@ func New(stateDir string, o NewOptions) (*Meta, error) {
 		return nil, fmt.Errorf("태스크 %q가 이미 있습니다", o.Task)
 	}
 	path := filepath.Join(repo, ".agentlayer", "worktrees", o.Task)
+	// window를 만들 수 없는 자리면 worktree도 만들지 않는다 — 반쯤 만들어진 잔해(worktree·브랜치만 남고
+	// 창 없음)가 wt list에 남던 것(Win11 WSL2 실측 2026-10-03). tmux 안에서의 다른 실패는 아래에서 worktree를 남긴다.
+	if !o.NoWindow && !tmuxx.InsideTmux() {
+		return nil, fmt.Errorf("tmux 밖입니다 — tmux 안에서 실행하세요 (worktree를 만들지 않았습니다)")
+	}
 
 	m := &Meta{Task: o.Task, Repo: repo, Base: base, Branch: branch, Path: path,
 		Agent: o.Agent, TestCmd: o.TestCmd, CreatedAt: time.Now()}

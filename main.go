@@ -157,9 +157,7 @@ func storeWithSync() (*state.Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
-		_ = scan.Sync(st, panes, time.Now())
-	}
+	_ = syncPanes(st, time.Now())
 	return st, nil
 }
 
@@ -246,10 +244,8 @@ func runStatus(args []string) error {
 		return err
 	}
 	now := time.Now()
-	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
-		if err := scan.Sync(st, panes, now); err != nil {
-			return err
-		}
+	if err := syncPanes(st, now); err != nil {
+		return err
 	}
 	wired := map[string]string{}
 	if !*jsonOut {
@@ -292,10 +288,8 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 		return err
 	}
 	now := time.Now()
-	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
-		if err := scan.Sync(st, panes, now); err != nil {
-			return err
-		}
+	if err := syncPanes(st, now); err != nil {
+		return err
 	}
 	agents, err := st.List()
 	if err != nil {
@@ -424,9 +418,18 @@ func runInit(args []string) error {
 		}
 		fmt.Println()
 	}
-	// ~/.gemini가 있으면(agy·Gemini CLI 공용) GEMINI.md에 브라우저·쿠키 지침 블록
-	geminiMD := filepath.Join(home, ".gemini", "GEMINI.md")
-	if _, err := os.Stat(filepath.Dir(geminiMD)); err == nil {
+	// Gemini 계열은 판정을 앞에서 한 번에 한다 — 아래 단계들이 ~/.gemini를 만들기 때문에 단계마다 폴더
+	// 유무로 보면 깨끗한 환경에서 1회차에 GEMINI.md가 빠지고(agy hook 단계가 폴더를 만든 뒤라 2회차에야
+	// 들어감), gemini CLI가 없어도 agy가 만든 폴더를 보고 Gemini CLI hook을 쓴다(Win11 WSL2 실측 2026-10-03).
+	// dry-run도 같은 판정이라 목록이 실제와 같다.
+	geminiDir := filepath.Join(home, ".gemini")
+	geminiMD := filepath.Join(geminiDir, "GEMINI.md")
+	geminiHooks := filepath.Join(geminiDir, "config", "hooks.json")
+	geminiSettings := filepath.Join(geminiDir, "settings.json")
+	hasAgy := agyInstalled(home)
+	hasGeminiCLI := geminiCLIInstalled(geminiDir, hasAgy)
+	// agy·Gemini CLI 공용 GEMINI.md에 브라우저·쿠키 지침 블록
+	if hasAgy || hasGeminiCLI {
 		fmt.Println("Gemini 브라우저 지침:", geminiMD)
 		if err := cli.InstallGeminiAgents(os.Stdout, geminiMD, *dryRun); err != nil {
 			return err
@@ -436,8 +439,7 @@ func runInit(args []string) error {
 	// agy(Antigravity CLI)가 설치된 경우에만 — 공유 훅 파일(~/.gemini/config/hooks.json,
 	// agy의 /hooks도 여기 쓴다)에 등록. 갓 설치한 agy는 config/ 폴더가 아직 없어
 	// (WSL2 실측 2026-09-07) 바이너리·antigravity-cli/ 흔적으로도 판단하고 폴더는 만든다.
-	geminiHooks := filepath.Join(home, ".gemini", "config", "hooks.json")
-	if agyInstalled(home) {
+	if hasAgy {
 		fmt.Println("Gemini(agy) hook 등록:", geminiHooks)
 		if err := cli.InstallGeminiHooks(os.Stdout, geminiHooks, binPath, *dryRun); err != nil {
 			return err
@@ -445,8 +447,7 @@ func runInit(args []string) error {
 		fmt.Println()
 	}
 	// stock Gemini CLI — ~/.gemini/settings.json의 hooks에 등록
-	geminiSettings := filepath.Join(home, ".gemini", "settings.json")
-	if _, err := os.Stat(filepath.Dir(geminiSettings)); err == nil {
+	if hasGeminiCLI {
 		fmt.Println("Gemini CLI hook 등록:", geminiSettings)
 		if err := cli.InstallGeminiCLIHooks(os.Stdout, geminiSettings, binPath, *dryRun); err != nil {
 			return err
@@ -464,7 +465,7 @@ func runInit(args []string) error {
 			return err
 		}
 	}
-	if _, err := os.Stat(filepath.Dir(geminiSettings)); err == nil {
+	if hasAgy || hasGeminiCLI { // settings.json의 mcpServers는 agy·Gemini CLI 공용 형식
 		if err := cli.InstallGeminiMCP(os.Stdout, geminiSettings, binPath, *dryRun); err != nil {
 			return err
 		}
@@ -602,9 +603,7 @@ func runInfo(args []string) error {
 		return err
 	}
 	now := time.Now()
-	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
-		_ = scan.Sync(st, panes, now)
-	}
+	_ = syncPanes(st, now)
 	agents, err := st.List()
 	if err != nil {
 		return err
@@ -657,10 +656,8 @@ func runAll(cmd string, args []string) error {
 		return err
 	}
 	now := time.Now()
-	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
-		if err := scan.Sync(st, panes, now); err != nil {
-			return err
-		}
+	if err := syncPanes(st, now); err != nil {
+		return err
 	}
 	return cli.RunAll(os.Stdout, st, tmuxx.Tmux{}, message, o, cmd != "broadcast", now)
 }
@@ -672,9 +669,7 @@ func runResume(args []string) error {
 	if err != nil {
 		return err
 	}
-	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
-		_ = scan.Sync(st, panes, time.Now())
-	}
+	_ = syncPanes(st, time.Now())
 	agents, err := st.List()
 	if err != nil {
 		return err
@@ -732,10 +727,23 @@ func runRestore(args []string) error {
 	}
 	// tmux 현실과 먼저 동기화 — 서버가 아예 없으면(재부팅 직후) 저장된
 	// 레코드가 전부 DEAD로 떨어져 그대로 복원 대상이 된다.
-	if panes, err := (tmuxx.Tmux{}).ListPanes(); err == nil {
-		_ = scan.Sync(st, panes, time.Now())
-	}
+	_ = syncPanes(st, time.Now())
 	return cli.RunRestore(os.Stdout, st, tmuxx.Tmux{}, args)
+}
+
+// syncPanes는 tmux pane 목록을 상태 저장소에 반영한다. tmux 서버 자체가 없으면 pane 0개로 동기화해
+// 남은 기록이 전부 DEAD가 되게 한다 — 서버가 내려갔는데 동기화를 건너뛰면 세션이 영영 DONE으로
+// 남는다(Win11 WSL2 실측 2026-10-03: 배포판이 내려가 tmux가 사라져도 status에 [DONE]이 그대로).
+// tmux 바이너리가 없거나 다른 오류면 현실을 모르는 것이니 건드리지 않는다.
+func syncPanes(st *state.Store, now time.Time) error {
+	panes, err := (tmuxx.Tmux{}).ListPanes()
+	if err != nil {
+		if !tmuxx.IsNoServer(err) {
+			return err
+		}
+		panes = nil
+	}
+	return scan.Sync(st, panes, now)
 }
 
 // agyInstalled는 Antigravity CLI(agy) 흔적이 있는지 — 공유 설정 폴더, 앱 데이터 폴더, PATH의 바이너리.
@@ -750,6 +758,19 @@ func agyInstalled(home string) bool {
 	}
 	_, err := exec.LookPath("agy")
 	return err == nil
+}
+
+// geminiCLIInstalled는 stock Gemini CLI(gemini) 흔적이 있는지 — PATH의 바이너리, 또는 agy 없이 ~/.gemini가
+// 이미 있는 경우(예전 판정과 같다). agy만 있는데 폴더가 생긴 경우는 Gemini CLI가 아니다.
+func geminiCLIInstalled(geminiDir string, hasAgy bool) bool {
+	if _, err := exec.LookPath("gemini"); err == nil {
+		return true
+	}
+	if hasAgy {
+		return false
+	}
+	st, err := os.Stat(geminiDir)
+	return err == nil && st.IsDir()
 }
 
 // spawnSelf는 자기 자신을 떼어 낸(detached) 자식으로 띄운다 — 부른 쪽을 기다리게 하지 않는다.

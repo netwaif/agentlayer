@@ -251,6 +251,10 @@ func RunInboxWait(ctx context.Context, stdout, stderr io.Writer, stateDir string
 	cwd, _ := os.Getwd()
 	pid := sessionPIDFn()
 	if pid <= 0 {
+		if sub == "open" {
+			// open은 프로세스가 끝난 뒤에도 주소가 살아야 하는데, 셸에서 띄우면 발급하자마자 죽은 주소가 된다(Win11 WSL2 실측 2026-10-03).
+			return fmt.Errorf("Claude 세션 안에서 실행하세요 — 셸에서 open하면 이 명령이 끝나는 즉시 죽는 주소가 발급됩니다(wait는 셸에서도 됨)")
+		}
 		// 조상에서 claude를 못 찾았다(맨 셸에서 실행 등) — 이 프로세스 자신을 세션으로 삼는다. 기다리는 동안은 살아 있으니 send의 생사 판정이 맞다.
 		pid = os.Getpid()
 		logf("Claude 세션 프로세스를 찾지 못해 이 프로세스(pid %d)를 주소로 씁니다", pid)
