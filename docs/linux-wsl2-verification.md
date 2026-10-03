@@ -171,6 +171,6 @@ Ubuntu 24.04.4 server, Node 24.20(nvm), Claude Code 2.1.263, Codex 0.153.4, Gemi
 - **셸에서 `inbox open`하면 즉시 죽는 주소 발급** — Claude 세션 밖이면 거부(`wait`는 그대로).
 
 ### 미확인·남은 것
-- 윈도우 앱(Claude 데스크톱)의 WSL 세션 플러그인 지원 — VM에 앱 미설치.
+- (확인됨 2026-10-03) **윈도우 앱(Claude 데스크톱 1.44121.x → 최신 업데이트)의 WSL 세션은 플러그인 미지원** — 환경 선택에 `Ubuntu`가 있고 `\\wsl.localhost\Ubuntu\home\…` 폴더로 세션(브랜치·워크트리 표시)은 열리지만 `/plugin` 입력 시 "이 환경에서는 플러그인을 사용할 수 없습니다". 윈도우 사용자는 플러그인을 앱 화면이 아니라 Ubuntu 터미널의 `claude plugin marketplace add` / `claude plugin install`로 넣어야 한다(매뉴얼 윈도우 장에 반영할 것). 로컬(윈도우 네이티브) 세션은 Git for Windows를 요구한다.
 - `wt clean`이 tmux 창은 남겨 상태·카드 DIR에 ` (deleted)` 접미사(리눅스 /proc cwd) — 기록만.
 - 회사 루트가 README 표준(`<root>/runtime/inbox`)이 아니면 `InferRoot`가 비어 `task message`가 등록 pane 밖에서 실패(설계).
