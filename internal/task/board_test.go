@@ -19,7 +19,7 @@ func linkedAgent(t *testing.T, ask string) (stateDir, root string, a *state.Agen
 	dir := filepath.Join(root, "tasks", "LAB-1")
 	_ = os.MkdirAll(dir, 0o755)
 	_ = os.WriteFile(filepath.Join(dir, "task.md"), []byte("# LAB-1\n```yaml\nstatus: in_progress\n```\n"), 0o644)
-	a = &state.Agent{ID: "claude-%1", Kind: "claude", Task: "OK 답하기", Ask: ask,
+	a = &state.Agent{ID: "claude-%1", Kind: "claude", Task: "OK 답하기", Ask: ask, LastSendAt: time.Now(),
 		Tmux: state.TmuxRef{Session: "collab-bot", WindowName: "t123456", PaneID: "%1"}}
 	if err := Assign(stateDir, Assignment{TaskID: "LAB-1", AgentID: a.ID, Session: "collab-bot", Window: "t123456",
 		Pane: "%1", Inbox: filepath.Join(root, "runtime", "inbox"), TaskDir: dir, AssignedAt: time.Now()}, false); err != nil {

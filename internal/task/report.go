@@ -29,6 +29,7 @@ type Report struct {
 	Letter  string    `json:"letter,omitempty"` // 편지(MESSAGE)의 원격 편지ID — task reply가 답장할 때 쓴다
 	At      time.Time `json:"at"`
 	Inbox   string    `json:"-"`
+	SendAt  time.Time `json:"-"` // 이 보고를 낳은 send 시각(Agent.LastSendAt) — DONE 보고 뒤 등록 파일에 기억
 }
 
 // ShouldReport — 총괄이 알아야 하는 것은 "멈췄다"뿐: 끝남·승인 대기·에러.
@@ -67,8 +68,16 @@ func ReportFor(stateDir string, a *state.Agent, prev, to state.AgentState, now t
 	if as.Session != a.Tmux.Session || as.Pane != a.Tmux.PaneID {
 		return nil, false
 	}
+	// 총괄이 시킨 턴만 보고한다 — hook은 턴을 누가 시작했는지 모르지만, 총괄의 지시는 반드시 agentlayer send를
+	// 거쳐 Agent.LastSendAt에 남는다. 그 send 이후 첫 DONE까지(승인 대기·에러 포함)만 보고하고, DONE이 그 send를
+	// 소비하면 다음 send가 올 때까지 조용하다. 사용자가 등록된 세션과 직접 대화할 때마다 총괄이 깨어나 토큰을
+	// 쓰던 것(2026-10-03). 원격 직원은 폴링 경로라 그대로.
+	if as.Remote == nil && (a.LastSendAt.IsZero() || !a.LastSendAt.After(as.DoneSendAt)) {
+		return nil, false
+	}
 	r := &Report{Version: 1, ID: NewID(), TaskID: as.TaskID, Session: a.Tmux.Session, Window: a.Tmux.WindowName,
-		Kind: a.Kind, From: string(prev), To: string(to), Task: a.Task, CWD: a.CWD, TaskDir: as.TaskDir, At: now, Inbox: as.Inbox}
+		Kind: a.Kind, From: string(prev), To: string(to), Task: a.Task, CWD: a.CWD, TaskDir: as.TaskDir, At: now, Inbox: as.Inbox,
+		SendAt: a.LastSendAt}
 	if to == state.StateWaiting {
 		r.Ask = a.Ask
 	}
@@ -85,18 +94,30 @@ func WriteReport(r *Report) (string, error) {
 	return p, writeAtomic(p, r)
 }
 
-// WriteReportFor는 보고를 쓰고, WAITING 보고면 그 질문을 등록 파일에 기억한다(다음 알림이 같은 질문인지 가리는 기준).
-// 보고가 먼저다 — 기억에 실패하면 같은 질문이 한 번 더 갈 뿐이고, 순서가 반대면 질문이 아예 안 갈 수 있다.
+// WriteReportFor는 보고를 쓰고 등록 파일에 두 가지를 기억한다 — WAITING 보고면 그 질문(다음 알림이 같은 질문인지
+// 가리는 기준), DONE 보고면 그 보고를 낳은 send 시각(같은 send에 대한 두 번째 DONE·사용자 턴을 거르는 기준).
+// 보고가 먼저다 — 기억에 실패하면 한 번 더 갈 뿐이고, 순서가 반대면 아예 안 갈 수 있다.
 func WriteReportFor(stateDir, agentID string, r *Report) (string, error) {
 	p, err := WriteReport(r)
-	if err != nil || r.To != string(state.StateWaiting) {
+	if err != nil {
 		return p, err
 	}
 	as, ok, err := Load(stateDir, agentID)
-	if err != nil || !ok || as.TaskID != r.TaskID || as.LastAsk == r.Ask {
+	if err != nil || !ok || as.TaskID != r.TaskID {
 		return p, err
 	}
-	as.LastAsk = r.Ask
+	changed := false
+	if r.To == string(state.StateWaiting) && as.LastAsk != r.Ask {
+		as.LastAsk = r.Ask
+		changed = true
+	}
+	if r.To == string(state.StateDoneUnread) && !r.SendAt.IsZero() && r.SendAt.After(as.DoneSendAt) {
+		as.DoneSendAt = r.SendAt
+		changed = true
+	}
+	if !changed {
+		return p, nil
+	}
 	return p, Save(stateDir, *as)
 }
 

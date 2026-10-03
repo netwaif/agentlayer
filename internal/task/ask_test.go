@@ -39,7 +39,8 @@ func localFixture(t *testing.T) (stateDir, root, inbox string, a *state.Agent) {
 	if err := Assign(stateDir, Assignment{TaskID: "T-1", AgentID: "claude-%16", Session: "lab-bot", Pane: "%16", Inbox: inbox, TaskDir: dir}, false); err != nil {
 		t.Fatal(err)
 	}
-	a = &state.Agent{ID: "claude-%16", Kind: "claude", Tmux: state.TmuxRef{Session: "lab-bot", PaneID: "%16"}}
+	// 총괄 send가 있었던 세션(그 뒤 첫 DONE까지 보고 대상)
+	a = &state.Agent{ID: "claude-%16", Kind: "claude", Tmux: state.TmuxRef{Session: "lab-bot", PaneID: "%16"}, LastSendAt: time.Now()}
 	return
 }
 

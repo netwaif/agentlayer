@@ -173,6 +173,9 @@ agentlayer task done VIDEO-07
 
 - `send`는 `WORK`(작업 중)·`WAIT`(승인창)에는 넣지 않는다. `--force`로 강제. `dead`는 거부.
 - 등록된 세션의 `DONE`·`WAIT`·`ERR` 전이를 hook이 `<inbox>/pending/<id>.json`으로 쓴다
+- **보고는 총괄이 시킨 턴에만 간다**(v1.14.0) — `agentlayer send`가 지시를 넣은 뒤 첫 `DONE`까지(그 사이 `WAIT`·`ERR` 포함)만
+  보고하고, 그 `DONE`이 send를 소비하면 다음 send까지 조용하다. 사용자가 등록된 세션과 직접 대화해도 총괄은 깨어나지 않는다.
+  `wake-all`·`broadcast`는 send로 치지 않는다
   (`task_id`·세션·창·이전/현재 상태·요약·승인 문구·cwd·시각). heartbeat·승인됨·읽음은 무음.
   `WAIT`에 머문 채 질문(승인 문구)만 바뀌면 `from`·`to`가 둘 다 `WAITING`인 보고가 새로 간다 — 같은 질문의 반복 알림은 가지 않는다(원격 직원도 같다).
 - `task watch`는 정상 건을 한 줄 JSON으로 출력하고 `received/`로 옮긴다. 깨진 파일·심볼릭 링크·16KiB 초과는 `quarantine/`.

@@ -64,6 +64,9 @@ type Agent struct {
 	PID        int        `json:"pid,omitempty"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 	StateSince time.Time  `json:"state_since"`
+	// LastSendAt은 agentlayer send가 이 세션에 지시를 넣은 마지막 시각. 등록된 세션의 멈춤 보고는 이 시각 이후
+	// 첫 DONE까지만 — 사용자가 직접 친 턴의 DONE은 총괄에게 보고하지 않는다(2026-10-03).
+	LastSendAt time.Time `json:"last_send_at,omitempty"`
 	// Threads는 표시용 — Fold가 이 행 뒤로 접은 스레드 pane 수. 저장하지 않는다.
 	Threads int `json:"-"`
 	// ThreadStates는 표시용 — 접힌 스레드의 상태별 개수(idle 제외). Fold가 채우고 저장하지 않는다.

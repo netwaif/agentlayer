@@ -363,6 +363,12 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 	if err != nil {
 		return fmt.Errorf("%s 전송 실패: %w", a.Tmux.Session, err)
 	}
+	// 지시가 들어간 시각을 세션 기록에 남긴다 — 등록된 세션의 멈춤 보고는 이 시각 이후 첫 DONE까지만 총괄에게 간다.
+	// 훅이 같은 파일을 갱신하므로 방금 읽은 복사본이 아니라 다시 읽어 그 필드만 바꾼다(실패는 보고 한 번 덜 갈 뿐).
+	if cur, lerr := st.Load(a.ID); lerr == nil && cur != nil {
+		cur.LastSendAt = time.Now()
+		_ = st.Save(cur)
+	}
 	if via == "queue" || via == "channel" {
 		reason = ""
 		if a.State == state.StateWorking {

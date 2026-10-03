@@ -33,6 +33,9 @@ type Assignment struct {
 	// LastAsk는 총괄에 마지막으로 보고한 질문(WAITING의 ask). 같은 WAITING 안에서 질문이 바뀌었는지, 같은 질문의
 	// 반복 알림인지 가린다. 훅(로컬)·폴링(원격)이 보고를 쓴 뒤 채운다.
 	LastAsk string `json:"last_ask,omitempty"`
+	// DoneSendAt은 마지막으로 DONE을 보고한 send 시각(Agent.LastSendAt). 같은 send에 대해 DONE은 한 번만 보고하고,
+	// 그 뒤 사용자가 직접 친 턴의 멈춤은 다음 send가 올 때까지 보고하지 않는다.
+	DoneSendAt time.Time `json:"done_send_at,omitempty"`
 }
 
 // RemoteRef는 원격 직원(어댑터) 쪽 실행 식별자와 마지막 관측 상태.
