@@ -540,6 +540,7 @@ func TestPreviewTickReschedules(t *testing.T) {
 }
 
 func TestUsageCacheCmdEmitsCachedImmediately(t *testing.T) {
+	t.Setenv("AGENTLAYER_USAGE_SOURCE", "codexbar")
 	m := fixtureModel(t)
 	// 하루 묵은 캐시를 심는다 — TTL과 무관하게 즉시 표시돼야 한다
 	old := time.Now().Add(-24 * time.Hour)
@@ -556,6 +557,7 @@ func TestUsageCacheCmdEmitsCachedImmediately(t *testing.T) {
 }
 
 func TestUsageCacheCmdNoCache(t *testing.T) {
+	t.Setenv("AGENTLAYER_USAGE_SOURCE", "codexbar")
 	m := fixtureModel(t)
 	msg, ok := m.usageCacheCmd()().(usageMsg)
 	if !ok || msg.payload != nil {

@@ -378,8 +378,8 @@ func (m Model) usageView() string {
 	}
 	b.WriteString("\n\n")
 	if m.usagePay == nil {
-		b.WriteString(styleHelp.Render("사용량 불러오는 중… 콜드 시작은 최대 2분 걸립니다.\n"))
-		b.WriteString(styleHelp.Render("(계속 비어 있으면 usage-coach 미설치 — brew/GitHub에서 coach 설치 후 재시도)\n"))
+		b.WriteString(styleHelp.Render("사용량을 아직 못 읽었습니다.\n"))
+		b.WriteString(styleHelp.Render("공식 값을 다시 읽으려면 agentlayer usage read --refresh를 실행하세요.\n"))
 	} else {
 		for _, key := range []string{"claude", "codex", "antigravity"} {
 			p, ok := m.usagePay.Providers[key]
@@ -398,10 +398,15 @@ func (m Model) usageView() string {
 				w := p.Windows[wk]
 				label := winLabel[wk]
 				if label == "" {
-					label = wk // antigravity 계정명 등
+					label = w.Label
+					if label == "" {
+						label = wk
+					}
 				}
 				line := fmt.Sprintf("  %-12s %s", label, barStyle.Render(usage.Gauge(w.LeftPct, 14)))
-				if w.LeftPct != nil {
+				if w.LeftPct != nil && w.ResetPassed {
+					line += styleHelp.Render(fmt.Sprintf(" (%d%%) 재설정됨 — 새 값 기다림", int(*w.LeftPct)))
+				} else if w.LeftPct != nil {
 					line += fmt.Sprintf("  %3d%%", int(*w.LeftPct))
 					if r := usage.ResetLabel(w.ResetMin); r != "" {
 						line += styleHelp.Render(" · 리셋 " + r)

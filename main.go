@@ -47,6 +47,7 @@ var (
 )
 
 func main() {
+	usage.AutoProbe = usage.SpawnProbe
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "agentlayer:", err)
 		if errors.Is(err, cli.ErrInboxTimeout) {
@@ -138,6 +139,22 @@ func run(args []string) error {
 			return err
 		}
 		return cli.RunBoard(os.Stdout, st, state.DefaultDir(), config.Load(), cli.OpenInBrowser, args[1:], time.Now())
+	case "usage":
+		usageArgs := args[1:]
+		if len(usageArgs) >= 2 && usageArgs[1] == "claude" {
+			switch usageArgs[0] {
+			case "probe":
+				return usage.AutoProbeOnce(context.Background(), state.DefaultDir(), time.Now())
+			case "tap":
+				rest := usageArgs[2:]
+				if len(rest) > 0 && rest[0] == "--" {
+					rest = rest[1:]
+				}
+				configDir := os.Getenv("CLAUDE_CONFIG_DIR")
+				os.Exit(usage.RunTap(state.DefaultDir(), configDir, os.Stdin, os.Stdout, os.Stderr, rest, time.Now()))
+			}
+		}
+		return cli.RunUsage(os.Stdout, state.DefaultDir(), usage.CoachRunner, time.Now(), usageArgs)
 	case "wt":
 		st, err := storeWithSync()
 		if err != nil {
@@ -328,7 +345,7 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 	if outOnly {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(build(usage.FetchCached(st.Dir, usageMaxAge, usage.CoachRunner, now)))
+		return enc.Encode(build(usage.Current(st.Dir, usageMaxAge, usage.CoachRunner, now)))
 	}
 
 	if cfg.DiscordWebhookURL == "" {
@@ -339,7 +356,7 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 	client := discord.NewClient(cfg.DiscordWebhookURL)
 	// 1차: 낡은 usage라도 캐시로 즉시 게시 — 에이전트 상태가 콜드 coach를
 	// 기다리지 않는다 (TUI stale-while-revalidate와 같은 원칙)
-	stale := usage.ReadCached(st.Dir)
+	stale := usage.CurrentCached(st.Dir, now)
 	published := false
 	if stale != nil {
 		mid, err := client.Upsert(build(stale), cs.MessageID)
@@ -351,7 +368,7 @@ func publishCard(outOnly bool, usageMaxAge time.Duration) error {
 	}
 	// 2차: usage 갱신이 실제로 있었을 때만 재게시. --event(24h 허용)는
 	// 캐시 그대로라 1차로 끝난다 — 오늘까지의 단일 게시와 동일
-	pay := usage.FetchCached(st.Dir, usageMaxAge, usage.CoachRunner, now)
+	pay := usage.Current(st.Dir, usageMaxAge, usage.CoachRunner, now)
 	if !published || usagePayloadChanged(stale, pay) {
 		mid, err := client.Upsert(build(pay), cs.MessageID)
 		if err != nil {

@@ -41,6 +41,10 @@ func helpText(goos string) string {
   task assign|list|done|watch|message  업무↔세션 등록·상주 수신·편지 — 등록된 세션의 DONE·WAIT·ERR 전이가 hook에서 <inbox>/pending/ 에 자동 보고됨. message는 직원이 총괄에게 먼저 보내는 편지(MESSAGE)
   channel serve <inbox>  총괄 수신함을 Claude Code 채널(MCP 알림)로 전달 — Monitor 폴링 대체. 'agentlayer channel --help'
   remote add|list|check|rm  원격 직원(호스팅어 Hermes 등) 등록 — 등록 뒤에는 task assign·send를 로컬 직원과 똑같이 쓴다
+  usage          Claude·Codex 공식 사용량 — TUI의 u  [--json] [--cached]
+  usage read     공식 사용량 읽기  [--json] [--refresh]
+  usage source   출처 확인·선택  [native|codexbar]
+  usage setup    Claude 상태줄 연결  claude [--undo]
   wt <명령>      worktree 워커 관리 (new·list·diff·test·review·send·merge·clean) — 'agentlayer wt'로 상세
   browser [open|pick|shot|errors|preview|cookies|mcp|control reset|restart]  에이전트 전용 브라우저 (기동/탭 열기/요소찍기/캡처/콘솔에러/wt 프리뷰/쿠키 import·list·clear·export/MCP 연동 명령/제어권 초기화/굳은 브라우저 재시작)
   board          회사 업무 보드 — HTML 생성 후 전용 브라우저로 열기  [--out 경로] [--json] [--no-open] [--refresh]

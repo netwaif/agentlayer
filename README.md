@@ -100,13 +100,14 @@ agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참
 `agentlayer init` 한 번으로 Claude hook과 Codex notify가 함께 등록된다
 (기존 설정 보존·백업·멱등).
 
-## 사용량·컨텍스트 (선택적 통합)
+## 사용량·컨텍스트
 
-[usage-coach](https://github.com/netwaif/usage-coach)가 설치돼 있으면:
-
-- TUI 헤더에 provider별 요약 한 줄, `u` 키로 전용 뷰(게이지·리셋·코칭)
-- 각 에이전트 행에 모델·컨텍스트%·마지막 활동 (statusline 스냅샷 + codex rollout)
-- coach 콜드 실행이 느려도 5분 파일 캐시 + 중복 실행 방지로 TUI는 블로킹되지 않는다
+- TUI 헤더에 사용량 요약, `u`로 게이지와 리셋 시각을 표시합니다. 기본값은 Claude Code와 Codex가 제공하는 공식 사용량입니다.
+- `agentlayer usage`는 저장된 값을 표시하고 필요할 때 백그라운드 갱신을 시작합니다. 즉시 갱신하려면 `agentlayer usage read --refresh`를 실행하세요.
+- Claude Code는 macOS·Linux에서 `/usage` 화면을 읽습니다. `agentlayer usage setup claude`로 상태줄의 한도 값도 수집할 수 있습니다. 기존 상태줄 명령은 유지되며 `agentlayer usage setup claude --undo`로 복원합니다.
+- Codex는 로컬 세션 기록과 공식 app-server에서 한도를 읽습니다.
+- [usage-coach](https://github.com/netwaif/usage-coach)를 이미 쓰는 경우 `agentlayer usage source codexbar`로 전환할 수 있습니다. 공식 값으로 돌아오려면 `agentlayer usage source native`를 실행하세요.
+- 에이전트 행에는 모델·컨텍스트 사용률·마지막 활동을 표시합니다.
 
 ## 알림·Discord
 

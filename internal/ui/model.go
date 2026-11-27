@@ -289,7 +289,7 @@ func usageTickCmd() tea.Cmd {
 // 갱신은 usageCmd가 뒤에서 하고, 나이는 usageAge가 화면에 밝힌다.
 func (m Model) usageCacheCmd() tea.Cmd {
 	dir := m.store.Dir
-	return func() tea.Msg { return usageMsg{payload: usage.ReadCached(dir)} }
+	return func() tea.Msg { return usageMsg{payload: usage.CurrentCached(dir, time.Now())} }
 }
 
 // usageCmd는 coach 사용량만 백그라운드에서 가져온다.
@@ -298,7 +298,7 @@ func (m Model) usageCacheCmd() tea.Cmd {
 func (m Model) usageCmd() tea.Cmd {
 	runner, st := m.coachRunner, m.store
 	return func() tea.Msg {
-		return usageMsg{payload: usage.FetchCached(st.Dir, 5*time.Minute, runner, time.Now())}
+		return usageMsg{payload: usage.Current(st.Dir, 5*time.Minute, runner, time.Now())}
 	}
 }
 

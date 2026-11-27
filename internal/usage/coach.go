@@ -18,6 +18,11 @@ import (
 type Window struct {
 	LeftPct  *float64 `json:"left_pct"`
 	ResetMin *float64 `json:"reset_min"`
+	// 공식 경로만 채운다(비면 JSON에서 빠져 coach 꼴과 같다): 값을 받은 때·출처·재설정 시각이 지났는지(숫자는 지난 값, 흐리게)
+	MeasuredAt  string `json:"measured_at,omitempty"`
+	Source      string `json:"source,omitempty"`
+	ResetPassed bool   `json:"reset_passed,omitempty"`
+	Label       string `json:"label,omitempty"` //  /usage 화면 이름(예: Current week (Fable))
 }
 
 // Provider는 coach의 provider 블록 (claude/codex/antigravity).
@@ -29,6 +34,9 @@ type Provider struct {
 	Action  string            `json:"action"`
 	Reason  string            `json:"reason"`
 	Windows map[string]Window `json:"windows"`
+	// 공식 경로만: 이 제공자 값을 받은 때·출처(claude-statusline | codex-rollout | codex-app-server)
+	MeasuredAt string `json:"measured_at,omitempty"`
+	Source     string `json:"source,omitempty"`
 }
 
 // Payload는 coach --json 전체.
