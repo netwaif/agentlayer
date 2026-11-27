@@ -15,7 +15,7 @@ import (
 )
 
 // Codex 사용량 — 네트워크 없이 공식 CLI가 내 디스크에 쓴 세션 기록(rollout-*.jsonl)의 끝 64KB에서 마지막 rate_limits.
-// 모양(10-18 확인): {"timestamp":…, "type":"event_msg", "payload":{"type":"token_count", …, "rate_limits":{"primary":{"used_percent","window_minutes","resets_at"},"secondary":{…},"plan_type":…}}}
+// 세션 기록 형식: {"timestamp":…, "type":"event_msg", "payload":{"type":"token_count", …, "rate_limits":{"primary":{"used_percent","window_minutes","resets_at"},"secondary":{…},"plan_type":…}}}
 // 공식 문서 필드가 아니어서 바뀌면 수동 새로 고침(app-server)으로 보완한다.
 
 const codexTailBytes = 64 << 10

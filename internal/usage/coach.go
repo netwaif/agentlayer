@@ -22,7 +22,7 @@ type Window struct {
 	MeasuredAt  string `json:"measured_at,omitempty"`
 	Source      string `json:"source,omitempty"`
 	ResetPassed bool   `json:"reset_passed,omitempty"`
-	Label       string `json:"label,omitempty"` //  /usage 화면 이름(예: Current week (Fable))
+	Label       string `json:"label,omitempty"` // /usage 화면 이름(예: Current week (Fable))
 }
 
 // Provider는 coach의 provider 블록 (claude/codex/antigravity).

@@ -79,10 +79,7 @@ type seenEntry struct {
 
 // SaveClaudeStatus는 상태줄 JSON 하나를 받아 새 측정일 때만 저장한다. 저장했으면 true.
 //
-// 2026-10-18 실측: 주간 사용량이 재설정 시각(resets_at)이 그대로인 채 97%→2%로 내려갔다
-// (/usage 화면 2%). 그 전 규칙 「같은 창이면 사용률 큰 값이 이긴다」가 97을 붙잡아 「7일 3% 남음」을 띄웠다.
-// 그래서 크기가 아니라 「새 측정인가」로 가린다: 같은 세션이 같은 값을 되풀이하면(쉬던 세션의 다시 그리기) 버리고,
-// 세션이 새 값을 보내면 그것이 이긴다. 재설정 시각이 더 이른 창(지난 창)은 받지 않는다.
+// 같은 창에서도 사용률은 내려갈 수 있다. 같은 세션의 반복 값과 이미 지난 창은 버리고 새 측정값을 쓴다.
 func SaveClaudeStatus(stateDir, configDir string, input []byte, now time.Time) (bool, error) {
 	fresh := parseClaudeStatus(input)
 	if len(fresh) == 0 {

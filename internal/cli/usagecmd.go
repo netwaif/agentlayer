@@ -31,7 +31,7 @@ func usageWinOrder(ws map[string]usage.Window) []string {
 	return append(std, rest...)
 }
 
-// UsageText는 사용량(coach 페이로드)을 색 없는 글자로 — 메뉴 막대 알림창·셸 출력용(TUI의 u).
+// UsageText는 사용량을 TUI와 같은 순서로 색 없는 글자로 출력한다.
 // nil이면 안내문. 공급자 순서는 TUI와 같다(claude·codex·antigravity).
 func UsageText(p *usage.Payload, now time.Time) string {
 	if p == nil {

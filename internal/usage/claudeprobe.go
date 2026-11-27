@@ -25,7 +25,10 @@ const (
 	probeAttempt = "claude-probe.attempt" // 마지막으로 띄운 때(실패해도 지금 간격 안에는 다시 안 띄움)
 )
 
-var ErrProbeBusy = errors.New("다른 /usage 읽기가 이미 도는 중")
+var (
+	ErrProbeBusy           = errors.New("다른 /usage 읽기가 이미 도는 중")
+	errClaudeLoginRequired = errors.New("Claude Code 로그인이 필요합니다")
+)
 
 // ── 화면 해석 ──
 
@@ -50,7 +53,7 @@ func screenText(b []byte) string {
 
 // UsageScreenWindow는 /usage 화면의 창 하나.
 type UsageScreenWindow struct {
-	Key      string  // 5h | 7d | <모델>_7d(예: fable_7d — CodexBar 비교 칸과 같은 이름)
+	Key      string  // 5h | 7d | <모델>_7d(예: fable_7d)
 	Label    string  // 화면 이름(예: Current week (Fable))
 	UsedPct  float64 // 화면에 표시된 사용 비율
 	ResetsAt int64   // Unix 초, 못 읽으면 0
@@ -196,6 +199,19 @@ func (s *screenBuf) since(n int) ([]byte, int) {
 	return append([]byte(nil), s.b[n:]...), len(s.b)
 }
 
+func claudeLoginScreen(text string) bool {
+	text = strings.ToLower(text)
+	for _, marker := range []string{
+		"let's get started", "let’s get started", "choose the text style",
+		"select login method", "select a login method", "not logged in", "please run /login",
+	} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 // ProbeClaudeUsage는 공식 claude를 전용 폴더(probeDir)의 가상 터미널에서 띄워 /usage 화면을 읽고 끝낸다.
 // 신뢰 확인 창은 이 전용 폴더에서만 「Yes, I trust this folder」로 넘긴다. claudeBin이 비면 PATH·흔한 위치에서 찾는다.
 func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func() time.Time) ([]UsageScreenWindow, error) {
@@ -226,23 +242,6 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 	slave.Close()
 	done := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(done) }()
-	defer func() {
-		// 정상 종료부터(Esc로 화면 닫고 /exit — claude가 자기 상태를 저장하고 끝난다), 3초 안에 안 끝나면 프로세스 그룹째 강제 종료
-		_, _ = master.Write([]byte("\x1b"))
-		time.Sleep(300 * time.Millisecond)
-		_, _ = master.Write([]byte("/exit"))
-		time.Sleep(300 * time.Millisecond)
-		_, _ = master.Write([]byte("\r"))
-		select {
-		case <-done:
-		case <-time.After(3 * time.Second):
-		}
-		killPTYGroup(cmd) // 남는 자식 없게
-		select {
-		case <-done:
-		case <-time.After(2 * time.Second):
-		}
-	}()
 	buf := &screenBuf{}
 	go func() {
 		b := make([]byte, 32<<10)
@@ -256,27 +255,63 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 			}
 		}
 	}()
-	send := func(s string) { _, _ = master.Write([]byte(s)) }
+	needsLogin := func() bool {
+		all, _ := buf.since(0)
+		return claudeLoginScreen(screenText(all))
+	}
+	send := func(key string) bool {
+		if needsLogin() {
+			return false
+		}
+		_, _ = master.Write([]byte(key))
+		return true
+	}
 	ctx, cancel := context.WithTimeout(ctx, ProbeTimeout)
 	defer cancel()
 	var (
-		trusted, asked        bool
-		askedAt, trustSeen    time.Time
-		mark, seen, trustMark int
-		best                  []UsageScreenWindow
-		bestAt                time.Time
+		trusted, asked, retried bool
+		askedAt, trustSeen      time.Time
+		mark, seen, trustMark   int
+		best                    []UsageScreenWindow
+		bestAt                  time.Time
 	)
+	defer func() {
+		// /usage를 보낸 세션에서만 정상 종료를 시도한다. 설정·로그인 화면에는 종료 키도 보내지 않는다.
+		if asked && send("\x1b") {
+			time.Sleep(300 * time.Millisecond)
+			if send("/exit") {
+				time.Sleep(300 * time.Millisecond)
+				if send("\r") {
+					select {
+					case <-done:
+					case <-time.After(3 * time.Second):
+					}
+				}
+			}
+		}
+		killPTYGroup(cmd)
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+		}
+	}()
 	tick := time.NewTicker(250 * time.Millisecond)
 	defer tick.Stop()
 	start := time.Now()
 	for {
 		select {
 		case <-ctx.Done():
+			if needsLogin() {
+				return nil, errClaudeLoginRequired
+			}
 			if len(best) > 0 {
 				return best, nil
 			}
 			return nil, fmt.Errorf("/usage 화면을 %s 안에 못 읽음%s", ProbeTimeout, debugTail(buf))
 		case <-done:
+			if needsLogin() {
+				return nil, errClaudeLoginRequired
+			}
 			if len(best) > 0 {
 				return best, nil
 			}
@@ -285,8 +320,11 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 		}
 		all, _ := buf.since(0)
 		text := screenText(all)
+		if claudeLoginScreen(text) {
+			return nil, errClaudeLoginRequired
+		}
 		if !trusted && strings.Contains(text, "Yes, I trust this folder") {
-			// 창이 보이자마자 키를 보내면 claude가 아직 키 입력 받을 준비(원시 모드) 전이라 엉켜 「No, exit」로 끝난다(10-18 실측) — 2초 기다린다
+			// Claude가 키를 받을 원시 모드로 바뀔 때까지 기다린다.
 			if trustSeen.IsZero() {
 				trustSeen = time.Now()
 			}
@@ -294,9 +332,13 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 				continue
 			}
 			trusted = true
-			send("\x1b[B") // 기본 선택이 「No, exit」 — 한 칸 내려 「Yes」
+			if !send("\x1b[B") { // 기본 선택이 「No, exit」 — 한 칸 내려 「Yes」
+				return nil, errClaudeLoginRequired
+			}
 			time.Sleep(300 * time.Millisecond)
-			send("\r")
+			if !send("\r") {
+				return nil, errClaudeLoginRequired
+			}
 			_, trustMark = buf.since(0)
 			continue
 		}
@@ -308,9 +350,13 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 			if time.Since(start) > 3*time.Second && strings.Contains(ft, "Claude Code v") && !strings.Contains(ft, "Yes, I trust this folder") {
 				time.Sleep(1500 * time.Millisecond) // 입력칸이 자리 잡게
 				_, mark = buf.since(0)
-				send("/usage")
+				if !send("/usage") {
+					return nil, errClaudeLoginRequired
+				}
 				time.Sleep(400 * time.Millisecond)
-				send("\r")
+				if !send("\r") {
+					return nil, errClaudeLoginRequired
+				}
 				asked, askedAt = true, time.Now()
 			}
 			continue
@@ -324,12 +370,15 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 		}
 		seen = n
 		ws := parseUsageScreen(screenText(after), now())
-		//  주간 창만 있어도 읽은 것이다 — Ultra 화면(2.1.316~)에는 「Current session」이 없어 5h·7d 둘 다를 기다리다 10-31부터 매번 실패했다
+		// 일부 플랜은 세션 창 없이 주간 창만 표시한다.
 		if hasKeys(ws, "7d") && len(ws) >= len(best) {
 			best, bestAt = ws, time.Now()
 		}
-		if !hasKeys(best, "7d") && time.Since(askedAt) > 12*time.Second && time.Since(askedAt) < 13*time.Second {
-			send("\r") // 화면이 안 열렸으면 한 번 더
+		if !retried && !hasKeys(best, "7d") && time.Since(askedAt) > 12*time.Second && time.Since(askedAt) < 13*time.Second {
+			if !send("\r") { // 화면이 안 열렸으면 한 번 더
+				return nil, errClaudeLoginRequired
+			}
+			retried = true
 		}
 	}
 }
@@ -371,7 +420,6 @@ func RefreshOfficial(stateDir string, now time.Time) error {
 var ProbeCodexBin = ""
 
 // AutoProbeOnce는 뒤에서 한 번 잰다(`usage probe claude` — AutoProbe가 띄운다). Claude /usage 화면과 같은 차례에 Codex도 다시 읽는다
-// 전엔 Codex를 「다시 읽기」 때만 다시 읽어, Codex를 안 쓰는 동안 Codex 고리가 묵고 칩 나이(가장 오래된 공급자)도 함께 늘었다.
 // Codex 기록 꼬리(쓸 때마다 남음)나 저장 값이 갱신 간격보다 새로우면 띄우지 않는다. codex가 없거나 못 읽으면 넘어간다(Claude는 그대로 잰다).
 func AutoProbeOnce(ctx context.Context, stateDir string, now time.Time) error {
 	return refreshClaude(ctx, stateDir, "", now, true)
@@ -398,7 +446,7 @@ func refreshClaude(ctx context.Context, stateDir, claudeBin string, now time.Tim
 	}
 	_ = os.WriteFile(filepath.Join(dir, probeAttempt), []byte(now.UTC().Format(time.RFC3339)+"\n"), 0o600)
 	if withCodex && codexDue(stateDir, now) {
-		_ = RefreshCodex(stateDir, ProbeCodexBin, time.Now()) // 단계 갱신(아래)이 새 Codex 값을 보게 먼저
+		_ = RefreshCodex(stateDir, ProbeCodexBin, time.Now())
 	}
 	ws, err := ProbeClaudeUsage(ctx, claudeBin, filepath.Join(dir, "claude-probe"), time.Now)
 	if err != nil {
@@ -447,7 +495,7 @@ func mergeClaude(status, screen *NativeFile) (*NativeFile, map[string]*NativeFil
 		}
 		for k, w := range f.Windows {
 			o, ok := base.Windows[k]
-			// 같은 창이면 나중에 잰 값이 이긴다(사용률은 같은 창에서도 내려갈 수 있다 — 2026-10-18 주간 97%→2%)
+			// 사용률은 한 창 안에서도 내려갈 수 있으므로 같은 창이면 나중에 잰 값을 쓴다.
 			if !ok || w.ResetsAt > o.ResetsAt || (w.ResetsAt == o.ResetsAt && f.Updated.After(from[k].Updated)) {
 				base.Windows[k] = w
 				from[k] = f

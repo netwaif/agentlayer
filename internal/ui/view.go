@@ -512,7 +512,7 @@ func (m Model) viewBody() string {
 	if s := m.usageSummaryLine(); s != "" {
 		b.WriteString(s + "\n")
 	} else if m.usagePay == nil {
-		b.WriteString(styleHelp.Render("사용량 불러오는 중… (콜드 시작은 최대 2분 걸립니다)") + "\n")
+		b.WriteString(styleHelp.Render("사용량 불러오는 중…") + "\n")
 	}
 	if s := m.starterLine(); s != "" {
 		b.WriteString(s + "\n")

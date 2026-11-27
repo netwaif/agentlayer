@@ -2,6 +2,7 @@ package usage
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,7 +38,7 @@ func TestParseUsageScreen(t *testing.T) {
 		t.Errorf("전체 주간: %+v", got["7d"])
 	}
 	if f := got["fable_7d"]; f.UsedPct != 0 || f.ResetsAt != time.Date(2026, 10, 20, 16, 0, 0, 0, seoul).Unix() {
-		t.Errorf("Fable 주간(CodexBar 비교 칸과 같은 이름 fable_7d): %+v", f)
+		t.Errorf("Fable 주간(fable_7d): %+v", f)
 	}
 }
 
@@ -83,12 +84,12 @@ func TestReadNativeMergesStatusAndUsageScreen(t *testing.T) {
 	r5, r7 := now.Add(2*time.Hour).Unix(), now.Add(60*time.Hour).Unix()
 	// 상태줄: 더 새로 받은 5h·7d
 	_ = writeNative(filepath.Join(NativeDir(dir), "claude.json"), &NativeFile{Provider: "claude", Source: "claude-statusline", Updated: now.Add(-2 * time.Minute), Windows: map[string]NativeWindow{"5h": {UsedPct: 70, ResetsAt: r5}, "7d": {UsedPct: 86, ResetsAt: r7}}})
-	// /usage 화면: 20분 전, 5h는 더 작은 값(같은 창 — 사용률은 줄지 않으니 상태줄 값), Fable은 화면에만
+	// /usage 화면: 20분 전, 5h는 더 작은 값(같은 창에서는 최신 측정인 상태줄 값 사용), Fable은 화면에만
 	_ = writeNative(filepath.Join(NativeDir(dir), probeFile), &NativeFile{Provider: "claude", Source: "claude-usage-screen", Updated: now.Add(-20 * time.Minute), Windows: map[string]NativeWindow{"5h": {UsedPct: 60, ResetsAt: r5}, "7d": {UsedPct: 86, ResetsAt: r7}, "fable_7d": {UsedPct: 12, ResetsAt: r7}}, Labels: map[string]string{"fable_7d": "Current week (Fable)"}})
 	p := ReadNative(dir, home, now)
 	c := p.Providers["claude"]
 	if *c.Windows["5h"].LeftPct != 30 || c.Windows["5h"].Source != "claude-statusline" {
-		t.Errorf("5h는 상태줄(같은 창 큰 사용률): %+v", c.Windows["5h"])
+		t.Errorf("5h는 상태줄(같은 창 최신 측정값): %+v", c.Windows["5h"])
 	}
 	f := c.Windows["fable_7d"]
 	if f.LeftPct == nil || *f.LeftPct != 88 || f.Source != "claude-usage-screen" || f.Label != "Current week (Fable)" || f.MeasuredAt != "2026-10-18T02:40:00Z" {
@@ -97,7 +98,7 @@ func TestReadNativeMergesStatusAndUsageScreen(t *testing.T) {
 	if c.Level == "" {
 		t.Error("판단은 5h·7d로(모델별 창은 표시 전용)")
 	}
-	// 상태줄 파일만 있을 때는 예전과 같다
+	// 모델별 창은 /usage 화면 값에서만 읽는다.
 	_ = os.Remove(filepath.Join(NativeDir(dir), probeFile))
 	if _, ok := ReadNative(dir, home, now).Providers["claude"].Windows["fable_7d"]; ok {
 		t.Error("화면 값이 없으면 모델별 창 없음")
@@ -181,6 +182,50 @@ func TestProbeClaudeUsageWithFakeClaude(t *testing.T) {
 	}
 }
 
+// 고정 화면을 그린 뒤 가상 터미널에서 받은 바이트를 기록한다.
+const fakeClaudeLoginScreen = `#!/bin/sh
+stty raw -echo || exit 1
+printf '%s' "$PROBE_SCREEN"
+exec cat >> "$PROBE_INPUT"
+`
+
+func TestProbeClaudeUsageStopsAtLoginWithoutKeys(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		screen string
+	}{
+		{"theme", "Welcome to Claude Code v2.1.328\r\n\x1b[1mLet's get started.\x1b[22m\r\nChoose the text style"},
+		{"login method", "Claude Code v2.1.328\r\nSelect login method"},
+		{"logged out", "Claude Code v2.1.328\r\nNot logged in"},
+		{"login takes priority over trust", "Claude Code v2.1.328\r\nYes, I trust this folder\r\nSelect a login method"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			bin := filepath.Join(dir, "fake-claude")
+			keys := filepath.Join(dir, "keys")
+			if err := os.WriteFile(bin, []byte(fakeClaudeLoginScreen), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PROBE_SCREEN", tt.screen)
+			t.Setenv("PROBE_INPUT", keys)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			start := time.Now()
+			ws, err := ProbeClaudeUsage(ctx, bin, dir, time.Now)
+			if !errors.Is(err, errClaudeLoginRequired) || len(ws) != 0 {
+				t.Errorf("로그인 필요 오류만 기대: 값=%v, 오류=%v", ws, err)
+			}
+			if elapsed := time.Since(start); elapsed >= 2*time.Second {
+				t.Errorf("로그인 화면에서 바로 종료해야 함: %s", elapsed)
+			}
+			got, err := os.ReadFile(keys)
+			if err != nil || len(got) != 0 {
+				t.Errorf("받은 키 0바이트 기대: 키=%q, 오류=%v", got, err)
+			}
+		})
+	}
+}
+
 func TestRefreshClaudeUsageOneAtATime(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.MkdirAll(NativeDir(dir), 0o700)
@@ -209,7 +254,7 @@ func TestProbeClaudeUsageGivesUpWithinTimeout(t *testing.T) {
 	}
 }
 
-// Ultra 화면(Claude Code 2.1.316, 11-03)에는 「Current session」이 없다 — 주간 창만으로 읽혀야 한다
+// 세션 창이 없는 화면은 주간 창만 읽어도 된다.
 const ultraUsageScreen = "Current week (all models) ████████████ 90% used Resets Nov 3 at 4pm (Asia/Seoul)\r\n" +
 	"What's contributing to your usage? Approximate · sessions on this machine only Scanning local sessions… Refreshing…\r\n" +
 	"Current week (Fable) ███████ 14% used Resets Nov 3 at 3:59pm (Asia/Seoul)\r\n" +

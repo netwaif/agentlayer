@@ -370,7 +370,7 @@ func TestMergeNewerWindowWinsAndSameWindowTakesFresh(t *testing.T) {
 	if m, ch := mergeWindows(old, map[string]NativeWindow{"5h": {UsedPct: 10, ResetsAt: r1 - 18000}}); ch || m["5h"].UsedPct != 40 {
 		t.Errorf("지난 창(resets_at 더 이름) 값은 버린다: %+v %v", m, ch)
 	}
-	// 같은 창에서도 사용률은 내려갈 수 있다(2026-10-18 주간 97%→2%, 재설정 시각 그대로) — 새 측정이 이긴다
+	// 같은 창에서 사용률이 내려가도 새 측정값을 쓴다.
 	if m, ch := mergeWindows(old, map[string]NativeWindow{"5h": {UsedPct: 2, ResetsAt: r1}}); !ch || m["5h"].UsedPct != 2 {
 		t.Errorf("같은 창 새 측정: %+v %v", m, ch)
 	}
@@ -404,7 +404,7 @@ func TestStaleSessionDoesNotOverwriteNewValue(t *testing.T) {
 	}
 }
 
-// 2026-10-18 실측: 주간 사용량이 재설정 시각 그대로 97%→2%. 새로 잰 2가 이기고, 97을 되풀이하는 옛 세션은 버린다.
+// 새로 측정한 낮은 값은 저장하고 이전 세션이 반복한 값은 버린다.
 func TestSameWindowUsageDropIsAccepted(t *testing.T) {
 	dir := t.TempDir()
 	r5, r7 := t0.Add(2*time.Hour).Unix(), t0.Add(72*time.Hour).Unix()
@@ -499,7 +499,7 @@ func TestSetupClaudeKeepsSymlink(t *testing.T) {
 	}
 }
 
-// 재설정 뒤 창 한 바퀴(5h)가 지나도록 새 값이 없으면 그 창은 내지 않는다 — Ultra로 바뀐 뒤 10-31의 5시간 값이 「84% · 0분 뒤 초기화」로 사흘 남았다
+// 재설정 뒤 세션 창 한 바퀴가 지나도록 새 값이 없으면 그 창을 표시하지 않는다.
 func TestReadNativeDropsDeadWindow(t *testing.T) {
 	dir := t.TempDir()
 	_, _ = SaveClaudeStatus(dir, "", statusJSON(16, t0.Add(-6*time.Hour).Unix(), 86, t0.Add(80*time.Hour).Unix()), t0.Add(-7*time.Hour))

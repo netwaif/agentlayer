@@ -105,6 +105,7 @@ agentlayer browser ...            # 에이전트 전용 브라우저 (아래 참
 - TUI 헤더에 사용량 요약, `u`로 게이지와 리셋 시각을 표시합니다. 기본값은 Claude Code와 Codex가 제공하는 공식 사용량입니다.
 - `agentlayer usage`는 저장된 값을 표시하고 필요할 때 백그라운드 갱신을 시작합니다. 즉시 갱신하려면 `agentlayer usage read --refresh`를 실행하세요.
 - Claude Code는 macOS·Linux에서 `/usage` 화면을 읽습니다. `agentlayer usage setup claude`로 상태줄의 한도 값도 수집할 수 있습니다. 기존 상태줄 명령은 유지되며 `agentlayer usage setup claude --undo`로 복원합니다.
+- 공식 경로에서 사용량을 열면 첫 조회이거나 마지막 갱신 시도로부터 30분 이상 지났을 때 `claude`를 백그라운드에서 띄웁니다. 작업 폴더는 AgentLayer 상태 폴더의 `usage/claude-probe`이며, 이 전용 폴더의 신뢰 확인 창은 자동으로 수락합니다. 조회 중에는 도구·훅·MCP를 끄고 채팅 메시지를 보내지 않습니다. 백그라운드 Claude 조회를 끄려면 `agentlayer usage source codexbar`를 실행하세요.
 - Codex는 로컬 세션 기록과 공식 app-server에서 한도를 읽습니다.
 - [usage-coach](https://github.com/netwaif/usage-coach)를 이미 쓰는 경우 `agentlayer usage source codexbar`로 전환할 수 있습니다. 공식 값으로 돌아오려면 `agentlayer usage source native`를 실행하세요.
 - 에이전트 행에는 모델·컨텍스트 사용률·마지막 활동을 표시합니다.

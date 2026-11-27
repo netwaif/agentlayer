@@ -29,7 +29,7 @@ type NativeFile struct {
 	Updated  time.Time               `json:"updated"` // 값을 받은(측정한) 때
 	Plan     string                  `json:"plan,omitempty"`
 	Windows  map[string]NativeWindow `json:"windows"`          // 5h | 7d | daily | <모델>_7d
-	Labels   map[string]string       `json:"labels,omitempty"` //  /usage 화면 이름(예: Current week (Fable))
+	Labels   map[string]string       `json:"labels,omitempty"` // /usage 화면 이름(예: Current week (Fable))
 }
 
 // NativeDir은 저장 폴더.
@@ -89,7 +89,7 @@ func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 }
 
 // mergeWindows는 새 측정(fresh)을 창마다 합친다. 재설정 시각이 같거나 늦으면 새 값이 이기고, 더 이르면(지난 창) 버린다.
-// 같은 창에서 사용률이 내려가는 일이 실제로 있다(2026-10-18 주간 97%→2%, 재설정 시각 그대로) — 큰 값을 붙잡지 않는다.
+// 같은 창에서 사용률이 내려갈 수 있으므로 새 값을 쓴다.
 // 쉬던 세션이 되풀이하는 낡은 값은 호출자(SaveClaudeStatus)가 세션별로 먼저 거른다.
 // 이번에 없는 창은 지난 값을 둔다(Claude Code는 재설정 시각이 지난 창을 빼고 보낸다 — 「재설정됨」으로 보이게).
 func mergeWindows(old, fresh map[string]NativeWindow) (map[string]NativeWindow, bool) {
@@ -112,10 +112,8 @@ func mergeWindows(old, fresh map[string]NativeWindow) (map[string]NativeWindow, 
 
 var winMinutes = map[string]float64{"5h": 300, "daily": 1440, "7d": 10080}
 
-//	남은 양 = 100 − 그 공급자가 화면에 보이는 사용% 정수.
-//
-// Claude Code 설정 Usage 칸은 `${Math.floor(utilization)}% used`(2.1.317 번들) — 내림이라 8.6% 사용은 「8% used」, 남음 92.
-// 전엔 math.Round(100−사용)이라 8.6이 91로 Claude 화면과 1 어긋났다. Codex는 실측 값이 정수뿐이라 옛 반올림 그대로.
+// leftPct는 공급자 화면에 맞춰 남은 비율을 계산한다.
+// Claude는 사용률을 내림하므로 8.6% 사용은 92% 남음으로 표시한다. Codex는 남은 비율을 반올림한다.
 func leftPct(source string, used float64) float64 {
 	var shown float64
 	if strings.HasPrefix(source, "claude") {
@@ -153,7 +151,7 @@ func nativeProvider(f *NativeFile, now time.Time, from ...map[string]*NativeFile
 			span = winMinutes["7d"] // 모델별 주간 창
 		}
 		if w.ResetsAt > 0 && -mins > span {
-			continue //  재설정 뒤 창 한 바퀴가 지나도록 새 값이 없다 — 없어진 창(Ultra의 5시간)이거나 못 읽는 창, 지난 숫자를 보이지 않는다
+			continue // 재설정 뒤 창 한 바퀴가 지나도록 새 값이 없다 — 없어진 창(Ultra의 5시간)이거나 못 읽는 창, 지난 숫자를 보이지 않는다
 		}
 		if w.ResetsAt > 0 && mins <= 0 {
 			win.ResetPassed = true // 재설정 시각이 지났다 — 숫자는 지난 값(흐리게), 새 값 기다림
@@ -189,7 +187,7 @@ func ReadNative(stateDir, home string, now time.Time) *Payload {
 			}
 		}
 	}
-	//  /usage 화면 값(모델별 주간 창 포함)과 창마다 합친다
+	// /usage 화면 값(모델별 주간 창 포함)과 창마다 합친다
 	if merged, from := mergeClaude(claude, readNative(filepath.Join(NativeDir(stateDir), probeFile))); merged != nil {
 		provs["claude"] = nativeProvider(merged, now, from)
 		newest = merged.Updated
