@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -27,33 +28,52 @@ const codexQueueTimeout = 15 * time.Second
 // codexQueueFn은 큐 전송 주입점 — 테스트가 바꿔 끼운다.
 var codexQueueFn = execCodexQueue
 
-// codexBin은 codex 실행 파일을 찾는다. 훅·LaunchAgent처럼 PATH가 최소인 환경에서도 찾도록 흔한 위치를 본다.
+// codexBin은 훅·LaunchAgent처럼 PATH가 최소인 환경에서도 설치 위치를 찾는다.
 func codexBin() string {
-	if p, err := exec.LookPath("codex"); err == nil {
+	if p := usage.LookupTool("codex"); p != "" {
 		return p
 	}
-	home, _ := os.UserHomeDir()
-	for _, p := range []string{"/opt/homebrew/bin/codex", "/usr/local/bin/codex",
-		filepath.Join(home, ".local/bin/codex"), filepath.Join(home, ".npm-global/bin/codex")} {
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+	if home, err := os.UserHomeDir(); err == nil {
+		if p, err := exec.LookPath(filepath.Join(home, ".npm-global", "bin", "codex")); err == nil {
 			return p
 		}
 	}
 	return ""
 }
 
+// 옵션 선언만 본다. queue가 없는 판은 최상위 도움말을 출력하고 0으로 끝나기도 한다.
+var codexThreadOption = regexp.MustCompile(`(?m)^[ 	]*(?:-[[:alnum:]],?[ 	]+)?--thread(?:[ 	=]|$)`)
+
 func execCodexQueue(ctx context.Context, thread, cwd, message string) error {
 	bin := codexBin()
 	if bin == "" {
-		return errors.New("codex 명령을 찾지 못함")
+		return errors.New("codex 명령을 찾지 못함 — 설치 위치를 PATH에 넣고 다시 보내세요")
 	}
+	nodeDirs := []string{filepath.Dir(bin)}
+	if resolved, err := filepath.EvalSymlinks(bin); err == nil && resolved != bin {
+		nodeDirs = append(nodeDirs, filepath.Dir(resolved))
+	}
+	nodeDirs = append(nodeDirs, "/opt/homebrew/opt/node/bin", "/usr/local/opt/node/bin")
+	env := usage.ExtendedEnv(nodeDirs...)
 	c, cancel := context.WithTimeout(ctx, codexQueueTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(c, bin, "queue", "--thread", thread, "--message", message)
-	if cwd != "" {
+	run := func(args ...string) ([]byte, error) {
+		cmd := exec.CommandContext(c, bin, args...)
 		cmd.Dir = cwd
+		cmd.Env = env
+		return cmd.CombinedOutput()
 	}
-	out, err := cmd.CombinedOutput()
+	help, err := run("queue", "--help")
+	if err != nil {
+		if strings.Contains(string(help), "env: node") {
+			return fmt.Errorf("Node.js를 찾지 못함 — node가 있는 폴더를 PATH에 넣고 다시 보내세요 (%w)", codexQueueResult(string(help), err))
+		}
+		return fmt.Errorf("codex queue 지원 확인 실패: %w", codexQueueResult(string(help), err))
+	}
+	if !codexThreadOption.Match(help) {
+		return errors.New("이 codex CLI는 queue --thread를 지원하지 않음 — 큐로 보내려면 해당 옵션을 지원하는 판을 사용하세요")
+	}
+	out, err := run("queue", "--thread", thread, "--message", message)
 	return codexQueueResult(string(out), err)
 }
 
@@ -177,17 +197,21 @@ func deliver(ctx context.Context, a *state.Agent, cfg *config.Config, tm TextSen
 			return "", "", fmt.Errorf("채널 전송 실패: %v", cerr)
 		}
 	}
+	var qerr error
 	if canCodexQueue(a, cfg) {
-		qerr := codexQueueFn(ctx, a.SessionID, a.CWD, message)
+		qerr = codexQueueFn(ctx, a.SessionID, a.CWD, message)
 		if qerr == nil {
 			return "queue", "", nil
 		}
 		warn = "codex queue 실패(" + qerr.Error() + ") — tmux 입력으로 보냄"
 		if !tmuxOK {
-			return "", "", fmt.Errorf("codex queue 실패: %v", qerr)
+			return "", "", fmt.Errorf("codex queue 실패: %w — 작업이 끝난 뒤 다시 보내거나 tmux에 즉시 입력하려면 --force를 사용하세요", qerr)
 		}
 	}
 	if err := tm.SendText(a.Tmux.PaneID, message); err != nil {
+		if qerr != nil {
+			return "", "", fmt.Errorf("codex queue 실패: %v / tmux 입력 실패: %w — 대상 pane 상태를 확인한 뒤 다시 보내세요", qerr, err)
+		}
 		return "", warn, err
 	}
 	return "tmux", warn, nil

@@ -91,7 +91,8 @@ func versionLess(a, b []int) bool {
 }
 
 // ExtendedEnv는 PATH를 흔한 도구 위치까지 넓힌 환경 — 외부 프로세스에 넘길 때 사용.
-func ExtendedEnv() []string { return extendedEnv() }
+// extraDirs는 기존 PATH 뒤, 기본 설치 위치 앞에 넣는다.
+func ExtendedEnv(extraDirs ...string) []string { return extendedEnv(extraDirs...) }
 
 // LookupTool은 name을 PATH에서, 없으면 흔한 위치에서 찾는다.
 // (tmux 팝업의 최소 PATH 환경 대응 — coach·lazygit 등 외부 도구 공용)
@@ -100,8 +101,7 @@ func LookupTool(name string) string {
 		return p
 	}
 	for _, d := range toolDirs() {
-		p := filepath.Join(d, name)
-		if _, err := os.Stat(p); err == nil {
+		if p, err := exec.LookPath(filepath.Join(d, name)); err == nil {
 			return p
 		}
 	}
@@ -110,20 +110,19 @@ func LookupTool(name string) string {
 
 // extendedEnv는 현재 env에서 PATH만 흔한 도구 위치까지 넓힌 것.
 // coach가 내부에서 codexbar를 PATH로 찾으므로 자식 env도 넓혀줘야 한다.
-func extendedEnv() []string {
-	path := os.Getenv("PATH")
-	for _, d := range toolDirs() {
-		if !strings.Contains(":"+path+":", ":"+d+":") {
-			path += ":" + d
+func extendedEnv(extraDirs ...string) []string {
+	dirs := filepath.SplitList(os.Getenv("PATH"))
+	seen := make(map[string]bool)
+	for _, dir := range dirs {
+		seen[dir] = true
+	}
+	for _, dir := range append(append([]string{}, extraDirs...), toolDirs()...) {
+		if !seen[dir] {
+			dirs = append(dirs, dir)
+			seen[dir] = true
 		}
 	}
-	env := []string{}
-	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, "PATH=") {
-			env = append(env, kv)
-		}
-	}
-	return append(env, "PATH="+path)
+	return append(os.Environ(), "PATH="+strings.Join(dirs, string(os.PathListSeparator)))
 }
 
 // CoachRunner는 기본 실행기: coach를 찾아 --json으로 부른다.

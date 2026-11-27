@@ -375,6 +375,9 @@ func RunSend(ctx context.Context, w io.Writer, stdin io.Reader, st *state.Store,
 			reason = "작업 중 — 현재 턴 뒤에 처리됩니다"
 		}
 	}
+	if via == "tmux" && qwarn != "" && a.Kind == "codex" && a.State == state.StateWorking {
+		reason = "작업 중 — tmux에 즉시 입력했습니다"
+	}
 	if qwarn != "" {
 		warnOut := w
 		if o.JSON {
