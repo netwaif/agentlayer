@@ -11,11 +11,14 @@ import (
 
 // openPTY는 가상 터미널 한 쌍(주·부)을 연다 — 공식 claude `/usage` 화면 읽기용.
 func openPTY() (master *os.File, slave *os.File, err error) {
-	m, err := os.OpenFile("/dev/ptmx", os.O_RDWR|unix.O_NOCTTY, 0)
+	// Open the master in blocking mode. On macOS 14, os.OpenFile can
+	// leave O_NONBLOCK set even after Fd(), so the first read returns EAGAIN
+	// before the child has written anything.
+	fd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, nil, err
 	}
-	fd := int(m.Fd())
+	m := os.NewFile(uintptr(fd), "/dev/ptmx")
 	if err := unix.IoctlSetInt(fd, unix.TIOCPTYGRANT, 0); err != nil {
 		m.Close()
 		return nil, nil, err

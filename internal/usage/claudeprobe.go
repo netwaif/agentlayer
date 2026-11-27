@@ -177,12 +177,14 @@ func parseResetText(s, tz string, now time.Time) (time.Time, bool) {
 var ProbeArgs = []string{"--allowed-tools", "", "--strict-mcp-config", "--settings", `{"remoteControlAtStartup":false,"disableAllHooks":true}`}
 
 type screenBuf struct {
-	mu sync.Mutex
-	b  []byte
+	mu       sync.Mutex
+	b        []byte
+	received uint64
 }
 
 func (s *screenBuf) Write(p []byte) (int, error) {
 	s.mu.Lock()
+	s.received += uint64(len(p))
 	s.b = append(s.b, p...)
 	if len(s.b) > 4<<20 { // 4MB 넘으면 앞을 버린다
 		s.b = append([]byte(nil), s.b[len(s.b)-(2<<20):]...)
@@ -197,6 +199,12 @@ func (s *screenBuf) since(n int) ([]byte, int) {
 		n = len(s.b)
 	}
 	return append([]byte(nil), s.b[n:]...), len(s.b)
+}
+
+func (s *screenBuf) receivedBytes() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.received
 }
 
 func claudeLoginScreen(text string) bool {
@@ -259,6 +267,12 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 		all, _ := buf.since(0)
 		return claudeLoginScreen(screenText(all))
 	}
+	loginRequired := func() error {
+		if os.Getenv("AGENTLAYER_PROBE_DEBUG") == "1" {
+			return fmt.Errorf("%w — 받은 바이트: %d", errClaudeLoginRequired, buf.receivedBytes())
+		}
+		return errClaudeLoginRequired
+	}
 	send := func(key string) bool {
 		if needsLogin() {
 			return false
@@ -302,7 +316,7 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 		select {
 		case <-ctx.Done():
 			if needsLogin() {
-				return nil, errClaudeLoginRequired
+				return nil, loginRequired()
 			}
 			if len(best) > 0 {
 				return best, nil
@@ -310,7 +324,7 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 			return nil, fmt.Errorf("/usage 화면을 %s 안에 못 읽음%s", ProbeTimeout, debugTail(buf))
 		case <-done:
 			if needsLogin() {
-				return nil, errClaudeLoginRequired
+				return nil, loginRequired()
 			}
 			if len(best) > 0 {
 				return best, nil
@@ -321,7 +335,7 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 		all, _ := buf.since(0)
 		text := screenText(all)
 		if claudeLoginScreen(text) {
-			return nil, errClaudeLoginRequired
+			return nil, loginRequired()
 		}
 		if !trusted && strings.Contains(text, "Yes, I trust this folder") {
 			// Claude가 키를 받을 원시 모드로 바뀔 때까지 기다린다.
@@ -333,11 +347,11 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 			}
 			trusted = true
 			if !send("\x1b[B") { // 기본 선택이 「No, exit」 — 한 칸 내려 「Yes」
-				return nil, errClaudeLoginRequired
+				return nil, loginRequired()
 			}
 			time.Sleep(300 * time.Millisecond)
 			if !send("\r") {
-				return nil, errClaudeLoginRequired
+				return nil, loginRequired()
 			}
 			_, trustMark = buf.since(0)
 			continue
@@ -351,11 +365,11 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 				time.Sleep(1500 * time.Millisecond) // 입력칸이 자리 잡게
 				_, mark = buf.since(0)
 				if !send("/usage") {
-					return nil, errClaudeLoginRequired
+					return nil, loginRequired()
 				}
 				time.Sleep(400 * time.Millisecond)
 				if !send("\r") {
-					return nil, errClaudeLoginRequired
+					return nil, loginRequired()
 				}
 				asked, askedAt = true, time.Now()
 			}
@@ -376,7 +390,7 @@ func ProbeClaudeUsage(ctx context.Context, claudeBin, probeDir string, now func(
 		}
 		if !retried && !hasKeys(best, "7d") && time.Since(askedAt) > 12*time.Second && time.Since(askedAt) < 13*time.Second {
 			if !send("\r") { // 화면이 안 열렸으면 한 번 더
-				return nil, errClaudeLoginRequired
+				return nil, loginRequired()
 			}
 			retried = true
 		}
@@ -524,5 +538,5 @@ func debugTail(buf *screenBuf) string {
 	if len(t) > 400 {
 		t = t[len(t)-400:]
 	}
-	return " — 화면 끝: " + t
+	return fmt.Sprintf(" — 받은 바이트: %d — 화면 끝: %s", buf.receivedBytes(), t)
 }
